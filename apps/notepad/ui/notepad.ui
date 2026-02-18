@@ -1,0 +1,66 @@
+Page {
+    spacing: 8
+    padding: "10"
+
+    ToolRow {
+        spacing: 8
+
+        TextInput {
+            id: PathInput
+            placeholder: "/home/user/note.txt"
+            onSubmitted: PathSubmitted
+            expand: true
+        }
+
+        Button {
+            id: OpenBtn
+            text: "Open"
+            onClicked: Open
+            expand: false
+        }
+
+        PrimaryButton {
+            id: SaveBtn
+            text: "Save"
+            onClicked: Save
+            expand: false
+        }
+
+        Button {
+            id: SaveAsBtn
+            text: "Save As"
+            onClicked: SaveAs
+            expand: false
+        }
+
+        Button {
+            id: ReloadBtn
+            text: "Reload"
+            onClicked: Reload
+            expand: false
+        }
+
+        Button {
+            id: ClearBtn
+            text: "New"
+            onClicked: Clear
+            expand: false
+        }
+    }
+
+    TextArea {
+        id: Editor
+        lineNumbers: true
+        wrap: true
+        showScrollbar: true
+        onChanged: EditorChanged
+        placeholder: "Start typing..."
+        textColor: "theme.color.text.primary"
+        expand: true
+    }
+
+    StatusLabel {
+        id: Status
+        text: "Ready"
+    }
+}

@@ -1,149 +1,176 @@
-CHANNEL								?= unstable
-OSTREE_BRANCH 		    			?= $(shell uname -m)/os/$(CHANNEL)
-OSTREE_REPO 						?= ostree-repo
-OSTREE_GPG 							?= ostree-gpg
-VERSION								?= 2.0
-IGNITE								?= build/ignite
-CACHE_PATH							?= build/
-DESTDIR								?= checkout/
-APPMARKET_PATH						?= appmarket/
-KEY_TYPES							:= PK KEK DB VENDOR linux-module-cert
-ALL_CERTS							 = $(foreach KEY,$(KEY_TYPES),assets/sign-keys/$(KEY).crt)
-ALL_KEYS							 = $(foreach KEY,$(KEY_TYPES),assets/sign-keys/$(KEY).key)
-BOOT_KEYS							 = $(ALL_KEYS) $(ALL_CERTS) assets/sign-keys/extra-db/.keep assets/sign-keys/extra-kek/.keep assets/sign-keys/modules/linux-module-cert.crt
-EXTENSIONS							 = $(wildcard external/extensions/*.yml)
+GO ?= go
+GOFLAGS ?= -tags netgo
+GOARCH ?= $(shell go env GOARCH)
+DEBUG ?= 0
 
--include config.mk
+KERNEL ?= linux
 
-define OSTREE_GPG_CONFIG
-Key-Type: DSA
-Key-Length: 1024
-Subkey-Type: ELG-E
-Subkey-Length: 1024
-Name-Real: RLXOS
-Expire-Date: 0
-%no-protection
-%commit
-%echo finished
-endef
+CACHE_PATH ?= ${CURDIR}/_cache
 
+-include config.inc
 
-export OSTREE_GPG_CONFIG
-export IGNITE
-export CACHE_PATH
+DEVICE_CACHE_PATH ?= ${CACHE_PATH}/${GOARCH}
 
-.PHONY: clean all docs version.yml channel.yml ostree-branch.yml apps TODO.ELEMENTS
+SYSTEM_PATH	?= ${DEVICE_CACHE_PATH}/system
+SYSTEM_IMAGE ?= ${SYSTEM_PATH}.img
 
-all: $(IGNITE) version.yml ostree-branch.yml channel.yml
-ifdef ELEMENT
-	$(IGNITE) build -cache-path $(CACHE_PATH) $(ELEMENT)
-endif
+INITRAMFS_PATH ?= ${DEVICE_CACHE_PATH}/initramfs
+INITRAMFS_IMAGE ?= ${INITRAMFS_PATH}.img
 
-status: $(IGNITE) version.yml ostree-branch.yml channel.yml
-ifdef ELEMENT
-	$(IGNITE) status -cache-path $(CACHE_PATH) $(ELEMENT)
+ifeq (${KERNEL},linux)
+KERNEL_IMAGE ?= ${CURDIR}/external/${GOARCH}/kernel.img
 else
-	@echo "no ELEMENT specified"
-	exit 1
+KERNEL_IMAGE ?= ${DEVICE_CACHE_PATH}/kernel.img
 endif
 
-cache-path: $(IGNITE) version.yml ostree-branch.yml  channel.yml
-ifdef ELEMENT
-	@IGNITE_NO_MESSAGE=1 $(IGNITE) cache-path -cache-path $(CACHE_PATH) $(ELEMENT)
+DISK_IMAGE ?= ${DEVICE_CACHE_PATH}/disk.img
+QEMU_DEBUG_LOG ?= ${DEVICE_CACHE_PATH}/qemu-debug.log
+
+ifeq (${GOARCH},amd64)
+QEMU ?= qemu-system-x86_64
+else ifeq (${GOARCH},arm64)
+QEMU ?= qemu-system-aarch64
+QEMU_ARCH_ARGS ?= -M virt -cpu cortex-a57
 else
-	@echo "no ELEMENT specified"
-	exit 1
+QEMU ?= qemu-system-${GOARCH}
 endif
 
-checkout: $(IGNITE) version.yml ostree-branch.yml  channel.yml
-ifdef ELEMENT
-	$(IGNITE) checkout -cache-path $(CACHE_PATH) $(ELEMENT) $(DESTDIR)
+ifeq (${GOARCH},arm64)
+KARGS ?= console=ttyAMA0,115200
 else
-	@echo "no ELEMENT specified"
-	exit 1
+KARGS ?= console=ttyS0 console=tty0
 endif
 
-define BUILD_EXTENSION
-	OSTREE_BRANCH="x86_64/extension/$(shell basename $(ext:external/%.yml=%))/$(CHANNEL)" \
-		$(MAKE) update-ostree ELEMENT=$(ext:external/%=%);
-endef
 
-extensions: $(IGNITE)
-	$(foreach ext,$(EXTENSIONS),$(BUILD_EXTENSION))
+ifeq ($(shell go env GOOS),linux)
+QEMU_ACCEL ?= -accel kvm
+else ifeq ($(shell go env GOOS),darwin)
+QEMU_ACCEL ?= -accel hvf
+endif
 
-build/build.ninja: CMakeLists.txt
-	cmake -B build -S tools/ignite
+ifeq (${QEMU_VNC},1)
+QEMU_VNC_OPTIONS = -vnc :0
+endif
 
-$(IGNITE): build/build.ninja version.yml ostree-branch.yml channel.yml
-	@cmake --build build --target ignite
+QEMU_COMMON_ARGS ?= -smp 2 -m 2G \
+	-serial mon:stdio \
+	-vga none ${QEMU_ACCEL} ${QEMU_VNC_OPTIONS} \
+	-device virtio-gpu-pci \
+	-device virtio-keyboard-pci \
+	-device virtio-mouse-pci
+
+QEMU_FW_ARGS ?= -drive if=pflash,file=${CURDIR}/external/${GOARCH}/firmware,readonly=on,format=raw \
+	-drive if=pflash,file=${DEVICE_CACHE_PATH}/variables,format=raw
+
+QEMU_DEBUG_ARGS ?= -d int,guest_errors,cpu_reset -D ${QEMU_DEBUG_LOG} \
+	-no-reboot -no-shutdown -s -S
+
+GENIMAGE_DEPS := ./tools/genimage/main.go ./tools/genimage/assets/btrfs-512m.img.gz
+RUN_EXTRA_ARGS = $(if $(filter 1,$(DEBUG)),$(QEMU_DEBUG_ARGS),)
+KERNEL_BUILD_FLAGS = $(if $(filter 1,$(DEBUG)),$(KERNEL_DEBUG_GCFLAGS) $(KERNEL_DEBUG_LDFLAGS),$(KERNEL_RELEASE_LDFLAGS))
+
+KERNEL_COMMON_FLAGS = GOOS=linux GOARCH=${GOARCH} CGO_ENABLED=0 ${GO} build
+KERNEL_RELEASE_LDFLAGS = -ldflags="-E main._entry -T -2147479552"
+KERNEL_DEBUG_GCFLAGS = -gcflags="all=-N -l"
+KERNEL_DEBUG_LDFLAGS = -ldflags="-E main._entry -T -2147479552 -compressdwarf=false"
+
+COMMANDS = distro copy delete driver filter find identity info init link list mkdir mount move net open power process read request service session shell showoff system tree uevent write
+APPS = appmenu background demo dock oobe terminal filemanager imageviewer taskmanager notepad power settingsmanager waylayer
+SERVICES = distro display login uevent
+GO_TARGETS = $(addprefix cmd/,${COMMANDS}) $(addsuffix /exec,$(addprefix apps/,${APPS})) $(addprefix services/,${SERVICES})
+CONFIG_TARGETS = $(shell find config/ -type f)
+DATA_TARGETS = $(shell find data/ -type f)
+SYSTEM_TARGETS = $(GO_TARGETS) ${CONFIG_TARGETS} ${DATA_TARGETS} $(addsuffix /manifest.json,$(addprefix apps/,${APPS})) $(addsuffix /icon.png,$(addprefix apps/,${APPS}))
+
+INITRAMFS_TARGETS = init
+
+ifeq (${RELEASE},1)
+GOFLAGS += -buildvcs=false -trimpath -ldflags="-s -w -buildid="
+endif
+
+all: ${DISK_IMAGE}
+
+.PHONY: clean update-certificates run compile_db
 
 clean:
-	rm -rf $(DOCS_DIR)
-
-TODO.ELEMENTS:
-	grep -R "# TODO:" elements | sed 's/# TODO://g' | sed 's#elements/##g' > $@
-
-$(OSTREE_GPG)/key-config:
-	rm -rf ostree-gpg.tmp
-	mkdir ostree-gpg.tmp
-	chmod 0700 ostree-gpg.tmp
-	echo "$${OSTREE_GPG_CONFIG}" >ostree-gpg.tmp/key-config
-	gpg --batch --homedir=ostree-gpg.tmp --generate-key ostree-gpg.tmp/key-config
-	gpg --homedir=ostree-gpg.tmp -k --with-colons | sed '/^fpr:/q;d' | cut -d: -f10 >ostree-gpg.tmp/default-id
-	mv ostree-gpg.tmp $(OSTREE_GPG)
-
-assets/rlxos.gpg: $(OSTREE_GPG)/key-config
-	gpg --homedir=$(OSTREE_GPG) --export --armor >"$@"
-
-update-app-market: $(IGNITE) version.yml ostree-branch.yml channel.yml
-	$(IGNITE) meta -cache-path $(CACHE_PATH) $(APPMARKET_PATH)/$(CHANNEL)
-	./scripts/extract-icons.sh $(APPMARKET_PATH)/$(CHANNEL)/apps/ $(APPMARKET_PATH)/$(CHANNEL)/icons/
-
-update-ostree: $(IGNITE) version.yml ostree-branch.yml channel.yml assets/rlxos.gpg
-ifndef ELEMENT
-	@echo "no ELEMENT specified"
-	@exit 1
+	rm -rf ${SYSTEM_PATH} ${INITRAMFS_PATH}
+	rm -f ${SYSTEM_IMAGE} ${INITRAMFS_IMAGE} ${DISK_IMAGE}
+ifneq (${KERNEL},linux)
+	rm -f ${KERNEL_IMAGE}
 endif
-	scripts/commit-ostree.sh													\
-	  --gpg-homedir=$(OSTREE_GPG)												\
-	  --gpg-sign=$$(cat $(OSTREE_GPG)/default-id)								\
-	  --collection-id=dev.rlxos.System											\
-	  --version=$(VERSION)													\
-	  $(OSTREE_REPO) $(ELEMENT)													\
-	  $(OSTREE_BRANCH)
 
-version.yml:
-	@echo "version: ${VERSION}" > $@
-	@echo "variables:" >> $@
-	@echo "  channel: ${CHANNEL}" >> $@
+update-certificates:
+	wget https://curl.se/ca/cacert.pem -O config/certificates/ca-certificates.crt
 
-ostree-branch.yml:
-	@echo "variables:" > $@
-	@echo "  ostree-branch: ${OSTREE_BRANCH}" >> $@
+run: ${DISK_IMAGE} ${DEVICE_CACHE_PATH}/variables
+	@if [ "${DEBUG}" = "1" ]; then mkdir -p $(dir ${QEMU_DEBUG_LOG}); fi
+	${QEMU} ${QEMU_ARCH_ARGS} ${QEMU_COMMON_ARGS} ${RUN_EXTRA_ARGS} ${QEMU_FW_ARGS} \
+		-drive file=$<,format=raw
 
- channel.yml:
-	@echo "variables:" > $@
-	@echo "  channel: ${CHANNEL}" >> $@
+compile_db:
+	@:> depends.${GOARCH}.inc
+	@for i in ${GO_TARGETS} ; do \
+		echo "${SYSTEM_PATH}/$$i: $$(find $$(go list ${GOFLAGS} -deps avyos.dev/$${i%/exec} | grep '^avyos.dev' | sed 's#^avyos.dev/#${CURDIR}/#g') -type f -name '*.go' | sort | tr '\n' ' ')" >> depends.${GOARCH}.inc; \
+	done
 
-generate-keys: $(BOOT_KEYS) 
+${DEVICE_CACHE_PATH}/variables: ${CURDIR}/external/${GOARCH}/variables
+	@mkdir -p $(dir $@)
+	cp -a $< $@
 
-assets/sign-keys/extra-db/.keep assets/sign-keys/extra-kek/.keep:
-	[ -d $(dir $@) ] || mkdir -p $(dir $@)
-	touch $@
+${DISK_IMAGE}: ${GENIMAGE_DEPS} ${KERNEL_IMAGE} ${INITRAMFS_IMAGE} ${SYSTEM_IMAGE}
+	GOOS=$(shell go env GOOS) 			\
+	GOARCH=$(shell go env GOARCH) 		\
+	${GO} run ./tools/genimage 			\
+		-target "${GOARCH}" 			\
+		-kernel ${KERNEL_IMAGE} 		\
+		-initrd ${INITRAMFS_IMAGE} 		\
+		-rootfs ${SYSTEM_IMAGE}			\
+		-protocol ${KERNEL}				\
+		-kargs "${KARGS}"				\
+		-limine-path ${CURDIR}/external/${GOARCH} \
+		-out $@
 
-assets/sign-keys/modules/linux-module-cert.crt: assets/sign-keys/linux-module-cert.crt
-	mkdir -p assets/sign-keys/modules
-	cp $< $@
+${SYSTEM_PATH}/apps/%/exec:
+	GOOS=linux GOARCH=${GOARCH} CGO_ENABLED=0 ${GO} build ${GOFLAGS} -o $@ $(@:${SYSTEM_PATH}/%/exec=avyos.dev/%)
 
-assets/sign-keys/%.crt assets/sign-keys/%.key:
-	[ -d assets/sign-keys ] || mkdir -p assets/sign-keys
-	openssl req -new -x509 -newkey rsa:2048 -subj "/CN=RLXOS $(basename $(notdir $@)) key/" -keyout "$(basename $@).key" -out "$(basename $@).crt" -days 3650 -nodes -sha256
+${SYSTEM_PATH}/apps/%/manifest.json:
+	@mkdir -p $(dir $@)
+	cp $(@:${SYSTEM_PATH}/%=${CURDIR}/%) $@
 
-download-microsoft-keys: assets/sign-keys/extra-db/.keep assets/sign-keys/extra-kek/.keep
-	curl https://www.microsoft.com/pkiops/certs/MicCorUEFCA2011_2011-06-27.crt | openssl x509 -inform der -outform pem >assets/sign-keys/extra-kek/mic-kek.crt
-	echo 77fa9abd-0359-4d32-bd60-28f4e78f784b >assets/sign-keys/extra-kek/mic-kek.owner
-	curl https://www.microsoft.com/pkiops/certs/MicCorUEFCA2011_2011-06-27.crt | openssl x509 -inform der -outform pem >assets/sign-keys/extra-db/mic-other.crt
-	echo 77fa9abd-0359-4d32-bd60-28f4e78f784b >assets/sign-keys/extra-db/mic-other.owner
-	curl https://www.microsoft.com/pkiops/certs/MicWinProPCA2011_2011-10-19.crt | openssl x509 -inform der -outform pem >assets/sign-keys/extra-db/mic-win.crt
-	echo 77fa9abd-0359-4d32-bd60-28f4e78f784b >assets/sign-keys/extra-db/mic-win.owner
+${SYSTEM_PATH}/apps/%/icon.png:
+	@mkdir -p $(dir $@)
+	cp $(@:${SYSTEM_PATH}/%=${CURDIR}/%) $@
 
+${SYSTEM_PATH}/config/%: ${CURDIR}/config/%
+	@mkdir -p $(dir $@)
+	cp -a $< $@
+
+${SYSTEM_PATH}/data/%: ${CURDIR}/data/%
+	@mkdir -p $(dir $@)
+	cp -a $< $@
+
+${SYSTEM_PATH}/%:
+	GOOS=linux GOARCH=${GOARCH} CGO_ENABLED=0 ${GO} build ${GOFLAGS} -o $@ $(@:${SYSTEM_PATH}/%=avyos.dev/%)
+
+${SYSTEM_IMAGE}: $(addprefix ${SYSTEM_PATH}/,${SYSTEM_TARGETS})
+	mksquashfs ${SYSTEM_PATH} ${SYSTEM_IMAGE} -noappend -all-root -quiet
+
+${INITRAMFS_PATH}/%: ${SYSTEM_PATH}/%
+	@mkdir -p $(dir $@)
+	cp -a $< $@
+
+${INITRAMFS_PATH}/init: ${SYSTEM_PATH}/cmd/init
+	@mkdir -p $(dir $@)
+	cp -a $< $@
+
+${INITRAMFS_IMAGE}: $(addprefix ${INITRAMFS_PATH}/,${INITRAMFS_TARGETS})
+	(cd ${INITRAMFS_PATH}; find . -print0 | cpio --null --create --verbose --format=newc) > $@
+
+${KERNEL_IMAGE}:
+ifneq (${KERNEL},linux)
+	@mkdir -p $(dir $@)
+	${KERNEL_COMMON_FLAGS} ${KERNEL_BUILD_FLAGS} -o $@ avyos.dev/kernel
+	python3 scripts/patch_phdr.py $@
+endif
+
+-include depends.${GOARCH}.inc

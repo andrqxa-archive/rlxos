@@ -1,0 +1,261 @@
+{
+  "service": {
+    "name": "display",
+    "id": "0x00000010",
+    "package": "displayapi"
+  },
+  "imports": [
+    "avyos.dev/pkg/graphics"
+  ],
+  "types": [
+    {
+      "name": "Empty",
+      "fields": []
+    },
+    {
+      "name": "CreateWindowRequest",
+      "fields": [
+        { "name": "ShmKey", "type": "string" },
+        { "name": "Width", "type": "int" },
+        { "name": "Height", "type": "int" },
+        { "name": "Stride", "type": "int" }
+      ]
+    },
+    {
+      "name": "CreateLayerRequest",
+      "fields": [
+        { "name": "Layer", "type": "uint32" },
+        { "name": "Anchor", "type": "uint32" },
+        { "name": "Exclusive", "type": "int" },
+        { "name": "OpaqueHint", "type": "bool" },
+        { "name": "ShmKey", "type": "string" },
+        { "name": "Width", "type": "int" },
+        { "name": "Height", "type": "int" },
+        { "name": "Stride", "type": "int" }
+      ]
+    },
+    {
+      "name": "CreatePopupRequest",
+      "fields": [
+        { "name": "ParentID", "type": "uint32" },
+        { "name": "X", "type": "int" },
+        { "name": "Y", "type": "int" },
+        { "name": "ShmKey", "type": "string" },
+        { "name": "Width", "type": "int" },
+        { "name": "Height", "type": "int" },
+        { "name": "Stride", "type": "int" }
+      ]
+    },
+    {
+      "name": "DestroyWindowRequest",
+      "fields": [{ "name": "WindowID", "type": "uint32" }]
+    },
+    {
+      "name": "SetTitleRequest",
+      "fields": [
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "Title", "type": "string" }
+      ]
+    },
+    {
+      "name": "DamageRequest",
+      "fields": [
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "X", "type": "int" },
+        { "name": "Y", "type": "int" },
+        { "name": "Width", "type": "int" },
+        { "name": "Height", "type": "int" }
+      ]
+    },
+    {
+      "name": "ResizeRequest",
+      "fields": [
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "ShmKey", "type": "string" },
+        { "name": "Width", "type": "int" },
+        { "name": "Height", "type": "int" },
+        { "name": "Stride", "type": "int" }
+      ]
+    },
+    {
+      "name": "MoveRequest",
+      "fields": [
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "X", "type": "int" },
+        { "name": "Y", "type": "int" }
+      ]
+    },
+    {
+      "name": "SetWindowStateRequest",
+      "fields": [
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "Action", "type": "uint32" }
+      ]
+    },
+    {
+      "name": "WindowCreatedEvent",
+      "fields": [
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "X", "type": "int" },
+        { "name": "Y", "type": "int" }
+      ]
+    },
+    {
+      "name": "ConfigureEvent",
+      "fields": [
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "Width", "type": "int" },
+        { "name": "Height", "type": "int" }
+      ]
+    },
+    {
+      "name": "CloseEvent",
+      "fields": [{ "name": "WindowID", "type": "uint32" }]
+    },
+    {
+      "name": "PointerEnterEvent",
+      "fields": [
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "X", "type": "int" },
+        { "name": "Y", "type": "int" }
+      ]
+    },
+    {
+      "name": "PointerLeaveEvent",
+      "fields": [{ "name": "WindowID", "type": "uint32" }]
+    },
+    {
+      "name": "PointerMotionEvent",
+      "fields": [
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "X", "type": "int" },
+        { "name": "Y", "type": "int" }
+      ]
+    },
+    {
+      "name": "PointerButtonEvent",
+      "fields": [
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "Button", "type": "int" },
+        { "name": "Pressed", "type": "bool" }
+      ]
+    },
+    {
+      "name": "KeyEvent",
+      "fields": [
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "Key", "type": "graphics.Key" },
+        { "name": "Char", "type": "rune" },
+        { "name": "Pressed", "type": "bool" }
+      ]
+    },
+    {
+      "name": "FocusEvent",
+      "fields": [
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "Focused", "type": "bool" }
+      ]
+    },
+    {
+      "name": "MovedEvent",
+      "fields": [
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "X", "type": "int" },
+        { "name": "Y", "type": "int" }
+      ]
+    },
+    {
+      "name": "WindowListItem",
+      "fields": [
+        { "name": "ID", "type": "uint32" },
+        { "name": "Flags", "type": "uint32" },
+        { "name": "Title", "type": "string" }
+      ]
+    },
+    {
+      "name": "WindowListEvent",
+      "fields": [
+        { "name": "Windows", "type": "[]WindowListItem" }
+      ]
+    },
+    {
+      "name": "RegisterSessionRequest",
+      "fields": [
+        { "name": "SessionID", "type": "uint32" },
+        { "name": "UID", "type": "uint32" }
+      ]
+    },
+    {
+      "name": "SetActiveSessionRequest",
+      "fields": [
+        { "name": "SessionID", "type": "uint32" }
+      ]
+    },
+    {
+      "name": "ActiveSessionEvent",
+      "fields": [
+        { "name": "SessionID", "type": "uint32" }
+      ]
+    },
+    {
+      "name": "RegisterShortcutRequest",
+      "fields": [
+        { "name": "ShortcutID", "type": "uint32" },
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "Scope", "type": "uint32" },
+        { "name": "Key", "type": "graphics.Key" },
+        { "name": "Modifiers", "type": "uint8" }
+      ]
+    },
+    {
+      "name": "UnregisterShortcutRequest",
+      "fields": [
+        { "name": "ShortcutID", "type": "uint32" }
+      ]
+    },
+    {
+      "name": "ShortcutEvent",
+      "fields": [
+        { "name": "ShortcutID", "type": "uint32" },
+        { "name": "WindowID", "type": "uint32" },
+        { "name": "Scope", "type": "uint32" },
+        { "name": "Key", "type": "graphics.Key" },
+        { "name": "Modifiers", "type": "uint8" }
+      ]
+    }
+  ],
+  "requests": [
+    { "name": "CreateWindow", "id": "0x0201", "request_type": "CreateWindowRequest", "response_type": "WindowCreatedEvent" },
+    { "name": "DestroyWindow", "id": "0x0202", "request_type": "DestroyWindowRequest", "response_type": "Empty" },
+    { "name": "SetTitle", "id": "0x0203", "request_type": "SetTitleRequest", "response_type": "Empty" },
+    { "name": "Damage", "id": "0x0204", "request_type": "DamageRequest", "response_type": "Empty" },
+    { "name": "Resize", "id": "0x0205", "request_type": "ResizeRequest", "response_type": "Empty" },
+    { "name": "Move", "id": "0x0206", "request_type": "MoveRequest", "response_type": "Empty" },
+    { "name": "CreateLayer", "id": "0x0207", "request_type": "CreateLayerRequest", "response_type": "WindowCreatedEvent" },
+    { "name": "CreatePopup", "id": "0x0208", "request_type": "CreatePopupRequest", "response_type": "WindowCreatedEvent" },
+    { "name": "ListWindows", "id": "0x0209", "request_type": "Empty", "response_type": "WindowListEvent" },
+    { "name": "SetWindowState", "id": "0x020A", "request_type": "SetWindowStateRequest", "response_type": "Empty" },
+    { "name": "RegisterSession", "id": "0x020B", "request_type": "RegisterSessionRequest", "response_type": "Empty" },
+    { "name": "SetActiveSession", "id": "0x020C", "request_type": "SetActiveSessionRequest", "response_type": "Empty" },
+    { "name": "GetActiveSession", "id": "0x020D", "request_type": "Empty", "response_type": "ActiveSessionEvent" },
+    { "name": "RegisterShortcut", "id": "0x020E", "request_type": "RegisterShortcutRequest", "response_type": "Empty" },
+    { "name": "UnregisterShortcut", "id": "0x020F", "request_type": "UnregisterShortcutRequest", "response_type": "Empty" }
+  ],
+  "events": [
+    { "name": "WindowCreated", "id": "0x0301", "request_type": "WindowCreatedEvent" },
+    { "name": "Configure", "id": "0x0302", "request_type": "ConfigureEvent" },
+    { "name": "Close", "id": "0x0303", "request_type": "CloseEvent" },
+    { "name": "PointerEnter", "id": "0x0304", "request_type": "PointerEnterEvent" },
+    { "name": "PointerLeave", "id": "0x0305", "request_type": "PointerLeaveEvent" },
+    { "name": "PointerMotion", "id": "0x0306", "request_type": "PointerMotionEvent" },
+    { "name": "PointerButton", "id": "0x0307", "request_type": "PointerButtonEvent" },
+    { "name": "Key", "id": "0x0308", "request_type": "KeyEvent" },
+    { "name": "Focus", "id": "0x0309", "request_type": "FocusEvent" },
+    { "name": "Moved", "id": "0x030A", "request_type": "MovedEvent" },
+    { "name": "WindowList", "id": "0x030B", "request_type": "WindowListEvent" },
+    { "name": "SessionActivated", "id": "0x030C", "request_type": "ActiveSessionEvent" },
+    { "name": "SessionSuspended", "id": "0x030D", "request_type": "ActiveSessionEvent" },
+    { "name": "SessionResumed", "id": "0x030E", "request_type": "ActiveSessionEvent" },
+    { "name": "Shortcut", "id": "0x030F", "request_type": "ShortcutEvent" }
+  ]
+}

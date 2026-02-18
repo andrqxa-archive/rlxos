@@ -1,0 +1,8 @@
+HBox {
+    id: TaskList
+    background: "theme.color.surface.glassraised"
+    gradientTop: "#FFFFFFE3"
+    gradientBottom: "#F2F6FFD1"
+    borderColor: "theme.color.stroke.hairline"
+    borderRadius: 14
+}

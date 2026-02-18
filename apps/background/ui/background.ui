@@ -1,0 +1,12 @@
+VBox {
+    id: Root
+    background: "theme.color.bg"
+    padding: "0"
+    spacing: 0
+
+    Image {
+        id: Wallpaper
+        scaleMode: "cover"
+        expand: true
+    }
+}

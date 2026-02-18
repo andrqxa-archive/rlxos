@@ -1,0 +1,3 @@
+component Spacer {
+    expand: true
+}

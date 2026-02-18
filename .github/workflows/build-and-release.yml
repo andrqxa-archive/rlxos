@@ -1,42 +1,50 @@
-name: Build and Release
+name: Build And Release
 on:
-  workflow_dispatch:
   push:
+    branches:
+      - main
+    tags:
+      - '*'
+  pull_request:
 
 env:
-  CACHE_PATH: ${{secrets.SERVER_REPO_PATH}}
-  OSTREE_REPO: ${{secrets.OSTREE_REPO}}
-  OSTREE_GPG: ${{secrets.OSTREE_GPG}}
-  VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'continuous' }}
-  CHANNEL: ${{ endsWith(github.ref, 'stable') && 'stable' || 'unstable' }}
-  OSTREE_BRANCH: "x86_64/os/${{ endsWith(github.ref, 'stable') && 'stable' || 'unstable' }}"
-  SIGN_KEYS_PATH: ${{secrets.SIGN_KEYS_PATH}}
+  SOURCE_DATE_EPOCH: 1700000000
+  RELEASE: 1
 
 jobs:
   build:
-    name: Build Collection
-    runs-on: self-hosted
-    timeout-minutes: 47000
-
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v5
+      - name: Install requirements
+        run: sudo apt-get update -y && sudo apt-get install -y parted zip
+      - name: Cleanup cache
+        run: rm -rf _cache
+
+      - name: Build
+        run: |
+          PATH=$PATH:/usr/sbin make GOARCH=${{matrix.arch}} -j$(nproc)
+
+      - name: Compress Image
+        run: |
+          rm -rf _cache/${{matrix.arch}}/bundle
+          mkdir -p _cache/${{matrix.arch}}/bundle
+          cp -a _cache/${{matrix.arch}}/disk.img external/${{matrix.arch}}/firmware external/${{matrix.arch}}/variables _cache/${{matrix.arch}}/bundle/
+          cd _cache/${{matrix.arch}}/bundle
+          zip ../avyos-${{github.ref_name}}-${{matrix.arch}}.zip disk.img firmware variables
+
+      - name: Create / Update Release and Upload Artifact
+        uses: softprops/action-gh-release@v2
         with:
-          token: ${{ secrets.CI_TOKEN }}
-          submodules: true
-      - name: Add sign keys
-        run: rm -rf assets/sign-keys && cp -r ${SIGN_KEYS_PATH} assets/sign-keys
-
-      - name: Write changelog
-        run: echo -e "${{ github.event.head_commit.message }}" > ChangeLog
-
-      - name: Build Installer ISO
-        run: make ELEMENT=installer/image.yml
-
-      - name: Checkout installer iso
-        run: make checkout ELEMENT=installer/image.yml
-
-      - name: Update Ostree
-        run: make ELEMENT=system/repo.yml update-ostree
-
-      - name: Update extensions
-        run: make extensions
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          prerelease: ${{ github.ref_type != 'tag' }}
+          allowUpdates: true
+          files: |
+            _cache/${{matrix.arch}}/avyos-${{github.ref_name}}-${{matrix.arch}}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

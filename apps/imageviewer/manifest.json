@@ -1,0 +1,17 @@
+{
+  "id": "imageviewer",
+  "name": "Image Viewer",
+  "description": "Open and preview image files.",
+  "icon": "image",
+  "support_extensions": [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".bmp",
+    ".webp",
+    ".svg",
+    ".tif",
+    ".tiff"
+  ]
+}

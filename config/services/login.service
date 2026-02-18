@@ -1,0 +1,4 @@
+name = login
+command = /avyos/services/login
+restart = always
+depends = display

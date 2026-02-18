@@ -1,0 +1,85 @@
+Grid {
+    rowSpacing: 0
+    colSpacing: 0
+    padding: "0"
+    background: "theme.color.bg"
+
+    Image {
+        id: BackgroundImage
+        src: "/avyos/data/backgrounds/default_blur.png"
+        scaleMode: "cover"
+        row: 0
+        col: 0
+    }
+
+    VBox {
+        row: 0
+        col: 0
+        spacing: 0
+        padding: "0"
+        alignment: "center"
+
+        Spacer {}
+
+        Card {
+            minWidth: 420
+            expand: false
+
+            VBox {
+                spacing: 10
+                padding: "18"
+
+                Title {
+                    text: "Welcome"
+                    textColor: "theme.color.accent"
+                    textAlign: "center"
+                    expand: false
+                }
+
+                Label {
+                    id: StatusLabel
+                    text: " "
+                    textColor: "theme.color.text.secondary"
+                    textAlign: "center"
+                    expand: false
+                }
+
+                Label {
+                    text: "Username"
+                    textColor: "theme.color.text.secondary"
+                    expand: false
+                }
+
+                TextInput {
+                    id: UsernameInput
+                    placeholder: "Enter your username"
+                }
+
+                Label {
+                    text: "Password"
+                    textColor: "theme.color.text.secondary"
+                    expand: false
+                }
+
+                TextInput {
+                    id: PasswordInput
+                    placeholder: "Enter your password"
+                    password: true
+                    onSubmitted: SubmitFromEnter
+                }
+
+                Spacer {}
+
+                PrimaryButton {
+                    id: SignInBtn
+                    text: "Sign In"
+                    minWidth: 100
+                    expand: false
+                    onClicked: SignIn
+                }
+            }
+        }
+
+        Spacer {}
+    }
+}

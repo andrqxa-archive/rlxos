@@ -1,0 +1,8 @@
+{
+  "id": "background",
+  "name": "Background",
+  "description": "Wallpaper and desktop background layer.",
+  "icon": "image",
+  "hidden": true,
+  "background": true
+}

@@ -1,0 +1,242 @@
+Page {
+    spacing: 8
+    padding: "10"
+
+    HBox {
+        spacing: 6
+        expand: false
+
+        Card {
+            expand: true
+            minHeight: 64
+            padding: "8"
+
+            VBox {
+                spacing: 2
+                expand: true
+
+                StatusLabel {
+                    text: "CPU"
+                    expand: false
+                }
+
+                Label {
+                    id: CPUValue
+                    text: "0%"
+                    textRole: "subheading"
+                    expand: false
+                }
+
+                ProgressBar {
+                    id: CPUBar
+                    value: 0
+                    showText: false
+                    minHeight: 6
+                    expand: false
+                }
+            }
+        }
+
+        Card {
+            expand: true
+            minHeight: 64
+            padding: "8"
+
+            VBox {
+                spacing: 2
+                expand: true
+
+                StatusLabel {
+                    text: "Memory"
+                    expand: false
+                }
+
+                Label {
+                    id: MemoryValue
+                    text: "0/0"
+                    textRole: "subheading"
+                    expand: false
+                }
+
+                ProgressBar {
+                    id: MemoryBar
+                    value: 0
+                    showText: false
+                    minHeight: 6
+                    expand: false
+                }
+            }
+        }
+
+        Card {
+            expand: true
+            minHeight: 64
+            padding: "8"
+
+            VBox {
+                spacing: 2
+                expand: true
+
+                StatusLabel {
+                    text: "Storage"
+                    expand: false
+                }
+
+                Label {
+                    id: StorageValue
+                    text: "0/0"
+                    textRole: "subheading"
+                    expand: false
+                }
+
+                ProgressBar {
+                    id: StorageBar
+                    value: 0
+                    showText: false
+                    minHeight: 6
+                    expand: false
+                }
+            }
+        }
+    }
+
+    Card {
+        expand: true
+        padding: "6"
+
+        VBox {
+            spacing: 4
+            expand: true
+
+            HBox {
+                spacing: 4
+                expand: false
+                padding: "0 4"
+
+                Label {
+                    text: "Icon"
+                    minWidth: 24
+                    maxWidth: 24
+                    expand: false
+                    textAlign: "left"
+                    textColor: "theme.color.text.secondary"
+                    fontFamily: "jetbrains-mono"
+                    fontSize: 13
+                    clipText: true
+                }
+
+                Label {
+                    text: "Name"
+                    expand: true
+                    textColor: "theme.color.text.secondary"
+                    clipText: true
+                }
+
+                Label {
+                    text: "PID"
+                    id: TaskPIDHeader
+                    minWidth: 52
+                    maxWidth: 52
+                    expand: false
+                    textAlign: "right"
+                    textColor: "theme.color.text.secondary"
+                    fontFamily: "jetbrains-mono"
+                    fontSize: 13
+                    clipText: true
+                }
+
+                Label {
+                    text: "CPU"
+                    id: TaskCPUHeader
+                    minWidth: 56
+                    maxWidth: 56
+                    expand: false
+                    textAlign: "right"
+                    textColor: "theme.color.text.secondary"
+                    fontFamily: "jetbrains-mono"
+                    fontSize: 13
+                    clipText: true
+                }
+
+                Label {
+                    text: "Memory"
+                    id: TaskMemoryHeader
+                    minWidth: 72
+                    maxWidth: 72
+                    expand: false
+                    textAlign: "right"
+                    textColor: "theme.color.text.secondary"
+                    fontFamily: "jetbrains-mono"
+                    fontSize: 13
+                    clipText: true
+                }
+            }
+
+            HSeparator {}
+
+            ScrollView {
+                id: TaskTable
+                expand: true
+                overflow: "auto"
+                scrollStep: 30
+                spacing: 0
+                padding: "0"
+            }
+        }
+    }
+
+    Card {
+        id: ContextMenu
+        visible: false
+        expand: false
+        padding: "6 8"
+        background: "theme.color.surface.glassraised"
+        borderColor: "theme.color.accent"
+        focusedBorderColor: "theme.color.accent"
+
+        HBox {
+            spacing: 8
+            expand: false
+
+            Label {
+                id: ContextInfo
+                text: ""
+                expand: true
+            }
+
+            Button {
+                id: ContextTerminateBtn
+                text: "Terminate"
+                onClicked: ContextTerminate
+                expand: false
+                minWidth: 110
+            }
+
+            DangerButton {
+                id: ContextKillBtn
+                text: "Kill"
+                onClicked: ContextKill
+                expand: false
+                minWidth: 88
+            }
+
+        }
+    }
+
+    Card {
+        expand: false
+        minHeight: 28
+        padding: "6 10"
+        background: "theme.color.surface.sidebar"
+        borderColor: "theme.color.stroke.divider"
+        focusedBorderColor: "theme.color.stroke.divider"
+        shadow: false
+
+        StatusLabel {
+            id: Status
+            text: "Ready"
+            expand: false
+            textAlign: "left"
+        }
+    }
+}

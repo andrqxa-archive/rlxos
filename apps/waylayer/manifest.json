@@ -1,0 +1,7 @@
+{
+    "id": "waylayer",
+    "name": "Waylayer",
+    "description": "Run wayland apps in compositor",
+    "icon": "wayland",
+    "hidden": true
+}

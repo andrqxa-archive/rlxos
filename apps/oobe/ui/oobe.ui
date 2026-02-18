@@ -1,0 +1,236 @@
+Grid {
+    rowSpacing: 0
+    colSpacing: 0
+    padding: "0"
+    background: "theme.color.bg"
+
+    Image {
+        id: BackgroundImage
+        src: "/avyos/data/backgrounds/default_blur.png"
+        scaleMode: "cover"
+        row: 0
+        col: 0
+    }
+
+    VBox {
+        row: 0
+        col: 0
+        spacing: 0
+        padding: "0"
+        alignment: "center"
+
+        Spacer {}
+
+        Card {
+            expand: false
+
+            VBox {
+                spacing: 0
+                padding: "26"
+                alignment: "stretch"
+
+                Stack {
+                    id: StageStack
+                    active: 0
+                    expand: false
+
+                    VBox {
+                        id: StageWelcome
+                        spacing: 0
+                        alignment: "center"
+                        expand: false
+
+                        VBox {
+                            spacing: 14
+                            alignment: "center"
+                            expand: false
+
+                            Image {
+                                id: LogoImage
+                                src: "/avyos/data/icons/logo/logo.png"
+                                minWidth: 120
+                                minHeight: 120
+                                maxWidth: 120
+                                maxHeight: 120
+                                expand: false
+                                srcOpaque: false
+                            }
+
+                            Title {
+                                text: "Welcome to AvyOS"
+                                textColor: "theme.color.accent"
+                                textAlign: "center"
+                                expand: false
+                            }
+
+                            Paragraph {
+                                text: "Let us set up your account in a few quick steps."
+                                textColor: "theme.color.text.secondary"
+                                textAlign: "center"
+                                expand: false
+                            }
+
+                            PrimaryButton {
+                                id: WelcomeContinueBtn
+                                text: "→"
+                                minWidth: 52
+                                minHeight: 52
+                                maxWidth: 52
+                                maxHeight: 52
+                                borderRadius: 26
+                                fontSize: 24
+                                textAlign: "center"
+                                onClicked: WelcomeContinue
+                                expand: false
+                            }
+                        }
+
+                    }
+
+                    VBox {
+                        id: StageCreateUser
+                        spacing: 0
+                        alignment: "stretch"
+                        expand: true
+
+                        Spacer {}
+
+                        VBox {
+                            spacing: 10
+                            alignment: "stretch"
+                            expand: false
+                            minWidth: 520
+
+                            Title {
+                                text: "Create User"
+                                textAlign: "left"
+                                expand: false
+                            }
+
+                            Paragraph {
+                                text: "Create your primary local account to start using AvyOS."
+                                textAlign: "left"
+                                textColor: "theme.color.text.secondary"
+                                expand: false
+                            }
+
+                            StatusLabel {
+                                text: "Name"
+                                expand: false
+                            }
+                            TextInput {
+                                id: NameInput
+                                placeholder: "Enter your name"
+                                onSubmitted: CreateUser
+                                expand: false
+                            }
+
+                            StatusLabel {
+                                text: "Password"
+                                expand: false
+                            }
+                            TextInput {
+                                id: PasswordInput
+                                placeholder: "Enter password"
+                                password: true
+                                onSubmitted: CreateUser
+                                expand: false
+                            }
+
+                            StatusLabel {
+                                text: "Repeat password"
+                                expand: false
+                            }
+                            TextInput {
+                                id: RepeatPasswordInput
+                                placeholder: "Repeat password"
+                                password: true
+                                onSubmitted: CreateUser
+                                expand: false
+                            }
+
+                            Label {
+                                id: CreateStatus
+                                text: ""
+                                minHeight: 20
+                                textColor: "theme.color.semantic.danger"
+                                clipText: true
+                                expand: false
+                            }
+
+                            HBox {
+                                direction: "row"
+                                spacing: 8
+                                expand: false
+
+                                Button {
+                                    id: BackBtn
+                                    text: "Back"
+                                    onClicked: BackToWelcome
+                                    expand: true
+                                }
+
+                                PrimaryButton {
+                                    id: CreateUserBtn
+                                    text: "Continue"
+                                    onClicked: CreateUser
+                                    expand: true
+                                }
+                            }
+                        }
+
+                        Spacer {}
+                    }
+
+                    VBox {
+                        id: StageInfo
+                        spacing: 0
+                        alignment: "center"
+                        expand: true
+
+                        Spacer {}
+
+                        VBox {
+                            spacing: 14
+                            alignment: "center"
+                            expand: false
+                            minWidth: 560
+
+                            Title {
+                                text: "Setup Complete"
+                                textAlign: "center"
+                                expand: false
+                            }
+
+                            Paragraph {
+                                text: "AvyOS is currently in alpha stage."
+                                textAlign: "center"
+                                textColor: "theme.color.text.secondary"
+                                expand: false
+                            }
+
+                            Paragraph {
+                                text: "Some features are incomplete and this environment is provided for testing and feedback only."
+                                textAlign: "center"
+                                textColor: "theme.color.text.secondary"
+                                expand: false
+                            }
+
+                            PrimaryButton {
+                                id: FinishBtn
+                                text: "Start Using AvyOS"
+                                onClicked: Finish
+                                expand: false
+                                minWidth: 220
+                            }
+                        }
+
+                        Spacer {}
+                    }
+                }
+            }
+        }
+
+        Spacer {}
+    }
+}

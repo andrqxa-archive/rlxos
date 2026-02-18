@@ -1,0 +1,66 @@
+{
+  "service": {
+    "name": "settings",
+    "id": "0x00000060",
+    "package": "settingsapi"
+  },
+  "types": [
+    {
+      "name": "Empty",
+      "fields": []
+    },
+    {
+      "name": "KeyRequest",
+      "fields": [
+        { "name": "Key", "type": "string" }
+      ]
+    },
+    {
+      "name": "SetRequest",
+      "fields": [
+        { "name": "Key", "type": "string" },
+        { "name": "Value", "type": "string" }
+      ]
+    },
+    {
+      "name": "ListRequest",
+      "fields": [
+        { "name": "Prefix", "type": "string" }
+      ]
+    },
+    {
+      "name": "GetResponse",
+      "fields": [
+        { "name": "Value", "type": "string" }
+      ]
+    },
+    {
+      "name": "Entry",
+      "fields": [
+        { "name": "Key", "type": "string" },
+        { "name": "Value", "type": "string" }
+      ]
+    },
+    {
+      "name": "EntryList",
+      "fields": [
+        { "name": "Items", "type": "[]Entry" }
+      ]
+    },
+    {
+      "name": "ChangedEvent",
+      "fields": [
+        { "name": "Key", "type": "string" },
+        { "name": "Value", "type": "string" }
+      ]
+    }
+  ],
+  "requests": [
+    { "name": "RawGet", "id": "0x0201", "request_type": "KeyRequest", "response_type": "GetResponse" },
+    { "name": "RawSet", "id": "0x0202", "request_type": "SetRequest", "response_type": "Empty" },
+    { "name": "RawList", "id": "0x0203", "request_type": "ListRequest", "response_type": "EntryList" }
+  ],
+  "events": [
+    { "name": "SettingsChanged", "id": "0x0301", "request_type": "ChangedEvent" }
+  ]
+}

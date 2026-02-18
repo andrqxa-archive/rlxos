@@ -1,0 +1,59 @@
+{
+  "service": {
+    "name": "uevent",
+    "id": "0x00000030",
+    "package": "ueventapi"
+  },
+  "types": [
+    {
+      "name": "Empty",
+      "fields": []
+    },
+    {
+      "name": "DeviceEvent",
+      "fields": [
+        { "name": "Action", "type": "string" },
+        { "name": "Subsystem", "type": "string" },
+        { "name": "DevPath", "type": "string" },
+        { "name": "DevName", "type": "string" },
+        { "name": "DevType", "type": "string" },
+        { "name": "Major", "type": "int" },
+        { "name": "Minor", "type": "int" }
+      ]
+    },
+    {
+      "name": "DeviceInfo",
+      "fields": [
+        { "name": "DevPath", "type": "string" },
+        { "name": "DevName", "type": "string" },
+        { "name": "Subsystem", "type": "string" },
+        { "name": "DevType", "type": "string" },
+        { "name": "Driver", "type": "string" },
+        { "name": "Major", "type": "int" },
+        { "name": "Minor", "type": "int" }
+      ]
+    },
+    {
+      "name": "DeviceList",
+      "fields": [
+        { "name": "Devices", "type": "[]DeviceInfo" }
+      ]
+    },
+    {
+      "name": "TriggerRequest",
+      "fields": [
+        { "name": "Subsystem", "type": "string" }
+      ]
+    }
+  ],
+  "requests": [
+    { "name": "ListDevices", "id": "0x0201", "request_type": "Empty", "response_type": "DeviceList" },
+    { "name": "GetDevice", "id": "0x0202", "request_type": "DeviceInfo", "response_type": "DeviceInfo" },
+    { "name": "Trigger", "id": "0x0203", "request_type": "TriggerRequest", "response_type": "Empty" }
+  ],
+  "events": [
+    { "name": "DeviceAdded", "id": "0x0301", "request_type": "DeviceEvent" },
+    { "name": "DeviceRemoved", "id": "0x0302", "request_type": "DeviceEvent" },
+    { "name": "DeviceChanged", "id": "0x0303", "request_type": "DeviceEvent" }
+  ]
+}

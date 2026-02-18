@@ -1,0 +1,31 @@
+{
+  "service": {
+    "name": "login",
+    "id": "0x00000040",
+    "package": "loginapi"
+  },
+  "types": [
+    {
+      "name": "Empty",
+      "fields": []
+    },
+    {
+      "name": "SessionInfo",
+      "fields": [
+        { "name": "Username", "type": "string" },
+        { "name": "UID", "type": "uint32" },
+        { "name": "PID", "type": "int" },
+        { "name": "Active", "type": "bool" }
+      ]
+    }
+  ],
+  "requests": [
+    { "name": "Logout", "id": "0x0201", "request_type": "Empty", "response_type": "Empty" },
+    { "name": "Lock", "id": "0x0202", "request_type": "Empty", "response_type": "Empty" },
+    { "name": "GetSession", "id": "0x0203", "request_type": "Empty", "response_type": "SessionInfo" }
+  ],
+  "events": [
+    { "name": "SessionStarted", "id": "0x0301", "request_type": "SessionInfo" },
+    { "name": "SessionEnded", "id": "0x0302", "request_type": "Empty" }
+  ]
+}

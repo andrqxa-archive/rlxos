@@ -1,0 +1,133 @@
+{
+  "service": {
+    "name": "distro",
+    "id": "0x00000070",
+    "package": "distroapi"
+  },
+  "types": [
+    {
+      "name": "Empty",
+      "fields": []
+    },
+    {
+      "name": "ListRequest",
+      "fields": [
+        { "name": "Available", "type": "bool" }
+      ]
+    },
+    {
+      "name": "DistroInfo",
+      "fields": [
+        { "name": "Name", "type": "string" },
+        { "name": "URL", "type": "string" },
+        { "name": "Version", "type": "string" },
+        { "name": "Path", "type": "string" },
+        { "name": "Size", "type": "int" }
+      ]
+    },
+    {
+      "name": "DistroList",
+      "fields": [
+        { "name": "Items", "type": "[]DistroInfo" }
+      ]
+    },
+    {
+      "name": "PullRequest",
+      "fields": [
+        { "name": "Name", "type": "string" },
+        { "name": "URL", "type": "string" }
+      ]
+    },
+    {
+      "name": "RunRequest",
+      "fields": [
+        { "name": "Distro", "type": "string" },
+        { "name": "Command", "type": "string" },
+        { "name": "Workdir", "type": "string" },
+        { "name": "Bind", "type": "string" },
+        { "name": "Env", "type": "string" },
+        { "name": "Input", "type": "[]byte" }
+      ]
+    },
+    {
+      "name": "RunResult",
+      "fields": [
+        { "name": "Stdout", "type": "[]byte" },
+        { "name": "Stderr", "type": "[]byte" },
+        { "name": "ExitCode", "type": "int" }
+      ]
+    },
+    {
+      "name": "RemoveRequest",
+      "fields": [
+        { "name": "Name", "type": "string" }
+      ]
+    },
+    {
+      "name": "ShellOpenRequest",
+      "fields": [
+        { "name": "Distro", "type": "string" },
+        { "name": "Workdir", "type": "string" },
+        { "name": "Bind", "type": "string" },
+        { "name": "Env", "type": "string" },
+        { "name": "Rows", "type": "int" },
+        { "name": "Cols", "type": "int" }
+      ]
+    },
+    {
+      "name": "ShellSession",
+      "fields": [
+        { "name": "SessionID", "type": "uint32" }
+      ]
+    },
+    {
+      "name": "ShellInputRequest",
+      "fields": [
+        { "name": "SessionID", "type": "uint32" },
+        { "name": "Data", "type": "[]byte" }
+      ]
+    },
+    {
+      "name": "ShellResizeRequest",
+      "fields": [
+        { "name": "SessionID", "type": "uint32" },
+        { "name": "Rows", "type": "int" },
+        { "name": "Cols", "type": "int" }
+      ]
+    },
+    {
+      "name": "ShellCloseRequest",
+      "fields": [
+        { "name": "SessionID", "type": "uint32" }
+      ]
+    },
+    {
+      "name": "ShellOutputEvent",
+      "fields": [
+        { "name": "SessionID", "type": "uint32" },
+        { "name": "Data", "type": "[]byte" }
+      ]
+    },
+    {
+      "name": "ShellExitEvent",
+      "fields": [
+        { "name": "SessionID", "type": "uint32" },
+        { "name": "ExitCode", "type": "int" }
+      ]
+    }
+  ],
+  "requests": [
+    { "name": "List", "id": "0x0201", "request_type": "ListRequest", "response_type": "DistroList" },
+    { "name": "Pull", "id": "0x0202", "request_type": "PullRequest", "response_type": "Empty" },
+    { "name": "Run", "id": "0x0203", "request_type": "RunRequest", "response_type": "RunResult" },
+    { "name": "Remove", "id": "0x0204", "request_type": "RemoveRequest", "response_type": "Empty" },
+    { "name": "ShellOpen", "id": "0x0205", "request_type": "ShellOpenRequest", "response_type": "ShellSession" },
+    { "name": "ShellInput", "id": "0x0206", "request_type": "ShellInputRequest", "one_way": true },
+    { "name": "ShellResize", "id": "0x0207", "request_type": "ShellResizeRequest", "one_way": true },
+    { "name": "ShellClose", "id": "0x0208", "request_type": "ShellCloseRequest", "one_way": true }
+  ],
+  "events": [
+    { "name": "ShellOutput", "id": "0x0301", "request_type": "ShellOutputEvent" },
+    { "name": "ShellExit", "id": "0x0302", "request_type": "ShellExitEvent" }
+  ]
+}

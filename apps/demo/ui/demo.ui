@@ -1,0 +1,321 @@
+Element {
+    hideTitle: true
+    scrollable: true
+    scrollStep: 44
+
+    VBox {
+        spacing: 16
+        padding: "20"
+
+        HBox {
+            spacing: 16
+            alignment: "stretch"
+
+            VBox {
+                spacing: 16
+                expand: true
+
+                Subheading {
+                    text: "Buttons"
+                    expand: false
+                }
+
+                HBox {
+                    spacing: 10
+                    expand: false
+
+                    PrimaryButton {
+                        id: primaryButton
+                        text: "Button"
+                        minWidth: 116
+                        minHeight: 36
+                        onClicked: HandlePrimary
+                        expand: false
+                    }
+
+                    PrimaryButton {
+                        id: toolsButton
+                        text: "CFG"
+                        minWidth: 82
+                        minHeight: 36
+                        onClicked: HandleTools
+                        expand: false
+                    }
+
+                    Toggle {
+                        id: quickToggle
+                        text: "On"
+                        checked: true
+                        onChanged: HandleToggleChanged
+                        expand: false
+                    }
+                }
+
+                HSeparator {}
+
+                Subheading {
+                    text: "Inputs"
+                    expand: false
+                }
+
+                TextInput {
+                    id: textInput
+                    placeholder: "Text Field"
+                    minHeight: 36
+                    onChanged: HandleInputChange
+                }
+
+                TextInput {
+                    id: passwordInput
+                    placeholder: "Password"
+                    password: true
+                    minHeight: 36
+                    onSubmitted: HandleInputSubmit
+                }
+
+                HSeparator {}
+
+                Subheading {
+                    text: "Layouts"
+                    expand: false
+                }
+
+                HBox {
+                    spacing: 14
+                    expand: false
+
+                    Checkbox {
+                        id: featureCheck
+                        text: "Checkbox"
+                        checked: true
+                        onChanged: HandleCheckboxChange
+                    }
+
+                    Checkbox {
+                        id: radioOptionA
+                        text: "Option 1"
+                        radio: true
+                        checked: true
+                        onChanged: HandleRadioA
+                    }
+
+                    Checkbox {
+                        id: radioOptionB
+                        text: "Option 2"
+                        radio: true
+                        onChanged: HandleRadioB
+                    }
+
+                    Checkbox {
+                        id: radioOptionC
+                        text: "Option 3"
+                        radio: true
+                        onChanged: HandleRadioC
+                    }
+                }
+
+                HSeparator {}
+
+                Subheading {
+                    text: "List View"
+                    expand: false
+                }
+
+                ListView {
+                    id: itemList
+                    items: "Item 1|Item 2|Item 3"
+                    selected: 0
+                    minHeight: 126
+                    onChanged: SelectListItem
+                }
+
+                HSeparator {}
+
+                Subheading {
+                    text: "Dialogs"
+                    expand: false
+                }
+
+                HBox {
+                    spacing: 8
+                    expand: false
+
+                    TextInput {
+                        id: dialogTitleInput
+                        text: "Dialog Title"
+                        minHeight: 36
+                    }
+
+                    Button {
+                        text: "OK"
+                        minWidth: 58
+                        minHeight: 36
+                        onClicked: DialogOK
+                        expand: false
+                    }
+                }
+            }
+
+            VBox {
+                spacing: 16
+                expand: true
+
+                Subheading {
+                    text: "Inputs"
+                    expand: false
+                }
+
+                Grid {
+                    colSpacing: 12
+                    rowSpacing: 12
+
+                    TextInput {
+                        id: rightFieldA
+                        placeholder: "Text Field"
+                        minHeight: 36
+                        row: 0
+                        col: 0
+                    }
+                    TextInput {
+                        id: rightFieldB
+                        placeholder: "Password"
+                        password: true
+                        minHeight: 36
+                        row: 0
+                        col: 1
+                    }
+                    TextInput {
+                        id: rightFieldC
+                        placeholder: "Password"
+                        password: true
+                        minHeight: 36
+                        row: 1
+                        col: 0
+                    }
+                    TextInput {
+                        id: rightFieldD
+                        placeholder: "Password"
+                        password: true
+                        minHeight: 36
+                        row: 1
+                        col: 1
+                    }
+                }
+
+                HSeparator {}
+
+                Subheading {
+                    text: "Layouts"
+                    expand: false
+                }
+
+                HBox {
+                    spacing: 16
+                    expand: false
+
+                    Checkbox {
+                        id: rightCheck
+                        text: "Checkbox"
+                        checked: true
+                    }
+
+                    Checkbox {
+                        id: rightRadio
+                        text: "Radio Option"
+                        radio: true
+                    }
+                }
+
+                Button {
+                    id: selectButton
+                    text: "Option 1"
+                    minHeight: 36
+                    minWidth: 120
+                    onClicked: CycleOption
+                    expand: false
+                }
+
+                HSeparator {}
+
+                Subheading {
+                    text: "Color Picker"
+                    expand: false
+                }
+
+                TableView {
+                    id: colorTable
+                    text: "Name       Type      Size\n#123456   Document  500 KB\n#507389   Image     1.2 MB\n#900772   Audio     840 KB"
+                    minHeight: 128
+                }
+
+                HSeparator {}
+
+                Subheading {
+                    text: "Progress Bars"
+                    expand: false
+                }
+
+                ProgressBar {
+                    id: progressBar
+                    value: 0.90
+                    showText: true
+                    minHeight: 18
+                }
+
+                Slider {
+                    id: mainSlider
+                    min: 0
+                    max: 100
+                    value: 65
+                    onChanged: HandleSliderChange
+                    minHeight: 22
+                }
+
+                ProgressBar {
+                    id: progressBarAlt
+                    value: 0.65
+                    showText: false
+                    fillColor: "theme.color.semantic.success"
+                    minHeight: 18
+                }
+
+                HBox {
+                    spacing: 8
+                    expand: false
+
+                    Button {
+                        text: "Dialog Title"
+                        minWidth: 124
+                        minHeight: 36
+                        onClicked: DialogOpen
+                        expand: false
+                    }
+
+                    Button {
+                        text: "Cancel"
+                        minWidth: 96
+                        minHeight: 36
+                        onClicked: DialogCancel
+                        expand: false
+                    }
+
+                    PrimaryButton {
+                        text: "OK"
+                        minWidth: 74
+                        minHeight: 36
+                        onClicked: DialogOK
+                        expand: false
+                    }
+
+                    PrimaryButton {
+                        text: "PWR"
+                        minWidth: 64
+                        minHeight: 36
+                        onClicked: HandleQuit
+                        expand: false
+                    }
+                }
+            }
+        }
+    }
+}

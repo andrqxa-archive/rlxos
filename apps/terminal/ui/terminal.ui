@@ -1,0 +1,34 @@
+Page {
+    spacing: 0
+    padding: "0"
+
+    TextArea {
+        id: Output
+        expand: true
+        interactive: true
+        focusable: true
+        onKeyPressed: TerminalKey
+        readOnly: true
+        lineNumbers: false
+        showScrollbar: true
+        text: ""
+        fontFamily: "jetbrains-mono"
+        fontSize: 14
+        textRole: "paragraph"
+        textColor: "theme.color.text.primary"
+        cursorColor: "theme.color.text.primary"
+        background: "transparent"
+        gradientTop: "transparent"
+        gradientBottom: "transparent"
+        borderColor: "transparent"
+        focusedBorderColor: "transparent"
+        focusRing: false
+        borderRadius: 0
+        padding: "0"
+        shadow: false
+        scrollbarWidth: 6
+        scrollbarMargin: 2
+        scrollbarTrackColor: "theme.color.stroke.divider"
+        scrollbarThumbColor: "theme.color.text.muted"
+    }
+}

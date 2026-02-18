@@ -1,0 +1,47 @@
+{
+  "service": {
+    "name": "service-manager",
+    "id": "0x00000050",
+    "package": "serviceapi"
+  },
+  "types": [
+    {
+      "name": "Empty",
+      "fields": []
+    },
+    {
+      "name": "ServiceNameRequest",
+      "fields": [
+        { "name": "Name", "type": "string" }
+      ]
+    },
+    {
+      "name": "ServiceStatus",
+      "fields": [
+        { "name": "Name", "type": "string" },
+        { "name": "Description", "type": "string" },
+        { "name": "Type", "type": "string" },
+        { "name": "Restart", "type": "string" },
+        { "name": "Running", "type": "bool" },
+        { "name": "Started", "type": "bool" },
+        { "name": "Failed", "type": "bool" },
+        { "name": "PID", "type": "int" }
+      ]
+    },
+    {
+      "name": "ServiceStatusList",
+      "fields": [
+        { "name": "Items", "type": "[]ServiceStatus" }
+      ]
+    }
+  ],
+  "requests": [
+    { "name": "StartService", "id": "0x0110", "request_type": "ServiceNameRequest", "response_type": "Empty" },
+    { "name": "StopService", "id": "0x0111", "request_type": "ServiceNameRequest", "response_type": "Empty" },
+    { "name": "RestartService", "id": "0x0112", "request_type": "ServiceNameRequest", "response_type": "Empty" },
+    { "name": "GetStatus", "id": "0x0113", "request_type": "ServiceNameRequest", "response_type": "ServiceStatus" },
+    { "name": "ListServices", "id": "0x0114", "request_type": "Empty", "response_type": "ServiceStatusList" },
+    { "name": "SystemPoweroff", "id": "0x0115", "request_type": "Empty", "response_type": "Empty" },
+    { "name": "SystemReboot", "id": "0x0116", "request_type": "Empty", "response_type": "Empty" }
+  ]
+}

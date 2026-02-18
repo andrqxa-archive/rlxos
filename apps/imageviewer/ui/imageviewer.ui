@@ -1,0 +1,39 @@
+Page {
+    spacing: 8
+    padding: "10"
+
+    ToolRow {
+        spacing: 8
+
+        TextInput {
+            id: PathInput
+            placeholder: "/users/username/Pictures/image.png"
+            onSubmitted: PathSubmitted
+            expand: true
+        }
+
+        PrimaryButton {
+            id: OpenBtn
+            text: "Open"
+            onClicked: Open
+            expand: false
+        }
+    }
+
+    Card {
+        expand: true
+        padding: "0"
+
+        Image {
+            id: ViewerImage
+            scaleMode: "contain"
+            srcOpaque: false
+            expand: true
+        }
+    }
+
+    StatusLabel {
+        id: Status
+        text: "Ready"
+    }
+}

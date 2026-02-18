@@ -1,0 +1,381 @@
+/*
+ * Copyright (c) 2026 Manjeet Singh <itsmanjeet1998@gmail.com>.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
+package compositor
+
+// Wayland protocol constants for the compositor (server) side.
+// Opcodes are requests (client → server), events are responses (server → client).
+
+// --- wl_display (object ID 1) ---
+
+// wl_display requests
+const (
+	displaySyncOp        = 0
+	displayGetRegistryOp = 1
+)
+
+// wl_display events
+const (
+	displayErrorEvent    = 0
+	displayDeleteIDEvent = 1
+)
+
+// --- wl_registry ---
+
+// wl_registry requests
+const (
+	registryBindOp = 0
+)
+
+// wl_registry events
+const (
+	registryGlobalEvent       = 0
+	registryGlobalRemoveEvent = 1
+)
+
+// --- wl_callback ---
+
+// wl_callback events
+const (
+	callbackDoneEvent = 0
+)
+
+// --- wl_compositor ---
+
+// wl_compositor requests
+const (
+	compositorCreateSurfaceOp = 0
+	compositorCreateRegionOp  = 1
+)
+
+// --- wl_surface ---
+
+// wl_surface requests
+const (
+	surfaceDestroyOp         = 0
+	surfaceAttachOp          = 1
+	surfaceDamageOp          = 2
+	surfaceFrameOp           = 3
+	surfaceSetOpaqueRegionOp = 4
+	surfaceSetInputRegionOp  = 5
+	surfaceCommitOp          = 6
+	surfaceDamageBufferOp    = 9
+)
+
+// --- wl_shm ---
+
+// wl_shm requests
+const (
+	shmCreatePoolOp = 0
+)
+
+// wl_shm events
+const (
+	shmFormatEvent = 0
+)
+
+// wl_shm formats
+const (
+	shmFormatARGB8888 = 0
+	shmFormatXRGB8888 = 1
+)
+
+// --- wl_shm_pool ---
+
+// wl_shm_pool requests
+const (
+	shmPoolCreateBufferOp = 0
+	shmPoolDestroyOp      = 1
+	shmPoolResizeOp       = 2
+)
+
+// --- wl_buffer ---
+
+// wl_buffer requests
+const (
+	bufferDestroyOp = 0
+)
+
+// wl_buffer events
+const (
+	bufferReleaseEvent = 0
+)
+
+// --- wl_seat ---
+
+// wl_seat requests
+const (
+	seatGetPointerOp  = 0
+	seatGetKeyboardOp = 1
+	seatGetTouchOp    = 2
+)
+
+// wl_seat events
+const (
+	seatCapabilitiesEvent = 0
+	seatNameEvent         = 1
+)
+
+// wl_seat capability bits
+const (
+	seatCapPointer  = 1
+	seatCapKeyboard = 2
+	seatCapTouch    = 4
+)
+
+// --- wl_pointer ---
+
+// wl_pointer events
+const (
+	pointerEnterEvent        = 0
+	pointerLeaveEvent        = 1
+	pointerMotionEvent       = 2
+	pointerButtonEvent       = 3
+	pointerAxisEvent         = 4
+	pointerFrameEvent        = 5
+	pointerAxisSourceEvent   = 6
+	pointerAxisStopEvent     = 7
+	pointerAxisDiscreteEvent = 8
+)
+
+// Pointer button states
+const (
+	pointerButtonReleased = 0
+	pointerButtonPressed  = 1
+)
+
+// --- wl_keyboard ---
+
+// wl_keyboard events
+const (
+	keyboardKeymapEvent    = 0
+	keyboardEnterEvent     = 1
+	keyboardLeaveEvent     = 2
+	keyboardKeyEvent       = 3
+	keyboardModifiersEvent = 4
+)
+
+// wl_keyboard keymap formats
+const (
+	keyboardKeymapFormatNoKeymap = 0
+	keyboardKeymapFormatXKBv1    = 1
+)
+
+// wl_keyboard key states
+const (
+	keyboardKeyReleased = 0
+	keyboardKeyPressed  = 1
+)
+
+// --- xdg_wm_base ---
+
+// xdg_wm_base requests
+const (
+	xdgWmBaseDestroyOp       = 0
+	xdgWmBaseCreatePosOp     = 1
+	xdgWmBaseGetXdgSurfaceOp = 2
+	xdgWmBasePongOp          = 3
+)
+
+// xdg_wm_base events
+const (
+	xdgWmBasePingEvent = 0
+)
+
+// --- xdg_surface ---
+
+// xdg_surface requests
+const (
+	xdgSurfaceDestroyOp      = 0
+	xdgSurfaceGetToplevelOp  = 1
+	xdgSurfaceGetPopupOp     = 2
+	xdgSurfaceSetGeometryOp  = 3
+	xdgSurfaceAckConfigureOp = 4
+)
+
+// xdg_surface events
+const (
+	xdgSurfaceConfigureEvent = 0
+)
+
+// --- xdg_toplevel ---
+
+// xdg_toplevel requests
+const (
+	xdgToplevelDestroyOp         = 0
+	xdgToplevelSetParentOp       = 1
+	xdgToplevelSetTitleOp        = 2
+	xdgToplevelSetAppIDOp        = 3
+	xdgToplevelShowWindowMenuOp  = 4
+	xdgToplevelMoveOp            = 5
+	xdgToplevelResizeOp          = 6
+	xdgToplevelSetMinSizeOp      = 7
+	xdgToplevelSetMaxSizeOp      = 8
+	xdgToplevelSetMaximizedOp    = 9
+	xdgToplevelUnsetMaximizedOp  = 10
+	xdgToplevelSetFullscreenOp   = 11
+	xdgToplevelUnsetFullscreenOp = 12
+	xdgToplevelSetMinimizedOp    = 13
+)
+
+// xdg_toplevel events
+const (
+	xdgToplevelConfigureEvent = 0
+	xdgToplevelCloseEvent     = 1
+)
+
+// xdg_toplevel states
+const (
+	xdgToplevelStateMaximized  = 1
+	xdgToplevelStateFullscreen = 2
+	xdgToplevelStateResizing   = 3
+	xdgToplevelStateActivated  = 4
+)
+
+// Global interface names
+const (
+	ifaceWlCompositor = "wl_compositor"
+	ifaceWlShm        = "wl_shm"
+	ifaceWlSeat       = "wl_seat"
+	ifaceXdgWmBase    = "xdg_wm_base"
+)
+
+// Global interface versions we advertise
+const (
+	versionWlCompositor = 4
+	versionWlShm        = 1
+	versionWlSeat       = 5
+	versionXdgWmBase    = 2
+)
+
+// --- zwlr_layer_shell_v1 (wlr-layer-shell-unstable-v1) ---
+
+// zwlr_layer_shell_v1 requests
+const (
+	layerShellGetLayerSurfaceOp = 0
+	layerShellDestroyOp         = 1
+)
+
+// Layer constants
+const (
+	layerBackground = 0
+	layerBottom     = 1
+	layerTop        = 2
+	layerOverlay    = 3
+)
+
+// --- zwlr_layer_surface_v1 ---
+
+// zwlr_layer_surface_v1 requests
+const (
+	layerSurfaceSetSizeOp             = 0
+	layerSurfaceSetAnchorOp           = 1
+	layerSurfaceSetExclusiveZoneOp    = 2
+	layerSurfaceSetMarginOp           = 3
+	layerSurfaceSetKeyboardInteractOp = 4
+	layerSurfaceGetPopupOp            = 5
+	layerSurfaceAckConfigureOp        = 6
+	layerSurfaceDestroyOp             = 7
+	layerSurfaceSetLayerOp            = 8
+)
+
+// zwlr_layer_surface_v1 events
+const (
+	layerSurfaceConfigureEvent = 0
+	layerSurfaceClosedEvent    = 1
+)
+
+// Anchor edge bits
+const (
+	layerAnchorTop    = 1
+	layerAnchorBottom = 2
+	layerAnchorLeft   = 4
+	layerAnchorRight  = 8
+)
+
+// Keyboard interactivity modes
+const (
+	layerKeyboardInteractNone      = 0
+	layerKeyboardInteractExclusive = 1
+	layerKeyboardInteractOnDemand  = 2
+)
+
+// --- zwlr_foreign_toplevel_manager_v1 ---
+
+// zwlr_foreign_toplevel_manager_v1 requests
+const (
+	foreignManagerStopOp = 0
+)
+
+// zwlr_foreign_toplevel_manager_v1 events
+const (
+	foreignManagerToplevelEvent = 0
+	foreignManagerFinishedEvent = 1
+)
+
+// --- zwlr_foreign_toplevel_handle_v1 ---
+
+// zwlr_foreign_toplevel_handle_v1 requests
+const (
+	foreignHandleSetMaximizedOp    = 0
+	foreignHandleUnsetMaximizedOp  = 1
+	foreignHandleSetMinimizedOp    = 2
+	foreignHandleUnsetMinimizedOp  = 3
+	foreignHandleActivateOp        = 4
+	foreignHandleCloseOp           = 5
+	foreignHandleSetRectangleOp    = 6
+	foreignHandleDestroyOp         = 7
+	foreignHandleSetFullscreenOp   = 8
+	foreignHandleUnsetFullscreenOp = 9
+)
+
+// zwlr_foreign_toplevel_handle_v1 events
+const (
+	foreignHandleTitleEvent       = 0
+	foreignHandleAppIDEvent       = 1
+	foreignHandleOutputEnterEvent = 2
+	foreignHandleOutputLeaveEvent = 3
+	foreignHandleStateEvent       = 4
+	foreignHandleDoneEvent        = 5
+	foreignHandleClosedEvent      = 6
+)
+
+// Foreign toplevel states
+const (
+	foreignStateMaximized  = 0
+	foreignStateMinimized  = 1
+	foreignStateActivated  = 2
+	foreignStateFullscreen = 3
+)
+
+// Global interface names and versions for new protocols
+const (
+	ifaceLayerShell     = "zwlr_layer_shell_v1"
+	ifaceForeignManager = "zwlr_foreign_toplevel_manager_v1"
+)
+
+const (
+	versionLayerShell     = 4
+	versionForeignManager = 3
+)
+
+// Linux evdev button codes
+const (
+	evBtnLeft   = 0x110
+	evBtnRight  = 0x111
+	evBtnMiddle = 0x112
+)

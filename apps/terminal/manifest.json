@@ -1,0 +1,6 @@
+{
+  "id": "terminal",
+  "name": "Terminal",
+  "description": "Run command-line operations.",
+  "icon": "terminal"
+}

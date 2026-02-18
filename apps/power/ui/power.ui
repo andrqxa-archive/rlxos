@@ -1,0 +1,96 @@
+Page {
+    padding: "18"
+    spacing: 0
+    background: "#0A132680"
+    overflow: "visible"
+
+    VBox {
+        expand: true
+        spacing: 0
+
+        Spacer {
+            interactive: true
+            onClicked: Dismiss
+        }
+
+        HBox {
+            expand: true
+            spacing: 0
+
+            Spacer {
+                interactive: true
+                onClicked: Dismiss
+            }
+
+            Card {
+                padding: "18"
+                expand: false
+
+                VBox {
+                    spacing: 12
+                    expand: true
+
+                    Heading {
+                        text: "Power Options"
+                    }
+
+                    Paragraph {
+                        text: "Choose an action for this session."
+                        textColor: "theme.color.text.secondary"
+                    }
+
+                    HBox {
+                        spacing: 10
+                        expand: false
+
+                        Button {
+                            id: LogoutBtn
+                            text: "Logout"
+                            onClicked: Logout
+                            minWidth: 110
+                            minHeight: 110
+                            maxWidth: 110
+                            maxHeight: 110
+                            borderRadius: 14
+                            textAlign: "center"
+                        }
+
+                        Button {
+                            id: RebootBtn
+                            text: "Restart"
+                            onClicked: Reboot
+                            minWidth: 110
+                            minHeight: 110
+                            maxWidth: 110
+                            maxHeight: 110
+                            borderRadius: 14
+                            textAlign: "center"
+                        }
+
+                        Button {
+                            id: ShutdownBtn
+                            text: "Shutdown"
+                            onClicked: Shutdown
+                            minWidth: 110
+                            minHeight: 110
+                            maxWidth: 110
+                            maxHeight: 110
+                            borderRadius: 14
+                            textAlign: "center"
+                        }
+                    }
+                }
+            }
+
+            Spacer {
+                interactive: true
+                onClicked: Dismiss
+            }
+        }
+
+        Spacer {
+            interactive: true
+            onClicked: Dismiss
+        }
+    }
+}
