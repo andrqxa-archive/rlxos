@@ -86,7 +86,8 @@ SERVICES = distro display login uevent dbgd
 GO_TARGETS = $(addprefix cmd/,${COMMANDS}) $(addsuffix /exec,$(addprefix apps/,${APPS})) $(addprefix services/,${SERVICES})
 CONFIG_TARGETS = $(shell find config/ -type f)
 DATA_TARGETS = $(shell find data/ -type f)
-SYSTEM_TARGETS = $(GO_TARGETS) ${CONFIG_TARGETS} ${DATA_TARGETS} $(addsuffix /manifest.json,$(addprefix apps/,${APPS})) $(addsuffix /icon.png,$(addprefix apps/,${APPS}))
+EXTERNAL_TARGETS = cmd/dlv
+SYSTEM_TARGETS = $(GO_TARGETS) ${EXTERNAL_TARGETS} ${CONFIG_TARGETS} ${DATA_TARGETS} $(addsuffix /manifest.json,$(addprefix apps/,${APPS})) $(addsuffix /icon.png,$(addprefix apps/,${APPS}))
 
 INITRAMFS_TARGETS = init
 
@@ -160,6 +161,9 @@ ${SYSTEM_PATH}/data/%: ${CURDIR}/data/%
 
 ${SYSTEM_PATH}/%:
 	GOOS=linux GOARCH=${GOARCH} CGO_ENABLED=0 ${GO} build ${GOFLAGS} -o $@ $(@:${SYSTEM_PATH}/%=avyos.dev/%)
+
+${SYSTEM_PATH}/cmd/dlv:
+	GOOS=linux GOARCH=${GOARCH} CGO_ENABLED=0 ${GO} build ${GOFLAGS} -o $@ github.com/go-delve/delve/cmd/dlv
 
 ${SYSTEM_IMAGE}: $(addprefix ${SYSTEM_PATH}/,${SYSTEM_TARGETS})
 	mksquashfs ${SYSTEM_PATH} ${SYSTEM_IMAGE} -noappend -all-root -quiet
