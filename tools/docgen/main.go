@@ -944,10 +944,10 @@ func run(cfg config) error {
 	indexMeta := parseDocsIndex(projectDocs)
 
 	homeRelPath := ""
-	if _, ok := findProjectDoc(projectDocs, "docs/index.md"); ok {
-		homeRelPath = "docs/index.md"
-	} else if _, ok := findProjectDoc(projectDocs, "README.md"); ok {
+	if _, ok := findProjectDoc(projectDocs, "README.md"); ok {
 		homeRelPath = "README.md"
+	} else if _, ok := findProjectDoc(projectDocs, "docs/index.md"); ok {
+		homeRelPath = "docs/index.md"
 	}
 
 	markdownMap := map[string]string{}

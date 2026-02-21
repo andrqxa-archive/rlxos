@@ -13,126 +13,115 @@
   <img src="docs/assets/interface.png" width="60%" alt="Interface"/>
 </p>
 
-## Overview
 
-AvyOS is an experimental operating system that reimagines the traditional Linux userspace from the ground up. Everything — from init to shell to the tiling window manager — is implemented in pure Go with zero C dependencies.
+## What is avyos?
 
-**Key characteristics:**
+**avyos** is an operating system project. It uses the **Linux kernel** for hardware support and booting, but rethinks the “system layer” (init, services, core tools, UI stack) in **pure Go** with **CGO disabled**.
 
-- **Pure Go** — Built with `CGO_ENABLED=0`, no C toolchain required
-- **Non-POSIX** — Clean, modern interfaces without legacy baggage
-- **TUI-only** — Terminal-based interface (like tmux meets tiling WM)
-- **Immutable core** — System files in `/avyos/` are read-only
-- **Containerized apps** — Applications run with capability-based isolation
+If you’re not an OS person: you can think of avyos as “a Linux-based OS image with its own Go-written system core”.
 
-## Documentation
+### What makes it different?
 
-| Document                                   | Description                                |
-| ------------------------------------------ | ------------------------------------------ |
-| [Filesystem Hierarchy](docs/filesystem.md) | AvyOS directory structure and mount points |
-| [Architecture](docs/architecture.md)       | Source code organization and components    |
-| [First Boot](docs/firstboot.md)            | Initial system setup process               |
-| [Desktop Guide](docs/welcome-tour.md)      | TUI desktop and keyboard shortcuts         |
+- **Immutable system core**  
+  The OS core is mounted at `/avyos` and treated as read-only at runtime.
 
-## Why Go?
+- **Clear separation of state**  
+  Apps, configuration, user data, and runtime files live in separate writable locations (`/apps`, `/config`, `/users`, `/cache`).
 
-- **Faster development** — Go's simplicity makes building an OS userspace enjoyable
-- **Easier maintenance** — Single-developer project needs readable, maintainable code
-- **No CGO complexity** — Eliminates entire categories of build issues
-- **Strong standard library** — Networking, crypto, compression without dependencies
+- **Service-driven capabilities**  
+  Instead of letting apps poke low-level system resources directly, privileged operations are intended to be exposed via services and accessed through authenticated IPC.
 
-## Non-Goals
+- **Optional Linux compatibility layer**  
+  A distro root filesystem can be provided at `/linux` and run in a restricted container for compatibility and reuse of existing Linux userland resources.
 
-AvyOS is **not** POSIX-compatible. This is intentional.
+For the detailed system breakdown and code map, see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
-POSIX compatibility would require implementing decades of legacy interfaces. Instead, AvyOS focuses on:
+---
 
-- **Simplicity** — Clean interfaces designed for the system, not compatibility
-- **Developer experience** — Easy to understand, modify, and extend
-- **Modern design** — No baggage from the 1970s
+## Try avyos (no source code required)
 
-For running POSIX applications, AvyOS provides a Linux compatibility layer at `/linux/<distro>` using containerization.
+You can try avyos in QEMU using **prebuilt release images**.
 
-## Building
+### Option A: One-command runner (recommended)
+
+This tool downloads the right release ZIP for your architecture and starts QEMU:
 
 ```bash
-# Build disk image
-make GOARCH=arm64
+go run avyos.dev/tools/runimage@latest
 ```
 
-## Testing
+Supported flags (from `tools/runimage`):
+
+- `--arch <arch>`: target architecture (default: your host `GOARCH`, e.g. `amd64`, `arm64`)
+- `--branch <name>`: release tag/branch to download (default: `main`)
+- `--cpu <n>`: CPU cores for QEMU (default: `2`)
+- `--memory <size>`: RAM for QEMU (default: `2G`)
+- `--vnc <display>`: start VNC server (example `:0`)
+- `--dbg-port <port>`: forward `host:port → guest:5037` (default: `5037`, `0` disables)
+
+Any extra arguments after the flags are passed directly to QEMU.
+
+Examples:
 
 ```bash
-# Test your local build
-make GOARCH=arm64 run
+# Run with VNC on :0
+go run avyos.dev/tools/runimage@latest --vnc :0
 
-# Optional: use a different host debug forward port for local build
-make GOARCH=arm64 run DBG_PORT=5038
+# Use 4 cores and 4G RAM
+go run avyos.dev/tools/runimage@latest --cpu 4 --memory 4G
+
+# Disable dbgd port forwarding
+go run avyos.dev/tools/runimage@latest --dbg-port 0
 ```
 
-## Test latest release build (without source)
+> Requirements: Go + QEMU installed on your machine.
+
+### Option B: Download a release ZIP and run QEMU manually
+
+Releases are published on GitHub:
+
+- Releases page: https://github.com/itsManjeet/avyos/releases
+- Latest release: https://github.com/itsManjeet/avyos/releases/latest
+
+Each release provides an **arch-specific ZIP** named like:
+
+- `avyos-<release>-amd64.zip`
+- `avyos-<release>-arm64.zip`
+
+The ZIP contains:
+- `disk.img`
+- `firmware`
+- `variables`
+
+Unzip it, then run QEMU from that directory.
+
+#### amd64
 
 ```bash
-# Run latest release image (recommended)
-go run avyos.dev/tools/runimage@latest --arch amd64
-go run avyos.dev/tools/runimage@latest --arch arm64
-
-# Optional: change forwarded dbg port (host -> guest 5037)
-go run avyos.dev/tools/runimage@latest --arch amd64 --dbg-port 5038
+qemu-system-x86_64   -smp 2 -m 2G   -serial mon:stdio   -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:5037-:5037   -vga none   -device virtio-gpu-pci   -device virtio-keyboard-pci   -device virtio-mouse-pci   -drive if=pflash,file=firmware,readonly=on,format=raw   -drive if=pflash,file=variables,format=raw   -drive file=disk.img,format=raw
 ```
 
-> Use __admin:admin__ as default credentials
-
-## Debugging with dbg
-
-`dbgd` runs in the guest and is reachable on host `127.0.0.1:5037` by default (via QEMU port forward).
+#### arm64
 
 ```bash
-# Use repo tool
-go run ./tools/dbg --host 127.0.0.1 --port 5037 --user admin whoami
-
-# Or use latest tool without source checkout
-go run avyos.dev/tools/dbg@latest --host 127.0.0.1 --port 5037 --user admin whoami
-
-# Run a single command
-go run ./tools/dbg --host 127.0.0.1 --port 5037 --user admin cmd "list /config"
-
-# Run through shell parsing
-go run ./tools/dbg --host 127.0.0.1 --port 5037 --user admin shell "list /config | read pattern service"
-
-# Pull/push files
-go run ./tools/dbg --host 127.0.0.1 --port 5037 --user admin pull /config/init.conf ./init.conf
-go run ./tools/dbg --host 127.0.0.1 --port 5037 --user admin push ./init.conf /config/init.conf
+qemu-system-aarch64   -M virt -cpu cortex-a57   -smp 2 -m 2G   -serial mon:stdio   -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:5037-:5037   -vga none   -device virtio-gpu-pci   -device virtio-keyboard-pci   -device virtio-mouse-pci   -drive if=pflash,file=firmware,readonly=on,format=raw   -drive if=pflash,file=variables,format=raw   -drive file=disk.img,format=raw
 ```
 
-You can set `DBG_PASSWORD` to avoid interactive password prompt:
+Notes:
+- The networking rule forwards host TCP `5037` to the guest `dbgd` service on `5037`. Remove the `hostfwd=...` part if you don’t want it.
+- Add `-vnc :0` to enable VNC output.
 
-```bash
-export DBG_PASSWORD=admin
-```
+---
 
-## Status
+## Docs
 
-AvyOS is experimental — a proof of concept that a usable Linux userspace can be built entirely in Go.
+- **Building and running from source**: [`BUILDING.md`](./docs/BUILDING.md)
+- **Architecture**: [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
+- **Developer workflows**: [`DEVELOPERS.md`](./docs/DEVELOPERS.md)
+- **Contributing**: [`CONTRIBUTING.md`](./docs/CONTRIBUTING.md)
 
-| Component          | Status    | Notes                                               |
-| ------------------ | --------- | --------------------------------------------------- |
-| Boot & Init        | ✅ Done    | Basic init system with service manager              |
-| Shell              | ✅ Done    | Interactive shell with builtins                     |
-| IPC                | ✅ Done    | Sutra message bus + code generator                  |
-| UI Toolkit         | 🟡 Basic   | Basic widget toolkit (wayland, drmkms, fb, display) |
-| Desktop/WM         | 🟡 Minimal | Basic window manager with taskbar support           |
-| Networking         | 🟡 Basic   | Static IPv4 support only                            |
-| Core Utils         | 🟡 Minimal | 23 essential commands                               |
-| Audio              | ❌ TODO    | ALSA or direct hardware                             |
-| USB/Input          | ❌ TODO    | Device hotplug, input handling                      |
-| Package Manager    | ❌ TODO    | Package format, repos                               |
-| Hardware Detection | ❌ TODO    | PCI, device enumeration                             |
-
-## Acknowledgments
-
-This project was developed with the help of LLM models.
+---
 
 ## License
 
-GNU General Public License v3.0
+See [`LICENSE`](./LICENSE).
