@@ -32,6 +32,8 @@ import (
 	"avyos.dev/pkg/sutra"
 )
 
+const waylayerDisplay = "waylayer"
+
 // session manages the lifecycle of a user session: spawning cmd/session
 // as the user and waiting for it to exit naturally.
 type session struct {
@@ -83,6 +85,9 @@ func (s *session) run() {
 
 	if err := ensureUserRuntimeDir(uid, gid); err != nil {
 		serviceLog.Warn("failed to setup user runtime dir: %v", err)
+	}
+	if err := ensureWaylandRuntimeDir(uid, gid); err != nil {
+		serviceLog.Warn("failed to setup wayland runtime dir: %v", err)
 	}
 
 	// Build per-session environment (don't pollute global env)
@@ -145,6 +150,9 @@ func (s *session) stop(timeout time.Duration) error {
 
 // sessionEnv builds the environment for this user's session.
 func (s *session) sessionEnv() []string {
+	uid := uint32(s.id.ID)
+	runtimeDir := waylandRuntimeDir(uid)
+
 	// Start from a clean base, preserving only essential system vars
 	env := []string{
 		"HOME=" + s.id.Home,
@@ -153,6 +161,8 @@ func (s *session) sessionEnv() []string {
 		"SHELL=" + s.id.Shell,
 		"AVYOS_SESSION_PID=" + strconv.Itoa(os.Getpid()),
 		"AVYOS_SESSION_ID=" + strconv.FormatUint(uint64(s.id.ID), 10),
+		"XDG_RUNTIME_DIR=" + runtimeDir,
+		"WAYLAND_DISPLAY=" + waylayerDisplay,
 	}
 	// Carry over system-level environment
 	for _, e := range os.Environ() {
@@ -161,7 +171,7 @@ func (s *session) sessionEnv() []string {
 			key = e[:idx]
 		}
 		switch key {
-		case "HOME", "USER", "LOGNAME", "SHELL", "AVYOS_SESSION_PID", "AVYOS_SESSION_ID":
+		case "HOME", "USER", "LOGNAME", "SHELL", "AVYOS_SESSION_PID", "AVYOS_SESSION_ID", "XDG_RUNTIME_DIR", "WAYLAND_DISPLAY":
 			continue // already set above
 		default:
 			env = append(env, e)
@@ -229,6 +239,24 @@ func ensureUserRuntimeDir(uid, gid uint32) error {
 		return err
 	}
 	if err := os.Chmod(userDir, 0700); err != nil {
+		return err
+	}
+	return nil
+}
+
+func waylandRuntimeDir(uid uint32) string {
+	return fs.Resolve("cache", filepath.Join("runtime", strconv.FormatUint(uint64(uid), 10)))
+}
+
+func ensureWaylandRuntimeDir(uid, gid uint32) error {
+	runtimeDir := waylandRuntimeDir(uid)
+	if err := os.MkdirAll(runtimeDir, 0700); err != nil {
+		return err
+	}
+	if err := os.Chown(runtimeDir, int(uid), int(gid)); err != nil {
+		return err
+	}
+	if err := os.Chmod(runtimeDir, 0700); err != nil {
 		return err
 	}
 	return nil

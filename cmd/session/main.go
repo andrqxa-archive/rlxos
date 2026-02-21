@@ -24,6 +24,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -51,15 +52,23 @@ func main() {
 
 	components := []component{
 		{name: "settingsmanager", args: []string{"--daemon"}, daemon: true, optional: true},
-		{name: "waylayer", daemon: true, optional: true},
+		{name: "waylayer", args: []string{"--daemon"}, daemon: true, optional: true},
 		{name: "background", args: []string{"--mode", "layer"}},
 		{name: "dock"},
 	}
 
-	// Set WAYLAND_DISPLAY for Wayland clients to find waylayer
-	if os.Getenv("WAYLAND_DISPLAY") == "" {
-		os.Setenv("WAYLAND_DISPLAY", "wayland-0")
+	// Set deterministic Wayland runtime/socket defaults for the session.
+	uid := os.Getuid()
+	runtimeDir := fs.Resolve("cache", filepath.Join("runtime", strconv.Itoa(uid)))
+	if err := os.MkdirAll(runtimeDir, 0700); err != nil {
+		log.Printf("warning: failed to create runtime dir %s: %v", runtimeDir, err)
 	}
+	if err := os.Chmod(runtimeDir, 0700); err != nil {
+		log.Printf("warning: failed to chmod runtime dir %s: %v", runtimeDir, err)
+	}
+	_ = os.Setenv("XDG_RUNTIME_DIR", runtimeDir)
+	_ = os.Setenv("WAYLAND_DISPLAY", "waylayer")
+	_ = os.Setenv("AVYOS_SESSION_MODE", "1")
 
 	var children []*child
 	var critical []*child
@@ -72,7 +81,9 @@ func main() {
 		cmd.Stderr = os.Stderr
 		cmd.Dir = os.Getenv("HOME")
 		cmd.Env = os.Environ()
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
+		// Start each component in its own process group so terminal SIGINT
+		// (Ctrl+C) on the parent shell does not tear down the full desktop.
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 		if err := cmd.Start(); err != nil {
 			if comp.optional {
@@ -111,17 +122,27 @@ func main() {
 	}
 
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
 
-	select {
-	case sig := <-sigCh:
-		log.Printf("received %v", sig)
-	case c := <-exits:
-		log.Printf("%s exited", c.name)
+	for {
+		select {
+		case sig := <-sigCh:
+			// Ignore interactive shell/tty signals for session robustness.
+			if sig == syscall.SIGINT || sig == syscall.SIGHUP || sig == syscall.SIGQUIT {
+				log.Printf("ignoring %v", sig)
+				continue
+			}
+			log.Printf("received %v", sig)
+			signal.Stop(sigCh)
+			stopAll(children)
+			return
+		case c := <-exits:
+			log.Printf("%s exited", c.name)
+			signal.Stop(sigCh)
+			stopAll(children)
+			return
+		}
 	}
-
-	signal.Stop(sigCh)
-	stopAll(children)
 }
 
 func resolveApp(name string) string {

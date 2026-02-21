@@ -22,7 +22,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
+
+	"avyos.dev/pkg/fs"
 )
 
 func (s *Service) Start() error {
@@ -58,13 +61,15 @@ func (s *Service) Start() error {
 			s.Environment["TERM"] = "linux"
 		}
 	} else {
-		if err := os.MkdirAll("/cache/logs", 0755); err != nil {
-			return fmt.Errorf("failed to create /cache/logs: %w", err)
+		logPath := fs.Resolve("cache", filepath.Join("log", "services", serviceLogFileName(s)+".log"))
+		logDir := filepath.Dir(logPath)
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return fmt.Errorf("failed to create %s: %w", logDir, err)
 		}
 		var err error
-		logFile, err = os.OpenFile(filepath.Join("/cache/logs", "system.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		logFile, err = os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
-			return fmt.Errorf("failed to open /cache/logs/system.log: %w", err)
+			return fmt.Errorf("failed to open %s: %w", logPath, err)
 		}
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = logFile
@@ -104,4 +109,35 @@ func (s *Service) Start() error {
 
 	s.Process = cmd.Process
 	return nil
+}
+
+func serviceLogFileName(s *Service) string {
+	name := strings.TrimSpace(s.Name)
+	if name == "" {
+		name = filepath.Base(strings.TrimSpace(s.Command))
+	}
+	name = strings.ToLower(name)
+	if name == "" {
+		return "unknown"
+	}
+
+	var b strings.Builder
+	b.Grow(len(name))
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '-' || r == '_' || r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	out := strings.Trim(b.String(), "._-")
+	if out == "" {
+		return "unknown"
+	}
+	return out
 }

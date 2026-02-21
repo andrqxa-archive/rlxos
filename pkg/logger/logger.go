@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"avyos.dev/pkg/format"
+	"avyos.dev/pkg/fs"
 )
 
 // Level represents the log severity level
@@ -71,16 +72,29 @@ func New(component string) *Logger {
 	}
 }
 
-// SetupSystemLog configures process logging to append to /cache/logs/system.log
+// SetupSystemLog configures process logging to append to a per-process log file
 // while preserving stdout/stderr output.
+//
+// Root/system process path:
+//
+//	fs.Resolve("cache", "log/services/<name>.log")
+//
+// User process path:
+//
+//	$HOME/.cache/log/services/<name>.log
 func SetupSystemLog() error {
 	setupOnce.Do(func() {
-		logDir := "/cache/logs"
+		logPath, err := resolveServiceLogPath()
+		if err != nil {
+			setupErr = err
+			return
+		}
+		logDir := filepath.Dir(logPath)
 		if err := os.MkdirAll(logDir, 0755); err != nil {
 			setupErr = err
 			return
 		}
-		logFile, err := os.OpenFile(filepath.Join(logDir, "system.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
 			setupErr = err
 			return
@@ -96,6 +110,70 @@ func SetupSystemLog() error {
 		stdlog.SetFlags(stdlog.LstdFlags | stdlog.Lmicroseconds)
 	})
 	return setupErr
+}
+
+func resolveServiceLogPath() (string, error) {
+	name := sanitizeServiceName(guessProcessName())
+	if name == "" {
+		name = "unknown"
+	}
+	fileName := name + ".log"
+
+	if os.Geteuid() == 0 {
+		return fs.Resolve("cache", filepath.Join("log", "services", fileName)), nil
+	}
+
+	home := strings.TrimSpace(os.Getenv("HOME"))
+	if home == "" {
+		var err error
+		home, err = os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+	}
+	return filepath.Join(home, ".cache", "log", "services", fileName), nil
+}
+
+func guessProcessName() string {
+	exe := filepath.Clean(strings.TrimSpace(os.Args[0]))
+	if exe == "" {
+		return "unknown"
+	}
+
+	base := filepath.Base(exe)
+	if base == "exec" {
+		parent := filepath.Base(filepath.Dir(exe))
+		if parent != "" && parent != "." && parent != string(os.PathSeparator) {
+			return parent
+		}
+	}
+	return base
+}
+
+func sanitizeServiceName(s string) string {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '-' || r == '_' || r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	out := strings.Trim(b.String(), "._-")
+	if out == "" {
+		return "unknown"
+	}
+	return out
 }
 
 // getDefaultLevel returns the default log level based on LOG_LEVEL env var
