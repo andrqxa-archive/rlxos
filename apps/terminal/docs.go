@@ -1,6 +1,11 @@
 /*
-Package main implements the AvyOS terminal application.
+Terminal lets you run command-line tools and scripts.
 
-terminal provides interactive shell sessions in desktop windows.
+How to use:
+- Type a command and press Enter to run it.
+- Use Ctrl+C to stop a running command.
+- Use Ctrl+D to end the current shell session.
+
+If the shell exits, you can restart the session from inside the app.
 */
 package main

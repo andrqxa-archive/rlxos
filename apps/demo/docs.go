@@ -1,6 +1,9 @@
 /*
-Package main implements the AvyOS demo application.
+Demo App is a showcase of built-in interface controls.
 
-demo provides a development sandbox for trying graphics and UI primitives.
+Use it to:
+- Preview buttons, toggles, sliders, inputs, and dialogs.
+- Try interactions and see status feedback in real time.
+- Explore how common AvyOS UI elements look and behave.
 */
 package main

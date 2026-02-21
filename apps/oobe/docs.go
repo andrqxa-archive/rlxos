@@ -1,6 +1,11 @@
 /*
-Package main implements the AvyOS OOBE application.
+Welcome (OOBE) guides first-time setup on a new system.
 
-oobe guides first-boot user onboarding and initial system configuration.
+Setup flow:
+- Start at the welcome screen.
+- Create your first user account and password.
+- Finish setup to enter the desktop.
+
+After completion, setup is marked as done and does not appear on normal boots.
 */
 package main
