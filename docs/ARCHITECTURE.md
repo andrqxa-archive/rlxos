@@ -1,4 +1,4 @@
-# avyos — Architecture
+# Architecture
 
 This document is a **high-level description** of avyos: its major subsystems, how they interact, and where the corresponding code lives. It is intended to be stable over time and act as a “map” for contributors.
 

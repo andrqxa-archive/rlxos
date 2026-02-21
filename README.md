@@ -78,12 +78,9 @@ go run avyos.dev/tools/runimage@latest --dbg-port 0
 
 ### Option B: Download a release ZIP and run QEMU manually
 
-Releases are published on GitHub:
+Releases are published on GitHub [Releases page](https://github.com/itsManjeet/avyos/releases)
 
-- Releases page: https://github.com/itsManjeet/avyos/releases
-- Latest release: https://github.com/itsManjeet/avyos/releases/latest
-
-Each release provides an **arch-specific ZIP** named like:
+Each release provides assets **arch-specific ZIP** named like:
 
 - `avyos-<release>-amd64.zip`
 - `avyos-<release>-arm64.zip`
@@ -98,13 +95,34 @@ Unzip it, then run QEMU from that directory.
 #### amd64
 
 ```bash
-qemu-system-x86_64   -smp 2 -m 2G   -serial mon:stdio   -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:5037-:5037   -vga none   -device virtio-gpu-pci   -device virtio-keyboard-pci   -device virtio-mouse-pci   -drive if=pflash,file=firmware,readonly=on,format=raw   -drive if=pflash,file=variables,format=raw   -drive file=disk.img,format=raw
+qemu-system-x86_64    \
+  -smp 2 -m 2G        \
+  -serial mon:stdio   \
+  -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:5037-:5037   \
+  -vga none           \
+  -device virtio-gpu-pci \
+  -device virtio-keyboard-pci \
+  -device virtio-mouse-pci   \
+  -drive if=pflash,file=firmware,readonly=on,format=raw \
+  -drive if=pflash,file=variables,format=raw \
+  -drive file=disk.img,format=raw
 ```
 
 #### arm64
 
 ```bash
-qemu-system-aarch64   -M virt -cpu cortex-a57   -smp 2 -m 2G   -serial mon:stdio   -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:5037-:5037   -vga none   -device virtio-gpu-pci   -device virtio-keyboard-pci   -device virtio-mouse-pci   -drive if=pflash,file=firmware,readonly=on,format=raw   -drive if=pflash,file=variables,format=raw   -drive file=disk.img,format=raw
+qemu-system-aarch64   \
+  -M virt -cpu cortex-a57   \
+  -smp 2 -m 2G        \
+  -serial mon:stdio   \
+  -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:5037-:5037   \
+  -vga none           \
+  -device virtio-gpu-pci \
+  -device virtio-keyboard-pci \
+  -device virtio-mouse-pci   \
+  -drive if=pflash,file=firmware,readonly=on,format=raw \
+  -drive if=pflash,file=variables,format=raw \
+  -drive file=disk.img,format=raw
 ```
 
 Notes:

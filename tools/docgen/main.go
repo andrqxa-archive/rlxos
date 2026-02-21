@@ -94,6 +94,10 @@ type commandHelpDoc struct {
 	Raw         string
 }
 
+type appManifest struct {
+	Name string `json:"name"`
+}
+
 type apiSchema struct {
 	Service  apiSchemaService  `json:"service"`
 	Imports  []string          `json:"imports,omitempty"`
@@ -400,6 +404,7 @@ const docgenStyles = `
 .doc-content {
   padding: 0;
   min-height: 80vh;
+  min-width: 0;
   background: transparent;
   border: 0;
   box-shadow: none;
@@ -413,6 +418,11 @@ const docgenStyles = `
 
 .doc-content > *:first-child {
   margin-top: 0;
+}
+
+.doc-content > * {
+  max-width: 1120px;
+  margin-inline: auto;
 }
 
 .doc-path {
@@ -473,6 +483,8 @@ const docgenStyles = `
   margin: 0.54rem 0;
   color: var(--text);
   line-height: 1.56;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .doc-markdown ul,
@@ -486,6 +498,16 @@ const docgenStyles = `
 .doc-markdown li + li,
 .doc-api li + li {
   margin-top: 0.2rem;
+}
+
+.doc-markdown li,
+.doc-api li,
+.doc-markdown td,
+.doc-markdown th,
+.doc-api td,
+.doc-api th {
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .doc-markdown blockquote,
@@ -877,6 +899,60 @@ const docgenStyles = `
   margin: 0.28rem 0;
 }
 
+.doc-go-shell {
+  display: grid;
+  gap: 0.76rem;
+}
+
+.doc-go-group > h2 {
+  margin: 0 0 0.5rem;
+  border-top: 0;
+  padding-top: 0;
+}
+
+.doc-go-symbol {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.doc-go-item pre,
+.doc-go-subitem pre {
+  margin: 0.4rem 0 0;
+}
+
+.doc-go-item .doc-markdown,
+.doc-go-subitem .doc-markdown {
+  margin-top: 0.44rem;
+}
+
+.doc-go-subgroup {
+  margin-top: 0.56rem;
+  padding-top: 0.48rem;
+  border-top: 1px solid var(--border);
+}
+
+.doc-go-subgroup > h4 {
+  margin: 0 0 0.4rem;
+  font-family: var(--display);
+  font-size: 0.9rem;
+}
+
+.doc-go-sublist {
+  gap: 0.52rem;
+}
+
+.doc-go-subitem {
+  padding: 0.52rem 0.58rem;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+@media (prefers-color-scheme: dark) {
+  .doc-go-subitem {
+    background: rgba(232, 239, 255, 0.08);
+  }
+}
+
 @media (max-width: 1080px) {
   .doc-shell .container {
     width: calc(100% - 24px);
@@ -1076,7 +1152,7 @@ func collectProjectDocs(root string) ([]markdownDoc, error) {
 			if walkErr != nil {
 				return walkErr
 			}
-			if d.IsDir() {
+			if d.IsDir() || filepath.Base(path) == "index.md" {
 				return nil
 			}
 			if strings.EqualFold(filepath.Ext(d.Name()), ".md") {
@@ -1281,6 +1357,13 @@ func renderAppDocs(root string) ([]apiDoc, error) {
 	out := make([]apiDoc, 0, len(dirs))
 	for _, relDir := range dirs {
 		title := filepath.Base(relDir)
+		manifestName, manifestErr := appDisplayName(root, relDir)
+		if manifestErr != nil {
+			fmt.Fprintf(os.Stderr, "docgen: warning: failed to read app manifest for %s: %v\n", relDir, manifestErr)
+		} else if manifestName != "" {
+			title = manifestName
+		}
+
 		docText, sourceFile, readErr := readProgramDoc(root, relDir, []string{"docs.go", "doc.go"})
 		if readErr != nil {
 			fmt.Fprintf(os.Stderr, "docgen: warning: failed to read docs for %s: %v\n", relDir, readErr)
@@ -1317,6 +1400,23 @@ func renderAppDocs(root string) ([]apiDoc, error) {
 	}
 
 	return out, nil
+}
+
+func appDisplayName(root, relDir string) (string, error) {
+	manifestPath := filepath.Join(root, relDir, "manifest.json")
+	content, err := os.ReadFile(manifestPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		return "", err
+	}
+
+	var manifest appManifest
+	if err := json.Unmarshal(content, &manifest); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(manifest.Name), nil
 }
 
 func appPreviewPath(root, relDir string) string {
@@ -2291,11 +2391,13 @@ func renderPackageBody(pkg apiPackage) (template.HTML, error) {
 	}
 
 	var b strings.Builder
-	b.WriteString(`<section class="doc-api">`)
+	b.WriteString(`<section class="doc-api doc-go-shell">`)
+	b.WriteString(`<header class="doc-ref-hero">`)
 	b.WriteString("<h1>" + template.HTMLEscapeString(pkg.ImportPath) + "</h1>\n")
 	b.WriteString(`<p class="muted mono doc-path">package ` + template.HTMLEscapeString(pkgDoc.Name) + "</p>\n")
+	b.WriteString(`</header>`)
+
 	var overview strings.Builder
-	overview.WriteString("## Package Overview\n\n")
 	if strings.TrimSpace(pkgDoc.Doc) != "" {
 		overview.WriteString(strings.TrimSpace(pkgDoc.Doc))
 		overview.WriteString("\n\n")
@@ -2308,8 +2410,12 @@ func renderPackageBody(pkg apiPackage) (template.HTML, error) {
 	overview.WriteString(fmt.Sprintf("| Variables | %d |\n", len(pkgDoc.Vars)))
 	overview.WriteString(fmt.Sprintf("| Functions | %d |\n", len(pkgDoc.Funcs)))
 	overview.WriteString(fmt.Sprintf("| Types | %d |\n", len(pkgDoc.Types)))
+
+	b.WriteString(`<section class="doc-section-card doc-go-group">`)
+	b.WriteString("<h2>Overview</h2>")
 	b.WriteString(`<section class="doc-markdown">`)
 	b.WriteString(string(renderMarkdown(overview.String())))
+	b.WriteString(`</section>`)
 	b.WriteString(`</section>`)
 
 	appendValueSection(&b, "Constants", pkgDoc.Consts, fset)
@@ -2325,17 +2431,15 @@ func appendValueSection(b *strings.Builder, heading string, values []*doc.Value,
 		return
 	}
 
+	b.WriteString(`<section class="doc-section-card doc-go-group">`)
 	b.WriteString("<h2>" + template.HTMLEscapeString(heading) + "</h2>")
+	b.WriteString(`<div class="api-card-list">`)
 	for _, value := range values {
-		if decl := formattedDecl(fset, value.Decl); decl != "" {
-			b.WriteString("<pre><code>" + template.HTMLEscapeString(decl) + "</code></pre>")
-		}
-		if strings.TrimSpace(value.Doc) != "" {
-			b.WriteString(`<section class="doc-markdown">`)
-			b.WriteString(string(renderMarkdown(value.Doc)))
-			b.WriteString(`</section>`)
-		}
+		name := strings.TrimSpace(strings.Join(value.Names, ", "))
+		appendGoDeclCard(b, "doc-go-item", name, formattedDecl(fset, value.Decl), value.Doc)
 	}
+	b.WriteString(`</div>`)
+	b.WriteString(`</section>`)
 }
 
 func appendFuncSection(b *strings.Builder, heading string, funcs []*doc.Func, fset *token.FileSet) {
@@ -2343,17 +2447,14 @@ func appendFuncSection(b *strings.Builder, heading string, funcs []*doc.Func, fs
 		return
 	}
 
+	b.WriteString(`<section class="doc-section-card doc-go-group">`)
 	b.WriteString("<h2>" + template.HTMLEscapeString(heading) + "</h2>")
+	b.WriteString(`<div class="api-card-list">`)
 	for _, fn := range funcs {
-		if decl := formattedDecl(fset, fn.Decl); decl != "" {
-			b.WriteString("<pre><code>" + template.HTMLEscapeString(decl) + "</code></pre>")
-		}
-		if strings.TrimSpace(fn.Doc) != "" {
-			b.WriteString(`<section class="doc-markdown">`)
-			b.WriteString(string(renderMarkdown(fn.Doc)))
-			b.WriteString(`</section>`)
-		}
+		appendGoDeclCard(b, "doc-go-item", strings.TrimSpace(fn.Name), formattedDecl(fset, fn.Decl), fn.Doc)
 	}
+	b.WriteString(`</div>`)
+	b.WriteString(`</section>`)
 }
 
 func appendTypeSection(b *strings.Builder, types []*doc.Type, fset *token.FileSet) {
@@ -2361,9 +2462,14 @@ func appendTypeSection(b *strings.Builder, types []*doc.Type, fset *token.FileSe
 		return
 	}
 
+	b.WriteString(`<section class="doc-section-card doc-go-group">`)
 	b.WriteString("<h2>Types</h2>")
+	b.WriteString(`<div class="api-card-list">`)
 	for _, t := range types {
-		b.WriteString("<h3>" + template.HTMLEscapeString(t.Name) + "</h3>")
+		b.WriteString(`<article class="api-item-card doc-go-item">`)
+		if strings.TrimSpace(t.Name) != "" {
+			b.WriteString("<h3><code>" + template.HTMLEscapeString(t.Name) + "</code></h3>")
+		}
 		if decl := formattedDecl(fset, t.Decl); decl != "" {
 			b.WriteString("<pre><code>" + template.HTMLEscapeString(decl) + "</code></pre>")
 		}
@@ -2377,7 +2483,11 @@ func appendTypeSection(b *strings.Builder, types []*doc.Type, fset *token.FileSe
 		appendTypeValues(b, "Variables", t.Vars, fset)
 		appendTypeFuncs(b, "Functions", t.Funcs, fset)
 		appendTypeFuncs(b, "Methods", t.Methods, fset)
+
+		b.WriteString(`</article>`)
 	}
+	b.WriteString(`</div>`)
+	b.WriteString(`</section>`)
 }
 
 func appendTypeValues(b *strings.Builder, heading string, values []*doc.Value, fset *token.FileSet) {
@@ -2385,17 +2495,15 @@ func appendTypeValues(b *strings.Builder, heading string, values []*doc.Value, f
 		return
 	}
 
+	b.WriteString(`<section class="doc-go-subgroup">`)
 	b.WriteString("<h4>" + template.HTMLEscapeString(heading) + "</h4>")
+	b.WriteString(`<div class="api-card-list doc-go-sublist">`)
 	for _, value := range values {
-		if decl := formattedDecl(fset, value.Decl); decl != "" {
-			b.WriteString("<pre><code>" + template.HTMLEscapeString(decl) + "</code></pre>")
-		}
-		if strings.TrimSpace(value.Doc) != "" {
-			b.WriteString(`<section class="doc-markdown">`)
-			b.WriteString(string(renderMarkdown(value.Doc)))
-			b.WriteString(`</section>`)
-		}
+		name := strings.TrimSpace(strings.Join(value.Names, ", "))
+		appendGoDeclCard(b, "doc-go-subitem", name, formattedDecl(fset, value.Decl), value.Doc)
 	}
+	b.WriteString(`</div>`)
+	b.WriteString(`</section>`)
 }
 
 func appendTypeFuncs(b *strings.Builder, heading string, funcs []*doc.Func, fset *token.FileSet) {
@@ -2403,17 +2511,43 @@ func appendTypeFuncs(b *strings.Builder, heading string, funcs []*doc.Func, fset
 		return
 	}
 
+	b.WriteString(`<section class="doc-go-subgroup">`)
 	b.WriteString("<h4>" + template.HTMLEscapeString(heading) + "</h4>")
+	b.WriteString(`<div class="api-card-list doc-go-sublist">`)
 	for _, fn := range funcs {
-		if decl := formattedDecl(fset, fn.Decl); decl != "" {
-			b.WriteString("<pre><code>" + template.HTMLEscapeString(decl) + "</code></pre>")
-		}
-		if strings.TrimSpace(fn.Doc) != "" {
-			b.WriteString(`<section class="doc-markdown">`)
-			b.WriteString(string(renderMarkdown(fn.Doc)))
-			b.WriteString(`</section>`)
-		}
+		appendGoDeclCard(b, "doc-go-subitem", strings.TrimSpace(fn.Name), formattedDecl(fset, fn.Decl), fn.Doc)
 	}
+	b.WriteString(`</div>`)
+	b.WriteString(`</section>`)
+}
+
+func appendGoDeclCard(b *strings.Builder, className, symbol, decl, docText string) {
+	if strings.TrimSpace(className) == "" {
+		className = "doc-go-item"
+	}
+
+	b.WriteString(`<article class="api-item-card ` + className + `">`)
+
+	symbol = strings.TrimSpace(symbol)
+	if symbol != "" {
+		b.WriteString(`<p class="doc-go-symbol"><code>` + template.HTMLEscapeString(symbol) + `</code></p>`)
+	}
+
+	if decl != "" {
+		b.WriteString("<pre><code>" + template.HTMLEscapeString(decl) + "</code></pre>")
+	}
+
+	if strings.TrimSpace(docText) != "" {
+		b.WriteString(`<section class="doc-markdown">`)
+		b.WriteString(string(renderMarkdown(docText)))
+		b.WriteString(`</section>`)
+	}
+
+	if decl == "" && strings.TrimSpace(docText) == "" {
+		b.WriteString(`<p class="doc-ref-empty">No declaration details available.</p>`)
+	}
+
+	b.WriteString(`</article>`)
 }
 
 func formattedDecl(fset *token.FileSet, node any) string {
@@ -3103,6 +3237,9 @@ func buildGoSection(title, section string, apiDocs []apiDoc, active string) navS
 		linkTitle := filepath.Base(tail)
 		if linkTitle == "." || linkTitle == "/" || linkTitle == "" {
 			linkTitle = tail
+		}
+		if section == "apps" && strings.TrimSpace(d.Title) != "" {
+			linkTitle = strings.TrimSpace(d.Title)
 		}
 
 		groups[group] = append(groups[group], navEntry{

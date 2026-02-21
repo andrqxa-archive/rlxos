@@ -6,32 +6,16 @@
     <p class="doc-ref-lead">{{ .Lead }}</p>
   </header>
 
-  <section class="doc-ref-grid">
-    <section class="doc-ref-card">
-      <h2>At A Glance</h2>
-      <dl class="doc-ref-meta">
-        <dt>Type</dt>
-        <dd>Application</dd>
-        <dt>Path</dt>
-        <dd><code>{{ .RelPath }}</code></dd>
-        <dt>Doc Source</dt>
-        <dd>{{ .DocSource }}</dd>
-        <dt>Preview</dt>
-        <dd>{{ if .PreviewPath }}Available{{ else }}Not provided{{ end }}</dd>
-      </dl>
-    </section>
-
-    <section class="doc-ref-card">
-      <h2>Preview</h2>
-      {{- if .PreviewPath }}
-      <figure class="doc-ref-preview">
-        <img src="{{ .PreviewPath }}" alt="{{ .Title }} preview" />
-        <figcaption>{{ .Title }} preview image</figcaption>
-      </figure>
-      {{- else }}
-      <p class="doc-ref-empty">Add <code>{{ .RelPath }}/preview.png</code> to show an app screenshot here.</p>
-      {{- end }}
-    </section>
+  <section class="doc-ref-card">
+    <h2>Preview</h2>
+    {{- if .PreviewPath }}
+    <figure class="doc-ref-preview">
+      <img src="{{ .PreviewPath }}" alt="{{ .Title }} preview" />
+      <figcaption>{{ .Title }} preview image</figcaption>
+    </figure>
+    {{- else }}
+    <p class="doc-ref-empty">Add <code>{{ .RelPath }}/preview.png</code> to show an app screenshot here.</p>
+    {{- end }}
   </section>
 
   <section class="doc-ref-card">
@@ -39,9 +23,9 @@
     <div class="doc-markdown">{{ .Description }}</div>
   </section>
 
+  {{- if .Flags }}
   <section class="doc-ref-card">
     <h2>Flags</h2>
-    {{- if .Flags }}
     <table class="doc-ref-table">
       <thead>
         <tr><th>Flag</th><th>Type</th><th>Description</th></tr>
@@ -56,14 +40,12 @@
         {{- end }}
       </tbody>
     </table>
-    {{- else }}
-    <p class="doc-ref-empty">{{ .FlagsMessage }}</p>
-    {{- end }}
   </section>
+  {{- end }}
 
+  {{- if .Subcommands }}
   <section class="doc-ref-card">
     <h2>Subcommands</h2>
-    {{- if .Subcommands }}
     <table class="doc-ref-table">
       <thead>
         <tr><th>Name</th><th>Description</th></tr>
@@ -77,10 +59,8 @@
         {{- end }}
       </tbody>
     </table>
-    {{- else }}
-    <p class="doc-ref-empty">No subcommands.</p>
-    {{- end }}
   </section>
+  {{- end }}
 
   {{- if .CaptureErr }}
   <p class="doc-ref-callout">Help capture warning: {{ .CaptureErr }}</p>

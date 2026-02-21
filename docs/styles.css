@@ -354,7 +354,7 @@ body {
   }
 }
 
-section {
+main > section {
   padding-block: clamp(4.1rem, 8vw, 6.4rem);
 }
 
@@ -429,6 +429,7 @@ main > section + section {
   box-shadow: var(--shadow-2);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  padding: 4px 12px;
 }
 
 .card {
@@ -2070,7 +2071,7 @@ main > section + section {
 }
 
 @media (max-width: 760px) {
-  section {
+  main > section {
     padding-block: clamp(3.5rem, 8.4vw, 5rem);
   }
 

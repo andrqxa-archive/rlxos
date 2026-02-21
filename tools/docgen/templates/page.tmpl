@@ -5,11 +5,12 @@
 <body>
   <header class="site-header">
     <div class="container nav">
-      <a class="brand" href="index.html" aria-label="AvyOS docs home">
-        <span>AvyOS Docs</span>
+      <a class="brand" href="index.html" aria-label="Handbook">
+        <span>Handbook</span>
       </a>
       <div class="nav-actions">
-        <a class="btn btn-release" href="index.html">Documentation Home</a>
+        <a class="btn btn-primary" href="https://avyos.dev">Home</a>
+        <a class="btn btn-release" href="https://github.com/itsmanjeet/avyos">Source Code</a>
       </div>
     </div>
   </header>
@@ -21,7 +22,6 @@
         <section class="doc-nav-group">
           <h2>{{ .Title }}</h2>
           {{ range .Groups }}
-          {{ if .Title }}<p class="doc-subtitle">{{ .Title }}</p>{{ end }}
           {{ range .Entries }}
           <a class="doc-link{{ if .Active }} active{{ end }}" href="{{ .Href }}">{{ .Title }}</a>
           {{ end }}
