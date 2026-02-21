@@ -58,44 +58,58 @@ For running POSIX applications, AvyOS provides a Linux compatibility layer at `/
 ```bash
 # Build disk image
 make GOARCH=arm64
+```
 
-# Test your build
+## Testing
+
+```bash
+# Test your local build
 make GOARCH=arm64 run
 
-# Optional: use a different host debug forward port
+# Optional: use a different host debug forward port for local build
 make GOARCH=arm64 run DBG_PORT=5038
+```
 
-# Manually run the release build
-# Set $AVYOS = path/to/avyos source for firmware
-# For arm64
-qemu-system-aarch64 -smp 2 -m 2G  \
-  -M virt -cpu cortex-a57         \
-  -display gtk                    \
-  -serial mon:stdio               \
-  -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:5037-:5037 \
-  -vga none                       \
-  -device virtio-gpu-pci          \
-  -device virtio-keyboard-pci     \
-  -device virtio-mouse-pci        \
-  -drive if=pflash,file=$AVYOS_SOURCE/external/arm64/firmware,readonly=on,format=raw \
-  -drive if=pflash,file=$AVYOS_SOURCE/external/arm64/variables,format=raw \
-  -drive file=avyos-main-arm64.img,format=raw
+## Test latest release build (without source)
 
-# For amd64
-qemu-system-x86_64 -smp 2 -m 2G   \
-  -display gtk                    \
-  -serial mon:stdio               \
-  -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:5037-:5037 \
-  -vga none                       \
-  -device virtio-gpu-pci          \
-  -device virtio-keyboard-pci     \
-  -device virtio-mouse-pci        \
-  -drive if=pflash,file=$AVYOS_SOURCE/external/amd64/firmware,readonly=on,format=raw \
-  -drive if=pflash,file=$AVYOS_SOURCE/external/amd64/variables,format=raw \
-  -drive file=avyos-main-amd64.img,format=raw
+```bash
+# Run latest release image (recommended)
+go run avyos.dev/tools/runimage@latest --arch amd64
+go run avyos.dev/tools/runimage@latest --arch arm64
+
+# Optional: change forwarded dbg port (host -> guest 5037)
+go run avyos.dev/tools/runimage@latest --arch amd64 --dbg-port 5038
 ```
 
 > Use __admin:admin__ as default credentials
+
+## Debugging with dbg
+
+`dbgd` runs in the guest and is reachable on host `127.0.0.1:5037` by default (via QEMU port forward).
+
+```bash
+# Use repo tool
+go run ./tools/dbg --host 127.0.0.1 --port 5037 --user admin whoami
+
+# Or use latest tool without source checkout
+go run avyos.dev/tools/dbg@latest --host 127.0.0.1 --port 5037 --user admin whoami
+
+# Run a single command
+go run ./tools/dbg --host 127.0.0.1 --port 5037 --user admin cmd "list /config"
+
+# Run through shell parsing
+go run ./tools/dbg --host 127.0.0.1 --port 5037 --user admin shell "list /config | read pattern service"
+
+# Pull/push files
+go run ./tools/dbg --host 127.0.0.1 --port 5037 --user admin pull /config/init.conf ./init.conf
+go run ./tools/dbg --host 127.0.0.1 --port 5037 --user admin push ./init.conf /config/init.conf
+```
+
+You can set `DBG_PASSWORD` to avoid interactive password prompt:
+
+```bash
+export DBG_PASSWORD=admin
+```
 
 ## Status
 
