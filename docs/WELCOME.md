@@ -115,7 +115,7 @@ Use the **Power button** on the dock to:
 ## 6) Terminal quick start
 
 <p align="center">
-  <img src="assets/terminal.png" alt="Terminal" width="900" />
+  <img src="assets/terminal-app.png" alt="Terminal" width="900" />
 </p>
 
 Open the terminal and run:
