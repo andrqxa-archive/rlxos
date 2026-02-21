@@ -30,7 +30,6 @@ import (
 	"syscall"
 
 	distroapi "avyos.dev/api/distro"
-	"avyos.dev/pkg/format"
 	"avyos.dev/pkg/fs"
 	"avyos.dev/pkg/pty"
 	"avyos.dev/pkg/sutra"
@@ -62,7 +61,7 @@ func newShellSessionManager(service *sutra.Service) *shellSessionManager {
 	return m
 }
 
-func (m *shellSessionManager) Open(owner uint32, req distroapi.ShellOpenRequest) (distroapi.ShellSession, error) {
+func (m *shellSessionManager) Open(owner, uid uint32, req distroapi.ShellOpenRequest) (distroapi.ShellSession, error) {
 	req.Distro = strings.TrimSpace(req.Distro)
 	if req.Distro == "" {
 		return distroapi.ShellSession{}, fmt.Errorf("distro name required")
@@ -96,14 +95,17 @@ func (m *shellSessionManager) Open(owner uint32, req distroapi.ShellOpenRequest)
 		return distroapi.ShellSession{}, fmt.Errorf("set pty size: %w", err)
 	}
 
-	waylandBridge, err := newWaylandBridge(rootfs, owner)
+	waylandBridge, err := newWaylandBridge(uid)
 	if err != nil {
-		format.Error("setup wayland bridget: %w", err)
+		_ = ptyPair.Close()
+		return distroapi.ShellSession{}, fmt.Errorf("setup wayland bridge: %w", err)
 	}
 
 	exePath, err := os.Readlink(fs.Resolve("process", "self/exe"))
 	if err != nil {
-		waylandBridge.Close()
+		if waylandBridge != nil {
+			waylandBridge.Close()
+		}
 		_ = ptyPair.Close()
 		return distroapi.ShellSession{}, fmt.Errorf("resolve executable path: %w", err)
 	}
@@ -113,22 +115,25 @@ func (m *shellSessionManager) Open(owner uint32, req distroapi.ShellOpenRequest)
 	cmd.Stdout = ptyPair.Slave
 	cmd.Stderr = ptyPair.Slave
 
-	cmd.Env = append(os.Environ(),
-		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-		"HOME=/root",
-		"USER=root",
-		"LOGNAME=root",
-		"TERM=xterm-256color",
-		"LANG=C.UTF-8",
-		"DISTRO_ROOTFS="+rootfs,
-		"DISTRO_COMMAND="+distroapi.EncodeCommand([]string{defaultShell}),
-		"DISTRO_WORKDIR="+workdir,
-		"DISTRO_BIND="+req.Bind,
-	)
-	cmd.Env = append(cmd.Env, waylandBridge.Env()...)
-	if strings.TrimSpace(req.Env) != "" {
-		cmd.Env = append(cmd.Env, req.Env)
+	env := os.Environ()
+	env = setEnv(env, "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+	env = setEnv(env, "HOME", "/root")
+	env = setEnv(env, "USER", "root")
+	env = setEnv(env, "LOGNAME", "root")
+	env = setEnv(env, "TERM", "xterm-256color")
+	env = setEnv(env, "LANG", "C.UTF-8")
+	env = setEnv(env, "DISTRO_ROOTFS", rootfs)
+	env = setEnv(env, "DISTRO_COMMAND", distroapi.EncodeCommand([]string{defaultShell}))
+	env = setEnv(env, "DISTRO_WORKDIR", workdir)
+	env = setEnv(env, "DISTRO_BIND", req.Bind)
+	env = setEnvMany(env, waylandBaseEnv())
+	if waylandBridge != nil && strings.TrimSpace(waylandBridge.RuntimeHost()) != "" {
+		env = setEnv(env, distroWaylandRuntimeHostEnv, waylandBridge.RuntimeHost())
 	}
+	if strings.TrimSpace(req.Env) != "" {
+		env = setEnvKV(env, req.Env)
+	}
+	cmd.Env = env
 
 	attr := &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
@@ -149,7 +154,9 @@ func (m *shellSessionManager) Open(owner uint32, req distroapi.ShellOpenRequest)
 	cmd.SysProcAttr = attr
 
 	if err := cmd.Start(); err != nil {
-		waylandBridge.Close()
+		if waylandBridge != nil {
+			waylandBridge.Close()
+		}
 		_ = ptyPair.Close()
 		return distroapi.ShellSession{}, fmt.Errorf("start shell: %w", err)
 	}

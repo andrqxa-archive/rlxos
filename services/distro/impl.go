@@ -18,6 +18,8 @@
 package main
 
 import (
+	"fmt"
+
 	distroapi "avyos.dev/api/distro"
 	"avyos.dev/pkg/sutra"
 )
@@ -45,7 +47,11 @@ func (h *Handler) Pull(sender uint32, req distroapi.PullRequest) (distroapi.Empt
 }
 
 func (h *Handler) Run(sender uint32, req distroapi.RunRequest) (distroapi.RunResult, error) {
-	return runContainer(req, sender)
+	uid, err := h.callerUID(sender)
+	if err != nil {
+		return distroapi.RunResult{}, err
+	}
+	return runContainer(req, uid)
 }
 
 func (h *Handler) Remove(sender uint32, req distroapi.RemoveRequest) (distroapi.Empty, error) {
@@ -57,7 +63,11 @@ func (h *Handler) Remove(sender uint32, req distroapi.RemoveRequest) (distroapi.
 }
 
 func (h *Handler) ShellOpen(sender uint32, req distroapi.ShellOpenRequest) (distroapi.ShellSession, error) {
-	return h.shells.Open(sender, req)
+	uid, err := h.callerUID(sender)
+	if err != nil {
+		return distroapi.ShellSession{}, err
+	}
+	return h.shells.Open(sender, uid, req)
 }
 
 func (h *Handler) ShellInput(sender uint32, req distroapi.ShellInputRequest) error {
@@ -70,4 +80,12 @@ func (h *Handler) ShellResize(sender uint32, req distroapi.ShellResizeRequest) e
 
 func (h *Handler) ShellClose(sender uint32, req distroapi.ShellCloseRequest) error {
 	return h.shells.Close(sender, req)
+}
+
+func (h *Handler) callerUID(sender uint32) (uint32, error) {
+	uid, ok := h.service.GetClientUID(sender)
+	if !ok {
+		return 0, fmt.Errorf("unable to resolve caller uid")
+	}
+	return uid, nil
 }

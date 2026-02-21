@@ -326,14 +326,14 @@ func runContainer(req distroapi.RunRequest, uid uint32) (distroapi.RunResult, er
 		workdir = "/"
 	}
 
-	waylandBridge, err := newWaylandBridge(rootfs, uid)
+	waylandBridge, err := newWaylandBridge(uid)
 	if err != nil {
 		return distroapi.RunResult{}, fmt.Errorf("setup wayland bridge: %w", err)
 	}
 	defer waylandBridge.Close()
 
 	command := distroapi.DecodeCommand(req.Command)
-	return execContainer(rootfs, command, workdir, req.Bind, req.Env, req.Input, waylandBridge.Env())
+	return execContainer(rootfs, command, workdir, req.Bind, req.Env, req.Input, waylandBridge.Env(), waylandBridge.RuntimeHost())
 }
 
 func removeDistro(name string) error {
@@ -358,6 +358,7 @@ func runInit() error {
 	command := distroapi.DecodeCommand(os.Getenv("DISTRO_COMMAND"))
 	workdir := os.Getenv("DISTRO_WORKDIR")
 	bind := os.Getenv("DISTRO_BIND")
+	waylandRuntimeHost := os.Getenv(distroWaylandRuntimeHostEnv)
 
 	if rootfs == "" || len(command) == 0 {
 		return fmt.Errorf("invalid distro configuration")
@@ -366,7 +367,7 @@ func runInit() error {
 		workdir = "/"
 	}
 
-	if err := setupContainerFS(rootfs, bind); err != nil {
+	if err := setupContainerFS(rootfs, bind, waylandRuntimeHost); err != nil {
 		return fmt.Errorf("failed to setup filesystem: %w", err)
 	}
 
@@ -386,7 +387,7 @@ func runInit() error {
 	return syscall.Exec(path, command, os.Environ())
 }
 
-func execContainer(rootfs string, command []string, workdir, bind, envVar string, input []byte, extraEnv []string) (distroapi.RunResult, error) {
+func execContainer(rootfs string, command []string, workdir, bind, envVar string, input []byte, extraEnv []string, waylandRuntimeHost string) (distroapi.RunResult, error) {
 	exePath, err := os.Readlink(fs.Resolve("process", "self/exe"))
 	if err != nil {
 		return distroapi.RunResult{}, fmt.Errorf("resolve executable path: %w", err)
@@ -400,24 +401,26 @@ func execContainer(rootfs string, command []string, workdir, bind, envVar string
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	cmd.Env = append(os.Environ(),
-		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-		"HOME=/root",
-		"USER=root",
-		"LOGNAME=root",
-		"TERM=xterm-256color",
-		"LANG=C.UTF-8",
-		"DISTRO_ROOTFS="+rootfs,
-		"DISTRO_COMMAND="+distroapi.EncodeCommand(command),
-		"DISTRO_WORKDIR="+workdir,
-		"DISTRO_BIND="+bind,
-	)
-	if len(extraEnv) > 0 {
-		cmd.Env = append(cmd.Env, extraEnv...)
+	env := os.Environ()
+	env = setEnv(env, "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+	env = setEnv(env, "HOME", "/root")
+	env = setEnv(env, "USER", "root")
+	env = setEnv(env, "LOGNAME", "root")
+	env = setEnv(env, "TERM", "xterm-256color")
+	env = setEnv(env, "LANG", "C.UTF-8")
+	env = setEnv(env, "DISTRO_ROOTFS", rootfs)
+	env = setEnv(env, "DISTRO_COMMAND", distroapi.EncodeCommand(command))
+	env = setEnv(env, "DISTRO_WORKDIR", workdir)
+	env = setEnv(env, "DISTRO_BIND", bind)
+	env = setEnvMany(env, waylandBaseEnv())
+	if strings.TrimSpace(waylandRuntimeHost) != "" {
+		env = setEnv(env, distroWaylandRuntimeHostEnv, waylandRuntimeHost)
 	}
+	env = setEnvMany(env, extraEnv)
 	if strings.TrimSpace(envVar) != "" {
-		cmd.Env = append(cmd.Env, envVar)
+		env = setEnvKV(env, envVar)
 	}
+	cmd.Env = env
 
 	attr := &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
@@ -453,70 +456,377 @@ func execContainer(rootfs string, command []string, workdir, bind, envVar string
 	return result, nil
 }
 
-func setupContainerFS(rootfs, bind string) error {
+func setupContainerFS(rootfs, bind, waylandRuntimeHost string) error {
 	if err := syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, ""); err != nil {
-		return fmt.Errorf("failed to do private mount: %w", err)
+		return fmt.Errorf("private mount propagation: %w", err)
 	}
-	if err := syscall.Mount(rootfs, rootfs, "", syscall.MS_BIND|syscall.MS_PRIVATE, ""); err != nil {
+	if err := mountWithIgnoreBusy(rootfs, rootfs, "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
 		return fmt.Errorf("bind mount rootfs: %w", err)
 	}
 
-	processRoot := strings.TrimPrefix(fs.Resolve("process"), "/")
-	procPath := filepath.Join(rootfs, processRoot)
-	_ = os.MkdirAll(procPath, 0755)
-	_ = syscall.Mount("proc", procPath, "proc", 0, "")
-
-	sysPath := filepath.Join(rootfs, "sys")
-	_ = os.MkdirAll(sysPath, 0755)
-	_ = syscall.Mount("sysfs", sysPath, "sysfs", syscall.MS_RDONLY, "")
-
-	tmpPath := filepath.Join(rootfs, "tmp")
-	_ = os.MkdirAll(tmpPath, 0777)
-	_ = syscall.Mount("tmpfs", tmpPath, "tmpfs", 0, "")
-
-	devPath := filepath.Join(rootfs, "dev")
-	_ = os.MkdirAll(devPath, 0755)
-	_ = syscall.Mount("tmpfs", devPath, "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755")
-
-	for _, dev := range []string{"null", "zero", "random", "urandom", "tty"} {
-		src := fs.Resolve("device", dev)
-		dst := filepath.Join(devPath, dev)
-		if _, err := os.Stat(src); err == nil {
-			f, _ := os.Create(dst)
-			if f != nil {
-				_ = f.Close()
-				_ = syscall.Mount(src, dst, "", syscall.MS_BIND, "")
-			}
-		}
+	if err := mountProcFS(rootfs); err != nil {
+		return err
 	}
-
-	ptsPath := filepath.Join(devPath, "pts")
-	_ = os.MkdirAll(ptsPath, 0755)
-	_ = syscall.Mount("devpts", ptsPath, "devpts", 0, "newinstance,ptmxmode=0666")
-	ptmxPath := filepath.Join(devPath, "ptmx")
-	_ = os.Remove(ptmxPath)
-	_ = os.Symlink("pts/ptmx", ptmxPath)
-
-	_ = symlinkIfMissing(fs.Resolve("process", "self/fd"), filepath.Join(devPath, "fd"))
-	_ = symlinkIfMissing(fs.Resolve("process", "self/fd/0"), filepath.Join(devPath, "stdin"))
-	_ = symlinkIfMissing(fs.Resolve("process", "self/fd/1"), filepath.Join(devPath, "stdout"))
-	_ = symlinkIfMissing(fs.Resolve("process", "self/fd/2"), filepath.Join(devPath, "stderr"))
-
-	if bind != "" {
-		parts := strings.SplitN(bind, ":", 2)
-		if len(parts) == 2 {
-			src := strings.TrimSpace(parts[0])
-			dst := filepath.Join(rootfs, strings.TrimSpace(parts[1]))
-			if src != "" {
-				_ = os.MkdirAll(dst, 0755)
-				_ = syscall.Mount(src, dst, "", syscall.MS_BIND, "")
-			}
-		}
+	if err := mountSysFS(rootfs); err != nil {
+		serviceLog.Debug("container sysfs mount skipped: %v", err)
+	}
+	if err := mountTmpFS(rootfs); err != nil {
+		return err
+	}
+	if err := mountRunFS(rootfs); err != nil {
+		return err
+	}
+	if err := mountDevFS(rootfs); err != nil {
+		return err
+	}
+	if err := applyBindMounts(rootfs, bind); err != nil {
+		return err
+	}
+	applyDefaultGUIBindMounts(rootfs)
+	if err := setupWaylandRuntimeMount(rootfs, waylandRuntimeHost); err != nil {
+		return err
 	}
 
 	generateResolvConf(rootfs)
+	return nil
+}
+
+type bindMountSpec struct {
+	source string
+	target string
+}
+
+func mountProcFS(rootfs string) error {
+	procPath := filepath.Join(rootfs, "proc")
+	if err := os.MkdirAll(procPath, 0555); err != nil {
+		return fmt.Errorf("create /proc: %w", err)
+	}
+
+	procSource := fs.Resolve("process")
+	if _, err := os.Stat(procSource); err == nil {
+		if err := mountBind(procSource, procPath); err != nil {
+			return fmt.Errorf("bind %s to /proc: %w", procSource, err)
+		}
+		return nil
+	}
+
+	if err := mountWithIgnoreBusy("proc", procPath, "proc", syscall.MS_NOSUID|syscall.MS_NOEXEC|syscall.MS_NODEV, ""); err != nil {
+		return fmt.Errorf("mount /proc fallback: %w", err)
+	}
+	return nil
+}
+
+func mountSysFS(rootfs string) error {
+	sysPath := filepath.Join(rootfs, "sys")
+	if err := os.MkdirAll(sysPath, 0555); err != nil {
+		return fmt.Errorf("create /sys: %w", err)
+	}
+	if err := mountWithIgnoreBusy("sysfs", sysPath, "sysfs", syscall.MS_RDONLY|syscall.MS_NOSUID|syscall.MS_NOEXEC|syscall.MS_NODEV, ""); err != nil {
+		return fmt.Errorf("mount /sys: %w", err)
+	}
+	return nil
+}
+
+func mountTmpFS(rootfs string) error {
+	tmpPath := filepath.Join(rootfs, "tmp")
+	if err := os.MkdirAll(tmpPath, 1777); err != nil {
+		return fmt.Errorf("create /tmp: %w", err)
+	}
+	if err := mountWithIgnoreBusy("tmpfs", tmpPath, "tmpfs", syscall.MS_NOSUID|syscall.MS_NODEV, "mode=1777"); err != nil {
+		return fmt.Errorf("mount /tmp: %w", err)
+	}
+	return nil
+}
+
+func mountRunFS(rootfs string) error {
+	runPath := filepath.Join(rootfs, "run")
+	if err := os.MkdirAll(runPath, 0755); err != nil {
+		return fmt.Errorf("create /run: %w", err)
+	}
+	if err := mountWithIgnoreBusy("tmpfs", runPath, "tmpfs", syscall.MS_NOSUID|syscall.MS_NODEV, "mode=755"); err != nil {
+		return fmt.Errorf("mount /run: %w", err)
+	}
+	return nil
+}
+
+func mountDevFS(rootfs string) error {
+	devPath := filepath.Join(rootfs, "dev")
+	if err := os.MkdirAll(devPath, 0755); err != nil {
+		return fmt.Errorf("create /dev: %w", err)
+	}
+	if err := mountWithIgnoreBusy("tmpfs", devPath, "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755"); err != nil {
+		return fmt.Errorf("mount /dev: %w", err)
+	}
+
+	for _, dev := range []string{"null", "zero", "random", "urandom", "tty"} {
+		src := fs.Resolve("device", dev)
+		if _, err := os.Stat(src); err != nil {
+			continue
+		}
+		if err := bindMountIntoRootfs(rootfs, src, filepath.Join("/dev", dev)); err != nil {
+			return fmt.Errorf("bind /dev/%s: %w", dev, err)
+		}
+	}
+
+	ptsPath, err := containerPath(rootfs, "/dev/pts")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(ptsPath, 0755); err != nil {
+		return fmt.Errorf("create /dev/pts: %w", err)
+	}
+	if err := mountWithIgnoreBusy("devpts", ptsPath, "devpts", syscall.MS_NOSUID|syscall.MS_NOEXEC, "newinstance,ptmxmode=0666,mode=620"); err != nil {
+		return fmt.Errorf("mount /dev/pts: %w", err)
+	}
+
+	shmPath, err := containerPath(rootfs, "/dev/shm")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(shmPath, 1777); err != nil {
+		return fmt.Errorf("create /dev/shm: %w", err)
+	}
+	if err := mountWithIgnoreBusy("tmpfs", shmPath, "tmpfs", syscall.MS_NOSUID|syscall.MS_NODEV, "mode=1777"); err != nil {
+		return fmt.Errorf("mount /dev/shm: %w", err)
+	}
+
+	ptmxPath := filepath.Join(devPath, "ptmx")
+	_ = os.Remove(ptmxPath)
+	if err := os.Symlink("pts/ptmx", ptmxPath); err != nil && !os.IsExist(err) {
+		return fmt.Errorf("link /dev/ptmx: %w", err)
+	}
+
+	if err := symlinkIfMissing("/proc/self/fd", filepath.Join(devPath, "fd")); err != nil {
+		return fmt.Errorf("link /dev/fd: %w", err)
+	}
+	if err := symlinkIfMissing("/proc/self/fd/0", filepath.Join(devPath, "stdin")); err != nil {
+		return fmt.Errorf("link /dev/stdin: %w", err)
+	}
+	if err := symlinkIfMissing("/proc/self/fd/1", filepath.Join(devPath, "stdout")); err != nil {
+		return fmt.Errorf("link /dev/stdout: %w", err)
+	}
+	if err := symlinkIfMissing("/proc/self/fd/2", filepath.Join(devPath, "stderr")); err != nil {
+		return fmt.Errorf("link /dev/stderr: %w", err)
+	}
 
 	return nil
+}
+
+func applyBindMounts(rootfs, bind string) error {
+	specs, err := parseBindMounts(bind)
+	if err != nil {
+		return err
+	}
+	for _, spec := range specs {
+		if err := bindMountIntoRootfs(rootfs, spec.source, spec.target); err != nil {
+			return fmt.Errorf("bind mount %s:%s: %w", spec.source, spec.target, err)
+		}
+	}
+	return nil
+}
+
+func applyDefaultGUIBindMounts(rootfs string) {
+	specs := make([]bindMountSpec, 0, 16)
+	seen := make(map[string]struct{})
+
+	addDeviceBind := func(rel string) {
+		rel = strings.TrimPrefix(filepath.Clean("/"+strings.TrimSpace(rel)), "/")
+		if rel == "" || rel == "." {
+			return
+		}
+
+		src := fs.Resolve("device", rel)
+		if _, err := os.Stat(src); err != nil {
+			return
+		}
+
+		key := src + "->" + rel
+		if _, exists := seen[key]; exists {
+			return
+		}
+		seen[key] = struct{}{}
+		specs = append(specs, bindMountSpec{
+			source: src,
+			target: filepath.Join("/dev", rel),
+		})
+	}
+
+	for _, rel := range []string{"dri", "snd", "fb0", "fb"} {
+		addDeviceBind(rel)
+	}
+
+	for _, pattern := range []string{"dri/*", "card*", "renderD*"} {
+		matches, err := filepath.Glob(fs.Resolve("device", pattern))
+		if err != nil {
+			continue
+		}
+		for _, match := range matches {
+			rel, err := filepath.Rel(fs.DevicesPath, match)
+			if err != nil || strings.HasPrefix(rel, "..") {
+				continue
+			}
+			addDeviceBind(rel)
+		}
+	}
+
+	for _, spec := range specs {
+		if err := bindMountIntoRootfs(rootfs, spec.source, spec.target); err != nil {
+			serviceLog.Debug("optional gui bind %s:%s skipped: %v", spec.source, spec.target, err)
+		}
+	}
+}
+
+func parseBindMounts(bind string) ([]bindMountSpec, error) {
+	bind = strings.TrimSpace(bind)
+	if bind == "" {
+		return nil, nil
+	}
+
+	entries := strings.Split(bind, ",")
+	specs := make([]bindMountSpec, 0, len(entries))
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		parts := strings.SplitN(entry, ":", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid bind %q (expected host:container)", entry)
+		}
+
+		source := strings.TrimSpace(parts[0])
+		target := strings.TrimSpace(parts[1])
+		if source == "" || target == "" {
+			return nil, fmt.Errorf("invalid bind %q (expected host:container)", entry)
+		}
+		specs = append(specs, bindMountSpec{
+			source: source,
+			target: target,
+		})
+	}
+	return specs, nil
+}
+
+func setupWaylandRuntimeMount(rootfs, runtimeHost string) error {
+	runtimePath, err := containerPath(rootfs, distroWaylandRuntime)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(runtimePath, 0777); err != nil {
+		return fmt.Errorf("create %s: %w", distroWaylandRuntime, err)
+	}
+	_ = os.Chmod(runtimePath, 0777)
+
+	runtimeHost = strings.TrimSpace(runtimeHost)
+	if runtimeHost == "" {
+		return fmt.Errorf("missing wayland runtime host path")
+	}
+	if _, err := os.Stat(runtimeHost); err != nil {
+		return fmt.Errorf("wayland runtime host path %q: %w", runtimeHost, err)
+	}
+	if err := mountBind(runtimeHost, runtimePath); err != nil {
+		return fmt.Errorf("bind mount wayland runtime: %w", err)
+	}
+	_ = os.Chmod(runtimePath, 0777)
+
+	socketPath := filepath.Join(runtimePath, distroWaylandDisplay)
+	info, err := os.Lstat(socketPath)
+	if err != nil {
+		return fmt.Errorf("wayland socket %q missing after mount: %w", socketPath, err)
+	}
+	if info.Mode()&os.ModeSocket == 0 {
+		return fmt.Errorf("wayland socket %q is not a socket", socketPath)
+	}
+	return nil
+}
+
+func bindMountIntoRootfs(rootfs, source, target string) error {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return fmt.Errorf("empty source path")
+	}
+
+	targetPath, err := containerPath(rootfs, target)
+	if err != nil {
+		return err
+	}
+	return mountBind(source, targetPath)
+}
+
+func mountBind(source, target string) error {
+	if err := ensureMountTarget(source, target); err != nil {
+		return err
+	}
+
+	srcInfo, err := os.Stat(source)
+	if err != nil {
+		return fmt.Errorf("stat source %q: %w", source, err)
+	}
+
+	flags := uintptr(syscall.MS_BIND)
+	if srcInfo.IsDir() {
+		flags |= syscall.MS_REC
+	}
+
+	if err := mountWithIgnoreBusy(source, target, "", flags, ""); err != nil {
+		return fmt.Errorf("bind %q -> %q: %w", source, target, err)
+	}
+	return nil
+}
+
+func ensureMountTarget(source, target string) error {
+	srcInfo, err := os.Stat(source)
+	if err != nil {
+		return fmt.Errorf("stat source %q: %w", source, err)
+	}
+
+	targetInfo, err := os.Stat(target)
+	if err == nil {
+		if srcInfo.IsDir() && !targetInfo.IsDir() {
+			return fmt.Errorf("target %q exists and is not a directory", target)
+		}
+		if !srcInfo.IsDir() && targetInfo.IsDir() {
+			return fmt.Errorf("target %q exists and is a directory", target)
+		}
+		return nil
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("stat target %q: %w", target, err)
+	}
+
+	if srcInfo.IsDir() {
+		if err := os.MkdirAll(target, 0755); err != nil {
+			return fmt.Errorf("create target directory %q: %w", target, err)
+		}
+		return nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		return fmt.Errorf("create target parent %q: %w", filepath.Dir(target), err)
+	}
+	f, err := os.OpenFile(target, os.O_CREATE|os.O_RDONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("create target file %q: %w", target, err)
+	}
+	return f.Close()
+}
+
+func containerPath(rootfs, target string) (string, error) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return "", fmt.Errorf("empty container path")
+	}
+	clean := filepath.Clean("/" + strings.TrimPrefix(target, "/"))
+	return filepath.Join(rootfs, strings.TrimPrefix(clean, "/")), nil
+}
+
+func mountWithIgnoreBusy(source, target, fstype string, flags uintptr, data string) error {
+	err := syscall.Mount(source, target, fstype, flags, data)
+	if err == nil || errors.Is(err, syscall.EBUSY) {
+		return nil
+	}
+	return err
 }
 
 func symlinkIfMissing(target, linkName string) error {

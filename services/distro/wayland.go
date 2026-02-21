@@ -18,8 +18,10 @@
 package main
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -32,14 +34,15 @@ import (
 )
 
 const (
-	distroWaylandRuntime = "/run/wayland"
-	distroWaylandDisplay = "wayland-0"
+	distroWaylandRuntime        = "/run/wayland"
+	distroWaylandDisplay        = "waylayer"
+	distroWaylandRuntimeHostEnv = "DISTRO_WAYLAND_RUNTIME_HOST"
 )
 
 // waylandBridge relays Wayland connections from inside the container to
 // the session-level waylayer running at the user's XDG_RUNTIME_DIR.
 type waylandBridge struct {
-	rootfs         string
+	runtimeHost    string
 	socketHost     string
 	upstreamSocket string
 
@@ -50,15 +53,24 @@ type waylandBridge struct {
 }
 
 // newWaylandBridge creates a bridge that relays container Wayland clients
-// to the session waylayer socket at /cache/runtime/user/<uid>/wayland-0.
-func newWaylandBridge(rootfs string, uid uint32) (*waylandBridge, error) {
-	upstreamSocket := filepath.Join(fs.UserRunPath, strconv.FormatUint(uint64(uid), 10), distroWaylandDisplay)
+// to the session waylayer socket at /cache/runtime/<uid>/waylayer.
+func newWaylandBridge(uid uint32) (*waylandBridge, error) {
+	upstreamSocket := fs.Resolve("cache", filepath.Join("runtime", strconv.FormatUint(uint64(uid), 10), distroWaylandDisplay))
 	if _, err := os.Stat(upstreamSocket); err != nil {
 		return nil, fmt.Errorf("session waylayer socket not found at %s: %w", upstreamSocket, err)
 	}
 
-	runtimeHost := filepath.Join(rootfs, filepath.FromSlash(distroWaylandRuntime))
+	runtimeRoot := fs.Resolve("run", filepath.Join("distro", "wayland"))
+	if err := os.MkdirAll(runtimeRoot, 0755); err != nil {
+		return nil, fmt.Errorf("create distro wayland runtime root: %w", err)
+	}
+
+	runtimeHost, err := os.MkdirTemp(runtimeRoot, "session-")
+	if err != nil {
+		return nil, fmt.Errorf("create distro wayland runtime: %w", err)
+	}
 	if err := os.MkdirAll(runtimeHost, 0777); err != nil {
+		_ = os.RemoveAll(runtimeHost)
 		return nil, fmt.Errorf("create distro wayland runtime: %w", err)
 	}
 	_ = os.Chmod(runtimeHost, 0777)
@@ -68,17 +80,19 @@ func newWaylandBridge(rootfs string, uid uint32) (*waylandBridge, error) {
 
 	addr, err := net.ResolveUnixAddr("unix", socketHost)
 	if err != nil {
+		_ = os.RemoveAll(runtimeHost)
 		return nil, fmt.Errorf("resolve distro wayland socket: %w", err)
 	}
 
 	ln, err := net.ListenUnix("unix", addr)
 	if err != nil {
+		_ = os.RemoveAll(runtimeHost)
 		return nil, fmt.Errorf("listen distro wayland socket: %w", err)
 	}
 	_ = os.Chmod(socketHost, 0666)
 
 	b := &waylandBridge{
-		rootfs:         rootfs,
+		runtimeHost:    runtimeHost,
 		socketHost:     socketHost,
 		upstreamSocket: upstreamSocket,
 		listener:       ln,
@@ -89,11 +103,29 @@ func newWaylandBridge(rootfs string, uid uint32) (*waylandBridge, error) {
 	return b, nil
 }
 
-func (b *waylandBridge) Env() []string {
+func (b *waylandBridge) RuntimeHost() string {
+	if b == nil {
+		return ""
+	}
+	return b.runtimeHost
+}
+
+func waylandBaseEnv() []string {
 	return []string{
 		"XDG_RUNTIME_DIR=" + distroWaylandRuntime,
 		"WAYLAND_DISPLAY=" + distroWaylandDisplay,
+		"XDG_SESSION_TYPE=wayland",
+		"XDG_CURRENT_DESKTOP=AvyOS",
+		"GDK_BACKEND=wayland",
+		"QT_QPA_PLATFORM=wayland",
+		"SDL_VIDEODRIVER=wayland",
+		"EGL_PLATFORM=wayland",
+		"MOZ_ENABLE_WAYLAND=1",
 	}
+}
+
+func (b *waylandBridge) Env() []string {
+	return waylandBaseEnv()
 }
 
 func (b *waylandBridge) Close() {
@@ -104,6 +136,9 @@ func (b *waylandBridge) Close() {
 		}
 		if b.socketHost != "" {
 			_ = os.Remove(b.socketHost)
+		}
+		if b.runtimeHost != "" {
+			_ = os.RemoveAll(b.runtimeHost)
 		}
 	})
 }
@@ -145,46 +180,150 @@ func (b *waylandBridge) handleConn(clientConn *net.UnixConn) {
 func relayWaylandStream(dst, src *net.UnixConn, done chan<- struct{}) {
 	defer func() { done <- struct{}{} }()
 
-	srcRaw, err := src.SyscallConn()
-	if err != nil {
-		return
-	}
-	dstRaw, err := dst.SyscallConn()
-	if err != nil {
-		return
-	}
-
-	buf := make([]byte, 64*1024)
-	oob := make([]byte, syscall.CmsgSpace(4*32))
-
 	for {
-		var n, oobn int
-		var recvErr error
-		err = srcRaw.Read(func(fd uintptr) bool {
-			n, oobn, _, _, recvErr = syscall.Recvmsg(int(fd), buf, oob, 0)
-			if recvErr == syscall.EINTR || recvErr == syscall.EAGAIN {
-				return false
-			}
-			return true
-		})
-		if err != nil || recvErr != nil || n <= 0 {
+		msg, fds, err := recvWaylandMessage(src)
+		if err != nil {
 			return
 		}
-
-		data := buf[:n]
-		control := oob[:oobn]
-
-		var sendErr error
-		err = dstRaw.Write(func(fd uintptr) bool {
-			sendErr = syscall.Sendmsg(int(fd), data, control, nil, 0)
-			if sendErr == syscall.EINTR || sendErr == syscall.EAGAIN {
-				return false
-			}
-			return true
-		})
-		if err != nil || sendErr != nil {
+		if err := sendWaylandMessage(dst, msg, fds); err != nil {
 			return
 		}
+	}
+}
+
+func recvWaylandMessage(conn *net.UnixConn) ([]byte, []int, error) {
+	const waylandHeaderSize = 8
+
+	header := make([]byte, waylandHeaderSize)
+	fds, err := recvWaylandFull(conn, header)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	size := int(binary.LittleEndian.Uint32(header[4:8]) >> 16)
+	if size < waylandHeaderSize || size > 65535 {
+		closeFDList(fds)
+		return nil, nil, fmt.Errorf("invalid wayland message size %d", size)
+	}
+
+	msg := make([]byte, size)
+	copy(msg, header)
+	if size > waylandHeaderSize {
+		payloadFDs, err := recvWaylandFull(conn, msg[waylandHeaderSize:])
+		if err != nil {
+			closeFDList(fds)
+			return nil, nil, err
+		}
+		fds = append(fds, payloadFDs...)
+	}
+
+	return msg, fds, nil
+}
+
+func recvWaylandFull(conn *net.UnixConn, buf []byte) ([]int, error) {
+	allFDs := make([]int, 0)
+	offset := 0
+
+	for offset < len(buf) {
+		n, fds, err := recvWithFDs(conn, buf[offset:])
+		if len(fds) > 0 {
+			allFDs = append(allFDs, fds...)
+		}
+		if err != nil {
+			closeFDList(allFDs)
+			return nil, err
+		}
+		if n == 0 {
+			closeFDList(allFDs)
+			return nil, io.EOF
+		}
+		offset += n
+	}
+
+	return allFDs, nil
+}
+
+func recvWithFDs(conn *net.UnixConn, buf []byte) (int, []int, error) {
+	rawConn, err := conn.SyscallConn()
+	if err != nil {
+		return 0, nil, err
+	}
+
+	oob := make([]byte, syscall.CmsgSpace(4*16))
+	var n, oobn, flags int
+	var recvErr error
+
+	err = rawConn.Read(func(fd uintptr) bool {
+		n, oobn, flags, _, recvErr = syscall.Recvmsg(int(fd), buf, oob, 0)
+		if recvErr == syscall.EINTR || recvErr == syscall.EAGAIN {
+			return false
+		}
+		return true
+	})
+	if err != nil {
+		return 0, nil, err
+	}
+	if recvErr != nil {
+		return 0, nil, recvErr
+	}
+	if flags&syscall.MSG_CTRUNC != 0 {
+		return 0, nil, fmt.Errorf("wayland ancillary data truncated")
+	}
+
+	return n, parseControlFDs(oob[:oobn]), nil
+}
+
+func sendWaylandMessage(conn *net.UnixConn, msg []byte, fds []int) error {
+	defer closeFDList(fds)
+
+	rawConn, err := conn.SyscallConn()
+	if err != nil {
+		return err
+	}
+
+	var rights []byte
+	if len(fds) > 0 {
+		rights = syscall.UnixRights(fds...)
+	}
+
+	var sendErr error
+	err = rawConn.Write(func(fd uintptr) bool {
+		sendErr = syscall.Sendmsg(int(fd), msg, rights, nil, 0)
+		if sendErr == syscall.EINTR || sendErr == syscall.EAGAIN {
+			return false
+		}
+		return true
+	})
+	if err != nil {
+		return err
+	}
+	return sendErr
+}
+
+func parseControlFDs(control []byte) []int {
+	if len(control) == 0 {
+		return nil
+	}
+
+	msgs, err := syscall.ParseSocketControlMessage(control)
+	if err != nil {
+		return nil
+	}
+
+	var fds []int
+	for _, msg := range msgs {
+		parsed, err := syscall.ParseUnixRights(&msg)
+		if err != nil {
+			continue
+		}
+		fds = append(fds, parsed...)
+	}
+	return fds
+}
+
+func closeFDList(fds []int) {
+	for _, fd := range fds {
+		_ = syscall.Close(fd)
 	}
 }
 

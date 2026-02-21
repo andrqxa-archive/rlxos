@@ -161,7 +161,7 @@ func runPull(args []string) error {
 
 func runRun(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
-	bind := fs.String("bind", "", "Bind mount (host:distro)")
+	bind := fs.String("bind", "", "Bind mount(s) (host:distro[,host:distro])")
 	env := fs.String("env", "", "Set environment variable (KEY=VALUE)")
 	workdir := fs.String("workdir", "/", "Set working directory")
 	fs.SetOutput(os.Stderr)
@@ -214,7 +214,7 @@ func runRun(args []string) error {
 
 func runShell(args []string) error {
 	fs := flag.NewFlagSet("shell", flag.ContinueOnError)
-	bind := fs.String("bind", "", "Bind mount (host:distro)")
+	bind := fs.String("bind", "", "Bind mount(s) (host:distro[,host:distro])")
 	env := fs.String("env", "", "Set environment variable (KEY=VALUE)")
 	fs.SetOutput(os.Stderr)
 	if err := fs.Parse(args); err != nil {

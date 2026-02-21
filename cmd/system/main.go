@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -44,6 +45,7 @@ func init() {
 		fmt.Fprintln(os.Stderr, "  info      Show general system information")
 		fmt.Fprintln(os.Stderr, "  memory    Show memory and swap usage")
 		fmt.Fprintln(os.Stderr, "  disk      Show disk usage by mountpoint")
+		fmt.Fprintln(os.Stderr, "  drives    Show drives and partitions with capacity/usage")
 		fmt.Fprintln(os.Stderr, "  uptime    Show uptime and boot time")
 		fmt.Fprintln(os.Stderr, "  hostname  Get or set hostname")
 		fmt.Fprintln(os.Stderr, "  env       Get or set environment variables")
@@ -65,6 +67,7 @@ func main() {
 		"info":     cmdInfo,
 		"memory":   cmdMemory,
 		"disk":     cmdDisk,
+		"drives":   cmdDrives,
 		"uptime":   cmdUptime,
 		"hostname": cmdHostname,
 		"env":      cmdEnv,
@@ -232,6 +235,154 @@ func cmdDisk(args []string) error {
 	}
 
 	table.Print()
+	return nil
+}
+
+func cmdDrives(args []string) error {
+	if len(args) > 1 {
+		return fmt.Errorf("usage: system drives [device]")
+	}
+
+	filter := ""
+	if len(args) == 1 {
+		filter = normalizeDeviceName(args[0])
+		if filter == "" {
+			filter = args[0]
+		}
+	}
+
+	entries, err := parsePartitions()
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		fmt.Println("No block devices found.")
+		return nil
+	}
+
+	classifyPartitions(entries)
+
+	known := make(map[string]struct{}, len(entries))
+	for _, e := range entries {
+		known[e.name] = struct{}{}
+	}
+
+	mounts, err := parseMounts()
+	if err != nil {
+		return err
+	}
+	usageByDevice := buildDeviceMountUsage(mounts, known)
+
+	drives := make(map[string]partitionEntry)
+	partsByDrive := make(map[string][]partitionEntry)
+	var orphanParts []partitionEntry
+
+	for _, e := range entries {
+		if e.isPartition {
+			if e.parent != "" {
+				partsByDrive[e.parent] = append(partsByDrive[e.parent], e)
+			} else {
+				orphanParts = append(orphanParts, e)
+			}
+			continue
+		}
+		drives[e.name] = e
+	}
+
+	driveNames := make([]string, 0, len(drives))
+	for name := range drives {
+		if filter == "" || filter == name || hasPartition(partsByDrive[name], filter) {
+			driveNames = append(driveNames, name)
+		}
+	}
+	sort.Strings(driveNames)
+	sort.Slice(orphanParts, func(i, j int) bool {
+		return orphanParts[i].name < orphanParts[j].name
+	})
+
+	partTable := format.NewTable("Partition", "Drive", "Size", "Used", "Free", "Usage", "Mounted on")
+	driveTable := format.NewTable("Drive", "Size", "Parts", "Used", "Free", "Usage", "Mounted on")
+	driveRows := 0
+	partRows := 0
+
+	found := filter == ""
+
+	for _, drive := range driveNames {
+		d := drives[drive]
+		parts := partsByDrive[drive]
+		sort.Slice(parts, func(i, j int) bool {
+			return parts[i].name < parts[j].name
+		})
+
+		used, free, usage, mount := summarizeMountUsage(usageByDevice[drive])
+		driveTable.AddRow(
+			d.name,
+			format.Size(int64(d.sizeBytes)),
+			strconv.Itoa(len(parts)),
+			used,
+			free,
+			usage,
+			mount,
+		)
+		driveRows++
+
+		if filter == drive {
+			found = true
+		}
+
+		for _, p := range parts {
+			if filter != "" && filter != drive && filter != p.name {
+				continue
+			}
+			if filter == p.name {
+				found = true
+			}
+			pUsed, pFree, pUsage, pMount := summarizeMountUsage(usageByDevice[p.name])
+			partTable.AddRow(
+				p.name,
+				drive,
+				format.Size(int64(p.sizeBytes)),
+				pUsed,
+				pFree,
+				pUsage,
+				pMount,
+			)
+			partRows++
+		}
+	}
+
+	for _, p := range orphanParts {
+		if filter != "" && filter != p.name {
+			continue
+		}
+		found = true
+		pUsed, pFree, pUsage, pMount := summarizeMountUsage(usageByDevice[p.name])
+		partTable.AddRow(
+			p.name,
+			"?",
+			format.Size(int64(p.sizeBytes)),
+			pUsed,
+			pFree,
+			pUsage,
+			pMount,
+		)
+		partRows++
+	}
+
+	if !found {
+		return fmt.Errorf("device not found: %s", filter)
+	}
+
+	if driveRows > 0 {
+		driveTable.Print()
+	}
+	if partRows > 0 {
+		if driveRows > 0 {
+			fmt.Println()
+		}
+		partTable.Print()
+	}
+
 	return nil
 }
 
@@ -635,8 +786,28 @@ type mountInfo struct {
 	fsType     string
 }
 
+type partitionEntry struct {
+	major       int
+	minor       int
+	blocks      uint64
+	sizeBytes   uint64
+	name        string
+	parent      string
+	isPartition bool
+}
+
+type deviceMountUsage struct {
+	mountPoint string
+	total      uint64
+	used       uint64
+	free       uint64
+}
+
 func parseMounts() ([]mountInfo, error) {
-	file, err := os.Open("/cache/kernel/processes/mounts")
+	file, err := openFirstExisting(
+		fs.Resolve("process", "mounts"),
+		"/proc/mounts",
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -657,6 +828,285 @@ func parseMounts() ([]mountInfo, error) {
 	}
 
 	return mounts, scanner.Err()
+}
+
+func parsePartitions() ([]partitionEntry, error) {
+	file, err := openFirstExisting(
+		fs.Resolve("process", "partitions"),
+		"/proc/partitions",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var entries []partitionEntry
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 4 || fields[0] == "major" {
+			continue
+		}
+
+		major, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+		minor, err := strconv.Atoi(fields[1])
+		if err != nil {
+			continue
+		}
+		blocks, err := strconv.ParseUint(fields[2], 10, 64)
+		if err != nil {
+			continue
+		}
+
+		entries = append(entries, partitionEntry{
+			major:     major,
+			minor:     minor,
+			blocks:    blocks,
+			sizeBytes: blocks * 1024,
+			name:      fields[3],
+		})
+	}
+
+	return entries, scanner.Err()
+}
+
+func classifyPartitions(entries []partitionEntry) {
+	known := make(map[string]struct{}, len(entries))
+	for _, e := range entries {
+		known[e.name] = struct{}{}
+	}
+
+	for i := range entries {
+		parent := guessParentDevice(entries[i].name, known)
+		if parent != "" {
+			entries[i].isPartition = true
+			entries[i].parent = parent
+			continue
+		}
+		if hasPartitionMarker(entries[i].name) {
+			entries[i].isPartition = true
+		}
+	}
+}
+
+func guessParentDevice(name string, known map[string]struct{}) string {
+	if base, ok := trimPartitionWithP(name); ok {
+		if _, exists := known[base]; exists {
+			return base
+		}
+	}
+	if base, ok := trimTrailingDigits(name); ok {
+		if _, exists := known[base]; exists {
+			return base
+		}
+	}
+	return ""
+}
+
+func trimPartitionWithP(name string) (string, bool) {
+	idx := strings.LastIndexByte(name, 'p')
+	if idx <= 0 || idx >= len(name)-1 {
+		return "", false
+	}
+	suffix := name[idx+1:]
+	if !allDigits(suffix) {
+		return "", false
+	}
+	return name[:idx], true
+}
+
+func trimTrailingDigits(name string) (string, bool) {
+	i := len(name) - 1
+	for i >= 0 && name[i] >= '0' && name[i] <= '9' {
+		i--
+	}
+	if i == len(name)-1 || i < 0 {
+		return "", false
+	}
+	return name[:i+1], true
+}
+
+func allDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, ch := range value {
+		if ch < '0' || ch > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func hasPartitionMarker(name string) bool {
+	paths := []string{
+		fs.Resolve("sysfs", filepath.Join("class/block", name, "partition")),
+		filepath.Join("/sys/class/block", name, "partition"),
+	}
+
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+func buildDeviceMountUsage(mounts []mountInfo, known map[string]struct{}) map[string][]deviceMountUsage {
+	usage := make(map[string][]deviceMountUsage)
+
+	for _, m := range mounts {
+		if isPseudoFilesystemType(m.fsType) {
+			continue
+		}
+
+		device := normalizeDeviceName(m.device)
+		if device == "" {
+			continue
+		}
+		if _, ok := known[device]; !ok {
+			continue
+		}
+
+		var stat syscall.Statfs_t
+		if err := syscall.Statfs(m.mountPoint, &stat); err != nil {
+			continue
+		}
+
+		total := stat.Blocks * uint64(stat.Bsize)
+		free := stat.Bavail * uint64(stat.Bsize)
+		used := total - free
+		if total == 0 {
+			continue
+		}
+
+		usage[device] = append(usage[device], deviceMountUsage{
+			mountPoint: m.mountPoint,
+			total:      total,
+			used:       used,
+			free:       free,
+		})
+	}
+
+	return usage
+}
+
+func isPseudoFilesystemType(fsType string) bool {
+	switch {
+	case strings.HasPrefix(fsType, "devtmpfs"),
+		strings.HasPrefix(fsType, "devpts"),
+		strings.HasPrefix(fsType, "tmpfs"),
+		strings.HasPrefix(fsType, "proc"),
+		strings.HasPrefix(fsType, "sysfs"),
+		strings.HasPrefix(fsType, "cgroup"),
+		strings.HasPrefix(fsType, "mqueue"),
+		strings.HasPrefix(fsType, "hugetlbfs"),
+		strings.HasPrefix(fsType, "pstore"),
+		strings.HasPrefix(fsType, "tracefs"),
+		strings.HasPrefix(fsType, "debugfs"),
+		strings.HasPrefix(fsType, "configfs"),
+		strings.HasPrefix(fsType, "securityfs"),
+		strings.HasPrefix(fsType, "fusectl"),
+		strings.HasPrefix(fsType, "autofs"),
+		strings.HasPrefix(fsType, "overlay"),
+		strings.HasPrefix(fsType, "squashfs"),
+		strings.HasPrefix(fsType, "rpc_pipefs"),
+		strings.HasPrefix(fsType, "nsfs"),
+		strings.HasPrefix(fsType, "ramfs"),
+		strings.HasPrefix(fsType, "binfmt_misc"),
+		strings.HasPrefix(fsType, "efivarfs"),
+		strings.HasPrefix(fsType, "bpf"):
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeDeviceName(device string) string {
+	device = strings.TrimSpace(device)
+	if device == "" || device == "none" {
+		return ""
+	}
+
+	if strings.HasPrefix(device, "UUID=") ||
+		strings.HasPrefix(device, "LABEL=") ||
+		strings.HasPrefix(device, "PARTUUID=") ||
+		strings.HasPrefix(device, "PARTLABEL=") {
+		return ""
+	}
+
+	devRoot := strings.TrimSuffix(fs.Resolve("device", ""), "/")
+	if devRoot != "" && strings.HasPrefix(device, devRoot+"/") {
+		return filepath.Base(device)
+	}
+	if strings.HasPrefix(device, "/dev/") {
+		return filepath.Base(device)
+	}
+	if strings.Contains(device, "/") {
+		return filepath.Base(device)
+	}
+
+	return device
+}
+
+func summarizeMountUsage(usages []deviceMountUsage) (used, free, usage, mountedOn string) {
+	if len(usages) == 0 {
+		return "-", "-", "-", "-"
+	}
+
+	best := usages[0]
+	for _, u := range usages[1:] {
+		if best.mountPoint != "/" && u.mountPoint == "/" {
+			best = u
+			continue
+		}
+		if len(u.mountPoint) < len(best.mountPoint) ||
+			(len(u.mountPoint) == len(best.mountPoint) && u.mountPoint < best.mountPoint) {
+			best = u
+		}
+	}
+
+	mountedOn = best.mountPoint
+	if len(usages) > 1 {
+		mountedOn = fmt.Sprintf("%s (+%d)", best.mountPoint, len(usages)-1)
+	}
+
+	used = format.Size(int64(best.used))
+	free = format.Size(int64(best.free))
+	usage = format.Percent(float64(best.used), float64(best.total))
+	return used, free, usage, mountedOn
+}
+
+func hasPartition(parts []partitionEntry, name string) bool {
+	for _, p := range parts {
+		if p.name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func openFirstExisting(paths ...string) (*os.File, error) {
+	var lastErr error
+	for _, p := range paths {
+		file, err := os.Open(p)
+		if err == nil {
+			return file, nil
+		}
+		if os.IsNotExist(err) {
+			lastErr = err
+			continue
+		}
+		return nil, err
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, os.ErrNotExist
 }
 
 func printDiskUsage(m mountInfo) {
