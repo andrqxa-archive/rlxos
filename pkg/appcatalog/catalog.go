@@ -56,6 +56,8 @@ type dockPinsFile struct {
 	Pins []string `json:"pins"`
 }
 
+const appIDPrefix = "dev.avyos."
+
 func Discover(opts DiscoverOptions) []Entry {
 	seen := make(map[string]struct{})
 	out := make([]Entry, 0, 24)
@@ -185,7 +187,13 @@ func SupportsExtension(entry Entry, ext string) bool {
 }
 
 func DefaultDockPins() []string {
-	return []string{"appmenu", "filemanager", "terminal", "notepad", "power"}
+	return []string{
+		normalizeID("appmenu"),
+		normalizeID("filemanager"),
+		normalizeID("terminal"),
+		normalizeID("notepad"),
+		normalizeID("power"),
+	}
 }
 
 func DockPinsPath(home string) string {
@@ -304,12 +312,24 @@ func resolveLocalIcon(root, appDir, iconName, id string) string {
 		if p := graphics.ResolveIconPath(id, 64); p != "" {
 			return p
 		}
+		if shortID := strings.TrimPrefix(id, appIDPrefix); shortID != id {
+			if p := graphics.ResolveIconPath(shortID, 64); p != "" {
+				return p
+			}
+		}
 	}
 	return graphics.ResolveIconPath("help", 64)
 }
 
 func normalizeID(id string) string {
-	return strings.ToLower(strings.TrimSpace(id))
+	id = strings.ToLower(strings.TrimSpace(id))
+	if id == "" {
+		return ""
+	}
+	if strings.HasPrefix(id, appIDPrefix) || strings.Contains(id, ".") {
+		return id
+	}
+	return appIDPrefix + id
 }
 
 func normalizeActions(actions []ManifestAction) []ManifestAction {
@@ -325,9 +345,9 @@ func normalizeActions(actions []ManifestAction) []ManifestAction {
 		if label == "" {
 			continue
 		}
-		id := normalizeID(action.ID)
+		id := normalizeActionID(action.ID)
 		if id == "" {
-			id = normalizeID(label)
+			id = normalizeActionID(label)
 		}
 		out = append(out, ManifestAction{
 			ID:      id,
@@ -338,6 +358,10 @@ func normalizeActions(actions []ManifestAction) []ManifestAction {
 		})
 	}
 	return out
+}
+
+func normalizeActionID(id string) string {
+	return strings.ToLower(strings.TrimSpace(id))
 }
 
 func normalizeExtension(ext string) string {
@@ -402,12 +426,13 @@ func normalizeIDs(ids []string) []string {
 }
 
 func titleFromID(id string) string {
-	id = strings.TrimSpace(id)
+	id = strings.TrimSpace(strings.ToLower(id))
+	id = strings.TrimPrefix(id, appIDPrefix)
 	if id == "" {
 		return "App"
 	}
 	parts := strings.FieldsFunc(id, func(r rune) bool {
-		return r == '-' || r == '_' || r == ' '
+		return r == '-' || r == '_' || r == ' ' || r == '.'
 	})
 	if len(parts) == 0 {
 		return "App"

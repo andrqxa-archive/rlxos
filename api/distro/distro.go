@@ -15,7 +15,7 @@
  *
  */
 
-package distroapi
+package distro
 
 import (
 	"fmt"

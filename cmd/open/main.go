@@ -112,7 +112,7 @@ func resolveTargetApp(entries []appcatalog.Entry, path string, isDir bool, force
 	}
 
 	if isDir {
-		if entry, ok := appcatalog.FindByID(entries, "filemanager"); ok {
+		if entry, ok := appcatalog.FindByID(entries, "dev.avyos.filemanager"); ok {
 			return entry, nil
 		}
 		return appcatalog.Entry{}, fmt.Errorf("file manager app not found")

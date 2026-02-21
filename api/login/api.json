@@ -1,8 +1,8 @@
 {
   "service": {
-    "name": "login",
+    "name": "dev.avyos.login",
     "id": "0x00000040",
-    "package": "loginapi"
+    "package": "login"
   },
   "types": [
     {

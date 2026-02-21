@@ -1,5 +1,5 @@
 {
-  "id": "notepad",
+  "id": "dev.avyos.notepad",
   "name": "Notepad",
   "description": "Edit plain text files.",
   "icon": "notes",

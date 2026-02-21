@@ -15,7 +15,7 @@
  *
  */
 
-package loginapi
+package login
 
 import (
 	"time"
@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	ServiceName = "login"
+	ServiceName = "dev.avyos.login"
 
 	RequestLogout       uint16 = 0x0201
 	RequestLock         uint16 = 0x0202

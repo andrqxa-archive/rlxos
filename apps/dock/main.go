@@ -30,10 +30,10 @@ const (
 	defaultDockPos   = "bottom"
 	keyDockPosition  = "/dev/rlxos/dock/position"
 	legacyDockKey    = "dock.position"
+	keyDockPinned    = "/dev/rlxos/dock/pinned"
+	legacyPinnedKey  = "dock.pinned"
 
-	startTileSize = 92
-	startIconSize = 48
-	taskIconSize  = 48
+	taskIconSize = 48
 
 	dockOuterPadX = 1
 	dockInnerPadX = 0
@@ -88,18 +88,18 @@ type menuItem struct {
 type TaskbarApp struct {
 	ui.App
 
-	home      string
-	catalog   []appcatalog.Entry
-	pinnedIDs []string
-	windows   []display.WindowInfo
-	groups    []taskGroup
+	home       string
+	catalog    []appcatalog.Entry
+	pinnedIDs  []string
+	pinsLoaded bool
+	windows    []display.WindowInfo
+	groups     []taskGroup
 
 	catalogSig string
 	pinSig     string
 	windowSig  string
 	groupSig   string
 
-	startPopup   *displaybackend.Popup
 	taskPopup    *displaybackend.Popup
 	taskPopupKey string
 	dockWidth    int
@@ -109,25 +109,8 @@ func (a *TaskbarApp) e(id string) *ui.Element { return a.FindElement(id) }
 
 func (a *TaskbarApp) OpenLaunchpad() {
 	a.closeTaskMenu()
-	a.closeStartMenu()
 	if err := runCommand("appmenu"); err != nil {
 		log.Warn("failed to open appmenu: %v", err)
-	}
-}
-
-func (a *TaskbarApp) ToggleStartMenu() {
-	if a.startPopup != nil {
-		a.closeStartMenu()
-		return
-	}
-	a.openStartMenu()
-}
-
-func (a *TaskbarApp) closeStartMenu() {
-	p := a.startPopup
-	a.startPopup = nil
-	if p != nil {
-		db.ClosePopup(p)
 	}
 }
 
@@ -140,183 +123,6 @@ func (a *TaskbarApp) closeTaskMenu() {
 	}
 }
 
-func (a *TaskbarApp) openStartMenu() {
-	entries := a.startMenuEntries()
-	if len(entries) == 0 {
-		return
-	}
-
-	a.closeTaskMenu()
-
-	const (
-		menuW      = 480
-		menuH      = 480
-		menuOffset = 12
-	)
-
-	anchor := a.e("StartButton")
-	x := menuOffset - 5
-	y := -menuH - menuOffset
-	if anchor != nil {
-		b := anchor.Bounds()
-		x = b.X - menuOffset
-		y = b.Y - menuH - menuOffset
-	}
-
-	content := buildStartMenu(entries, func(entry appcatalog.Entry) {
-		a.closeStartMenu()
-		if err := runCommand(entry.ExecPath); err != nil {
-			log.Warn("start menu launch failed for %s: %v", entry.ID, err)
-		}
-	})
-
-	var popup *displaybackend.Popup
-	popup = db.OpenPopup(x, y, menuW, menuH, content, func() {
-		if a.startPopup == popup {
-			a.startPopup = nil
-		}
-	})
-	if popup == nil {
-		return
-	}
-	a.startPopup = popup
-}
-
-func buildStartMenu(entries []appcatalog.Entry, onLaunch func(appcatalog.Entry)) *ui.Element {
-	root := ui.NewElement("VBox")
-	root.SetAttribute("direction", "column")
-	root.SetAttribute("spacing", 0)
-	root.SetAttribute("padding", "12")
-	root.SetAttribute("minWidth", 480)
-	root.SetAttribute("maxWidth", 480)
-	root.SetAttribute("minHeight", 480)
-	root.SetAttribute("maxHeight", 480)
-	root.SetAttribute("background", "transparent")
-	root.SetAttribute("gradientTop", "transparent")
-	root.SetAttribute("gradientBottom", "transparent")
-	root.SetAttribute("borderColor", "transparent")
-
-	panel := ui.NewElement("VBox")
-	panel.SetAttribute("direction", "column")
-	panel.SetAttribute("spacing", 0)
-	panel.SetAttribute("expand", true)
-	panel.SetAttribute("padding", "12")
-	panel.SetAttribute("interactive", false)
-	panel.SetAttribute("background", "#EEF2F7CC")
-	panel.SetAttribute("gradientTop", "#F7FAFFDD")
-	panel.SetAttribute("gradientBottom", "#DCE5F3C8")
-	panel.SetAttribute("borderColor", "#1B2A4A66")
-	panel.SetAttribute("borderRadius", 10)
-	panel.SetAttribute("shadow", true)
-	panel.SetAttribute("shadowOnlyOnHover", false)
-	panel.SetAttribute("shadowColor", "#1018284A")
-	panel.SetAttribute("shadowSpread", 14)
-	panel.SetAttribute("shadowOffsetY", 3)
-	panel.SetAttribute("shadowGap", 1)
-
-	grid := ui.NewElement("Flow")
-	grid.SetAttribute("id", "StartMenuGrid")
-	grid.SetAttribute("layout", "flow")
-	grid.SetAttribute("expand", true)
-	grid.SetAttribute("overflow", "auto")
-	grid.SetAttribute("rowSpacing", 10)
-	grid.SetAttribute("colSpacing", 10)
-	grid.SetAttribute("padding", "8")
-	grid.SetAttribute("minWidth", 440)
-	grid.SetAttribute("maxWidth", 440)
-	grid.SetAttribute("background", "transparent")
-	grid.SetAttribute("gradientTop", "transparent")
-	grid.SetAttribute("gradientBottom", "transparent")
-	grid.SetAttribute("borderColor", "transparent")
-	grid.SetAttribute("borderRadius", 0)
-	grid.SetAttribute("shadow", false)
-	grid.SetAttribute("scrollStep", 28)
-
-	for _, entry := range entries {
-		btn := ui.NewElement("Button")
-		btn.SetAttribute("text", "")
-		btn.SetAttribute("padding", "7")
-		btn.SetAttribute("minWidth", startTileSize)
-		btn.SetAttribute("maxWidth", startTileSize)
-		btn.SetAttribute("minHeight", startTileSize)
-		btn.SetAttribute("maxHeight", startTileSize)
-		btn.SetAttribute("borderRadius", 8)
-		btn.SetAttribute("focusRing", false)
-		btn.SetAttribute("background", "transparent")
-		btn.SetAttribute("gradientTop", "transparent")
-		btn.SetAttribute("gradientBottom", "transparent")
-		btn.SetAttribute("borderColor", "transparent")
-		btn.SetAttribute("focusedBorderColor", "transparent")
-		btn.SetAttribute("shadow", false)
-		btn.SetAttribute("shadowColor", "transparent")
-		btn.SetAttribute("hoverBackground", "transparent")
-		btn.SetAttribute("pressedBackground", "transparent")
-
-		box := ui.NewElement("VBox")
-		box.SetAttribute("direction", "column")
-		box.SetAttribute("alignment", "center")
-		box.SetAttribute("spacing", 6)
-		box.SetAttribute("expand", true)
-		box.SetAttribute("interactive", false)
-
-		icon := ui.NewElement("Image")
-		icon.SetAttribute("src", entry.IconPath)
-		icon.SetAttribute("srcOpaque", false)
-		icon.SetAttribute("scaleMode", "contain")
-		icon.SetAttribute("minWidth", startIconSize)
-		icon.SetAttribute("maxWidth", startIconSize)
-		icon.SetAttribute("minHeight", startIconSize)
-		icon.SetAttribute("maxHeight", startIconSize)
-		icon.SetAttribute("interactive", false)
-
-		label := ui.NewElement("Label")
-		label.SetAttribute("text", ellipsisText(entry.Name, 82))
-		label.SetAttribute("textAlign", "center")
-		label.SetAttribute("minWidth", 82)
-		label.SetAttribute("maxWidth", 82)
-		label.SetAttribute("clipText", true)
-		label.SetAttribute("interactive", false)
-
-		box.AddChild(icon)
-		box.AddChild(label)
-		btn.AddChild(box)
-
-		entryCopy := entry
-		btn.BindSignal("clicked", func() {
-			if onLaunch != nil {
-				onLaunch(entryCopy)
-			}
-		})
-		grid.AddChild(btn)
-	}
-
-	panel.AddChild(grid)
-	root.AddChild(panel)
-	return root
-}
-
-func (a *TaskbarApp) startMenuEntries() []appcatalog.Entry {
-	out := make([]appcatalog.Entry, 0, len(a.catalog))
-	for _, e := range a.catalog {
-		if e.Hidden || e.Background {
-			continue
-		}
-		if strings.TrimSpace(e.ExecPath) == "" {
-			continue
-		}
-		out = append(out, e)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		ln := strings.ToLower(out[i].Name)
-		rn := strings.ToLower(out[j].Name)
-		if ln == rn {
-			return out[i].ID < out[j].ID
-		}
-		return ln < rn
-	})
-	return out
-}
-
 func (a *TaskbarApp) syncCatalogAndPins(force bool) {
 	catalog := appcatalog.Discover(appcatalog.DiscoverOptions{
 		Home:          a.home,
@@ -324,14 +130,18 @@ func (a *TaskbarApp) syncCatalogAndPins(force bool) {
 	})
 	catSig := catalogSignature(catalog)
 
-	loadedPins := appcatalog.LoadDockPins(a.home, appcatalog.DefaultDockPins())
-	pins := filterPins(loadedPins, catalog)
-	pins = ensurePinnedID(pins, "appmenu", catalog)
-	if !sameIDs(loadedPins, pins) {
-		if err := appcatalog.SaveDockPins(a.home, pins); err != nil {
-			log.Warn("failed to persist dock pins: %v", err)
+	if !a.pinsLoaded {
+		pins, found := loadDockPinsFromSettings()
+		if !found {
+			pins = appcatalog.DefaultDockPins()
+			if err := saveDockPinsToSettings(pins); err != nil {
+				log.Warn("failed to bootstrap dock pins setting: %v", err)
+			}
 		}
+		a.pinnedIDs = filterPins(pins, catalog)
+		a.pinsLoaded = true
 	}
+	pins := filterPins(a.pinnedIDs, catalog)
 	pinSig := strings.Join(pins, ",")
 
 	if !force && catSig == a.catalogSig && pinSig == a.pinSig {
@@ -343,6 +153,51 @@ func (a *TaskbarApp) syncCatalogAndPins(force bool) {
 	a.catalogSig = catSig
 	a.pinSig = pinSig
 	a.rebuildTaskGroups(true)
+}
+
+func (a *TaskbarApp) applyPinnedIDs(ids []string) {
+	pins := filterPins(ids, a.catalog)
+	if sameIDs(a.pinnedIDs, pins) {
+		return
+	}
+	a.pinnedIDs = pins
+	a.pinSig = strings.Join(pins, ",")
+	a.rebuildTaskGroups(true)
+	a.refreshWindows()
+}
+
+func (a *TaskbarApp) setPinned(appID string, pinned bool) {
+	appID = strings.ToLower(strings.TrimSpace(appID))
+	if appID == "" {
+		return
+	}
+
+	next := append([]string(nil), a.pinnedIDs...)
+	index := -1
+	for i, id := range next {
+		if strings.ToLower(strings.TrimSpace(id)) == appID {
+			index = i
+			break
+		}
+	}
+
+	if pinned {
+		if index < 0 {
+			next = append(next, appID)
+		}
+	} else if index >= 0 {
+		next = append(next[:index], next[index+1:]...)
+	}
+
+	next = filterPins(next, a.catalog)
+	if sameIDs(next, a.pinnedIDs) {
+		return
+	}
+
+	if err := saveDockPinsToSettings(next); err != nil {
+		log.Warn("failed to persist dock pins setting: %v", err)
+	}
+	a.applyPinnedIDs(next)
 }
 
 func (a *TaskbarApp) refreshWindows() {
@@ -593,7 +448,6 @@ func (a *TaskbarApp) resizeDockToContent() {
 }
 
 func (a *TaskbarApp) activateGroup(key string) {
-	a.closeStartMenu()
 	g, ok := a.findGroup(key)
 	if !ok {
 		return
@@ -640,7 +494,6 @@ func (a *TaskbarApp) openGroupMenu(key string, anchor *ui.Element) {
 		return
 	}
 
-	a.closeStartMenu()
 	a.closeTaskMenu()
 
 	const (
@@ -757,11 +610,7 @@ func (a *TaskbarApp) buildGroupMenuItems(g taskGroup) []menuItem {
 				Label: "Unpin",
 				Run: func() {
 					a.closeTaskMenu()
-					if _, err := appcatalog.ToggleDockPin(a.home, id, appcatalog.DefaultDockPins()); err != nil {
-						log.Warn("unpin failed for %s: %v", id, err)
-					}
-					a.syncCatalogAndPins(true)
-					a.refreshWindows()
+					a.setPinned(id, false)
 				},
 			})
 		} else {
@@ -769,11 +618,7 @@ func (a *TaskbarApp) buildGroupMenuItems(g taskGroup) []menuItem {
 				Label: "Pin",
 				Run: func() {
 					a.closeTaskMenu()
-					if _, err := appcatalog.ToggleDockPin(a.home, id, appcatalog.DefaultDockPins()); err != nil {
-						log.Warn("pin failed for %s: %v", id, err)
-					}
-					a.syncCatalogAndPins(true)
-					a.refreshWindows()
+					a.setPinned(id, true)
 				},
 			})
 		}
@@ -837,10 +682,6 @@ func (a *TaskbarApp) matchWindowToEntry(win display.WindowInfo) (appcatalog.Entr
 	return appcatalog.Entry{}, "", false
 }
 
-func (a *TaskbarApp) updateClock() {
-	// Clock removed from dock UI.
-}
-
 func runManifestAction(entry appcatalog.Entry, action appcatalog.ManifestAction) error {
 	command := strings.TrimSpace(action.Command)
 	args := append([]string(nil), action.Args...)
@@ -896,8 +737,6 @@ func run() error {
 	db.SetSize(dockMinWidth, taskbarHeight)
 	db.SetLayer(display.LayerTop, anchor, taskbarExclusive)
 
-	go watchDockSettings()
-
 	home, _ := os.UserHomeDir()
 	a := &TaskbarApp{home: home}
 	a.SetOptions(gapp.Options{
@@ -918,6 +757,7 @@ func run() error {
 	a.syncCatalogAndPins(true)
 	a.refreshWindows()
 	a.resizeDockToContent()
+	go watchDockSettings(a)
 	go func() {
 		refreshTicker := time.NewTicker(150 * time.Millisecond)
 		defer refreshTicker.Stop()
@@ -967,7 +807,18 @@ func layerAnchorForPosition(position string) uint32 {
 	return uint32(display.AnchorBottom | display.AnchorHorizontalCenter)
 }
 
-func watchDockSettings() {
+func applyDockPositionSetting(key, value string) {
+	position := strings.ToLower(strings.TrimSpace(value))
+	if position != "top" && position != "bottom" {
+		log.Warn("ignoring invalid %s setting %q", key, value)
+		return
+	}
+	if err := db.ReconfigureLayer(layerAnchorForPosition(position), taskbarExclusive); err != nil {
+		log.Warn("failed to apply %s %q: %v", key, position, err)
+	}
+}
+
+func watchDockSettings(app *TaskbarApp) {
 	for {
 		client, err := settingsapi.Connect()
 		if err != nil {
@@ -983,17 +834,28 @@ func watchDockSettings() {
 			}
 		})
 
+		if value, ok := getSetting(client, keyDockPosition); ok {
+			applyDockPositionSetting(keyDockPosition, value)
+		} else if value, ok := getSetting(client, legacyDockKey); ok {
+			applyDockPositionSetting(legacyDockKey, value)
+		}
+		if app != nil {
+			if value, ok := getSetting(client, keyDockPinned); ok {
+				app.applyPinnedIDs(parsePinnedIDs(value))
+			} else if value, ok := getSetting(client, legacyPinnedKey); ok {
+				app.applyPinnedIDs(parsePinnedIDs(value))
+			}
+		}
+
 		client.OnChanged(func(ev settingsapi.ChangedEvent) {
-			if ev.Key != keyDockPosition && ev.Key != legacyDockKey {
-				return
-			}
-			position := strings.ToLower(strings.TrimSpace(ev.Value))
-			if position != "top" && position != "bottom" {
-				log.Warn("ignoring invalid %s setting %q", ev.Key, ev.Value)
-				return
-			}
-			if err := db.ReconfigureLayer(layerAnchorForPosition(position), taskbarExclusive); err != nil {
-				log.Warn("failed to apply %s %q: %v", ev.Key, position, err)
+			switch ev.Key {
+			case keyDockPosition, legacyDockKey:
+				applyDockPositionSetting(ev.Key, ev.Value)
+			case keyDockPinned, legacyPinnedKey:
+				if app == nil {
+					return
+				}
+				app.applyPinnedIDs(parsePinnedIDs(ev.Value))
 			}
 		})
 
@@ -1037,6 +899,70 @@ func getSetting(client *settingsapi.Client, key string) (string, bool) {
 	return value, true
 }
 
+func setSetting(key, value string) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return fmt.Errorf("setting key is required")
+	}
+	for range 4 {
+		client, err := settingsapi.Connect()
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		err = client.Set(key, value)
+		_ = client.Close()
+		return err
+	}
+	return fmt.Errorf("settings service unavailable")
+}
+
+func loadDockPinsFromSettings() ([]string, bool) {
+	value, ok := loadSettingCompat(keyDockPinned, legacyPinnedKey)
+	if !ok {
+		return nil, false
+	}
+	return parsePinnedIDs(value), true
+}
+
+func saveDockPinsToSettings(pins []string) error {
+	value := strings.Join(normalizePins(pins), ",")
+	return setSetting(keyDockPinned, value)
+}
+
+func parsePinnedIDs(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		switch r {
+		case ',', ';', '\n', '\r', '\t', ' ':
+			return true
+		default:
+			return false
+		}
+	})
+	return normalizePins(parts)
+}
+
+func normalizePins(pins []string) []string {
+	out := make([]string, 0, len(pins))
+	seen := make(map[string]struct{}, len(pins))
+	for _, id := range pins {
+		id = strings.ToLower(strings.TrimSpace(id))
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
 func flagProvided(name string) bool {
 	long := "--" + name
 	short := "-" + name
@@ -1073,32 +999,6 @@ func filterPins(pins []string, catalog []appcatalog.Entry) []string {
 		seen[id] = struct{}{}
 		out = append(out, id)
 	}
-	return out
-}
-
-func ensurePinnedID(pins []string, id string, catalog []appcatalog.Entry) []string {
-	id = strings.ToLower(strings.TrimSpace(id))
-	if id == "" {
-		return pins
-	}
-	catalogHasID := false
-	for _, entry := range catalog {
-		if strings.ToLower(strings.TrimSpace(entry.ID)) == id {
-			catalogHasID = true
-			break
-		}
-	}
-	if !catalogHasID {
-		return pins
-	}
-	for _, existing := range pins {
-		if strings.ToLower(strings.TrimSpace(existing)) == id {
-			return pins
-		}
-	}
-	out := make([]string, 0, len(pins)+1)
-	out = append(out, id)
-	out = append(out, pins...)
 	return out
 }
 
@@ -1178,41 +1078,6 @@ func groupsSignature(groups []taskGroup) string {
 		b.WriteString(strconv.Itoa(len(g.WindowIDs)))
 	}
 	return b.String()
-}
-
-func ellipsisText(text string, maxPx int) string {
-	text = strings.TrimSpace(text)
-	if text == "" || maxPx <= 0 {
-		return ""
-	}
-	font := graphics.DefaultFont
-	if font == nil {
-		return text
-	}
-	if font.TextWidth(text) <= maxPx {
-		return text
-	}
-
-	const dots = "..."
-	dotsW := font.TextWidth(dots)
-	if dotsW >= maxPx {
-		return dots
-	}
-
-	r := []rune(text)
-	lo, hi := 0, len(r)
-	for lo < hi {
-		mid := (lo + hi + 1) / 2
-		if font.TextWidth(string(r[:mid]))+dotsW <= maxPx {
-			lo = mid
-		} else {
-			hi = mid - 1
-		}
-	}
-	if lo <= 0 {
-		return dots
-	}
-	return string(r[:lo]) + dots
 }
 
 func entryLookupKeys(entry appcatalog.Entry) map[string]struct{} {

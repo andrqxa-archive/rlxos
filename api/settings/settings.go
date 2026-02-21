@@ -15,7 +15,7 @@
  *
  */
 
-package settingsapi
+package settings
 
 import (
 	"fmt"

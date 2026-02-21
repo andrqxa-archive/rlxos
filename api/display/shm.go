@@ -1,4 +1,4 @@
-package displayapi
+package display
 
 import (
 	"fmt"

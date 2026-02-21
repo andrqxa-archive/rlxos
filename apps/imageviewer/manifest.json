@@ -1,5 +1,5 @@
 {
-  "id": "imageviewer",
+  "id": "dev.avyos.imageviewer",
   "name": "Image Viewer",
   "description": "Open and preview image files.",
   "icon": "image",

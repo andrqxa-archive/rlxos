@@ -1,5 +1,5 @@
 {
-  "id": "filemanager",
+  "id": "dev.avyos.filemanager",
   "name": "File Manager",
   "description": "Browse folders and manage files.",
   "icon": "folder"

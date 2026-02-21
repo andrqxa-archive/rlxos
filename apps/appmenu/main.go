@@ -23,6 +23,7 @@ var appMenuUI string
 const (
 	launchpadTileSize = 116
 	launchpadIconSize = 62
+	appMenuID         = "dev.avyos.appmenu"
 )
 
 var log = logger.New("appmenu")
@@ -82,7 +83,7 @@ func showInLaunchpad(entry appcatalog.Entry) bool {
 		return false
 	}
 	id := strings.ToLower(strings.TrimSpace(entry.ID))
-	if id == "" || id == "appmenu" {
+	if id == "" || id == appMenuID {
 		return false
 	}
 	if strings.TrimSpace(entry.ExecPath) == "" {

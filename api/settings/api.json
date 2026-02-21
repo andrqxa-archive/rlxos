@@ -1,8 +1,8 @@
 {
   "service": {
-    "name": "settings",
+    "name": "dev.avyos.settings",
     "id": "0x00000060",
-    "package": "settingsapi"
+    "package": "settings"
   },
   "types": [
     {

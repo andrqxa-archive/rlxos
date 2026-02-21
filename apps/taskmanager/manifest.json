@@ -1,5 +1,5 @@
 {
-  "id": "taskmanager",
+  "id": "dev.avyos.taskmanager",
   "name": "Task Manager",
   "description": "Inspect and manage running processes.",
   "icon": "monitor_analytics"

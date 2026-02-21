@@ -1,8 +1,8 @@
 {
   "service": {
-    "name": "distro",
+    "name": "dev.avyos.distro",
     "id": "0x00000070",
-    "package": "distroapi"
+    "package": "distro"
   },
   "types": [
     {

@@ -15,7 +15,7 @@
  *
  */
 
-package ueventapi
+package uevent
 
 import (
 	"time"
@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	ServiceName = "uevent"
+	ServiceName = "dev.avyos.uevent"
 
 	RequestListDevices uint16 = 0x0201
 	RequestGetDevice   uint16 = 0x0202

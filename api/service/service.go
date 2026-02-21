@@ -15,7 +15,7 @@
  *
  */
 
-package serviceapi
+package service
 
 import (
 	"fmt"

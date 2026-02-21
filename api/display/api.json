@@ -1,8 +1,8 @@
 {
   "service": {
-    "name": "display",
+    "name": "dev.avyos.display",
     "id": "0x00000010",
-    "package": "displayapi"
+    "package": "display"
   },
   "imports": [
     "avyos.dev/pkg/graphics"
