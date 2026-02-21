@@ -62,6 +62,9 @@ make GOARCH=arm64
 # Test your build
 make GOARCH=arm64 run
 
+# Optional: use a different host debug forward port
+make GOARCH=arm64 run DBG_PORT=5038
+
 # Manually run the release build
 # Set $AVYOS = path/to/avyos source for firmware
 # For arm64
@@ -69,6 +72,7 @@ qemu-system-aarch64 -smp 2 -m 2G  \
   -M virt -cpu cortex-a57         \
   -display gtk                    \
   -serial mon:stdio               \
+  -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:5037-:5037 \
   -vga none                       \
   -device virtio-gpu-pci          \
   -device virtio-keyboard-pci     \
@@ -81,6 +85,7 @@ qemu-system-aarch64 -smp 2 -m 2G  \
 qemu-system-x86_64 -smp 2 -m 2G   \
   -display gtk                    \
   -serial mon:stdio               \
+  -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:5037-:5037 \
   -vga none                       \
   -device virtio-gpu-pci          \
   -device virtio-keyboard-pci     \

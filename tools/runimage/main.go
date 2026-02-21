@@ -26,11 +26,12 @@ type archConfig struct {
 }
 
 var (
-	flagArch   string
-	flagBranch string
-	flagCPU    string
-	flagMemory string
-	flagVNC    string
+	flagArch    string
+	flagBranch  string
+	flagCPU     string
+	flagMemory  string
+	flagVNC     string
+	flagDBGPort int
 )
 
 func init() {
@@ -39,11 +40,12 @@ func init() {
 	flag.StringVar(&flagCPU, "cpu", "2", "CPU to allocate for emulator")
 	flag.StringVar(&flagMemory, "memory", "2G", "Memory to allocate for emulator")
 	flag.StringVar(&flagVNC, "vnc", "", "Start VNC server")
+	flag.IntVar(&flagDBGPort, "dbg-port", 5037, "Forward host TCP port to guest dbgd port 5037 (0 disables)")
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "runimage - Download and run AvyOS image in QEMU")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Usage:")
-		fmt.Fprintln(os.Stderr, "  runimage [--arch ARCH] [--branch BRANCH] [--cpu N] [--memory SIZE] [--vnc DISPLAY] [qemu args...]")
+		fmt.Fprintln(os.Stderr, "  runimage [--arch ARCH] [--branch BRANCH] [--cpu N] [--memory SIZE] [--vnc DISPLAY] [--dbg-port PORT] [qemu args...]")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Subcommands:")
 		fmt.Fprintln(os.Stderr, "  (none)")
@@ -95,6 +97,14 @@ func run(args []string) error {
 		"-drive", fmt.Sprintf("if=pflash,file=%s/variables,format=raw", name),
 		"-drive", fmt.Sprintf("file=%s/disk.img,format=raw", name),
 	}
+	if flagDBGPort < 0 || flagDBGPort > 65535 {
+		return fmt.Errorf("invalid dbg-port: %d", flagDBGPort)
+	}
+	nicArg := "user,model=virtio-net-pci"
+	if flagDBGPort > 0 {
+		nicArg += fmt.Sprintf(",hostfwd=tcp:127.0.0.1:%d-:5037", flagDBGPort)
+	}
+	qemuArgs = append(qemuArgs, "-nic", nicArg)
 
 	switch runtime.GOOS {
 	case "linux":

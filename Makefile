@@ -53,8 +53,12 @@ ifeq (${QEMU_VNC},1)
 QEMU_VNC_OPTIONS = -vnc :0
 endif
 
+DBG_PORT ?= 5037
+QEMU_NET_ARGS ?= -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:${DBG_PORT}-:5037
+
 QEMU_COMMON_ARGS ?= -smp 2 -m 2G \
 	-serial mon:stdio \
+	${QEMU_NET_ARGS} \
 	-vga none ${QEMU_ACCEL} ${QEMU_VNC_OPTIONS} \
 	-device virtio-gpu-pci \
 	-device virtio-keyboard-pci \

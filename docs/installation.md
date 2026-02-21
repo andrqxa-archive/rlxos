@@ -46,7 +46,12 @@ make GOARCH=amd64 run
 
 # arm64 run
 make GOARCH=arm64 run
+
+# Optional: override host debug forward port (guest dbgd remains 5037)
+make GOARCH=amd64 run DBG_PORT=5038
 ```
+
+`make run` forwards `127.0.0.1:5037` on the host to `5037` in the guest for `dbgd`.
 
 ## Manual QEMU launch
 
@@ -58,6 +63,7 @@ Set `AVYOS_SOURCE` to your repository path so firmware files can be referenced.
 qemu-system-x86_64 -smp 2 -m 2G \
   -display gtk \
   -serial mon:stdio \
+  -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:5037-:5037 \
   -vga none \
   -device virtio-gpu-pci \
   -device virtio-keyboard-pci \
@@ -74,6 +80,7 @@ qemu-system-aarch64 -smp 2 -m 2G \
   -M virt -cpu cortex-a57 \
   -display gtk \
   -serial mon:stdio \
+  -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:5037-:5037 \
   -vga none \
   -device virtio-gpu-pci \
   -device virtio-keyboard-pci \
