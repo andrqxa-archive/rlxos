@@ -9,10 +9,12 @@
   <section class="doc-ref-card">
     <h2>Preview</h2>
     {{- if .PreviewPath }}
-    <figure class="doc-ref-preview">
-      <img src="{{ .PreviewPath }}" alt="{{ .Title }} preview" />
-      <figcaption>{{ .Title }} preview image</figcaption>
-    </figure>
+    <p align="center">
+      <figure class="doc-ref-preview">
+        <img src="{{ .PreviewPath }}" alt="{{ .Title }} preview" />
+        <figcaption>{{ .Title }} preview image</figcaption>
+      </figure>
+    </p>
     {{- else }}
     <p class="doc-ref-empty">Add <code>{{ .RelPath }}/preview.png</code> to show an app screenshot here.</p>
     {{- end }}

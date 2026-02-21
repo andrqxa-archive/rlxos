@@ -1,14 +1,5 @@
 # Welcome Tour
 
-This short tour walks you through the first boot experience and the basic UI concepts in avyos.
-
-> Screenshots referenced below are in `assets/`:
-> - `assets/welcome-screen.png`
-> - `assets/user-accounts.png`
-> - `assets/desktop-interface.png`
-
----
-
 ## 1) Boot to the Welcome Screen
 
 On first boot you’ll see the **Welcome Screen**:
