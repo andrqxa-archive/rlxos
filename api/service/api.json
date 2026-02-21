@@ -2,46 +2,136 @@
   "service": {
     "name": "dev.avyos.service",
     "id": "0x00000050",
-    "package": "service"
+    "package": "service",
+    "description": "Service manager API for lifecycle control and system-level power operations."
   },
   "types": [
     {
       "name": "Empty",
-      "fields": []
+      "description": "Empty payload used for requests and responses without data."
     },
     {
       "name": "ServiceNameRequest",
+      "description": "Payload that targets a service by unit name.",
       "fields": [
-        { "name": "Name", "type": "string" }
+        {
+          "name": "Name",
+          "type": "string"
+        }
       ]
     },
     {
       "name": "ServiceStatus",
+      "description": "Runtime status snapshot for a single service.",
       "fields": [
-        { "name": "Name", "type": "string" },
-        { "name": "Description", "type": "string" },
-        { "name": "Type", "type": "string" },
-        { "name": "Restart", "type": "string" },
-        { "name": "Running", "type": "bool" },
-        { "name": "Started", "type": "bool" },
-        { "name": "Failed", "type": "bool" },
-        { "name": "PID", "type": "int" }
+        {
+          "name": "Name",
+          "type": "string"
+        },
+        {
+          "name": "Description",
+          "type": "string"
+        },
+        {
+          "name": "Type",
+          "type": "string"
+        },
+        {
+          "name": "Restart",
+          "type": "string"
+        },
+        {
+          "name": "Running",
+          "type": "bool"
+        },
+        {
+          "name": "Started",
+          "type": "bool"
+        },
+        {
+          "name": "Failed",
+          "type": "bool"
+        },
+        {
+          "name": "PID",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "ServiceStatusList",
+      "description": "Collection of service status entries.",
       "fields": [
-        { "name": "Items", "type": "[]ServiceStatus" }
+        {
+          "name": "Items",
+          "type": "[]ServiceStatus"
+        }
       ]
     }
   ],
   "requests": [
-    { "name": "StartService", "id": "0x0110", "request_type": "ServiceNameRequest", "response_type": "Empty" },
-    { "name": "StopService", "id": "0x0111", "request_type": "ServiceNameRequest", "response_type": "Empty" },
-    { "name": "RestartService", "id": "0x0112", "request_type": "ServiceNameRequest", "response_type": "Empty" },
-    { "name": "GetStatus", "id": "0x0113", "request_type": "ServiceNameRequest", "response_type": "ServiceStatus" },
-    { "name": "ListServices", "id": "0x0114", "request_type": "Empty", "response_type": "ServiceStatusList" },
-    { "name": "SystemPoweroff", "id": "0x0115", "request_type": "Empty", "response_type": "Empty" },
-    { "name": "SystemReboot", "id": "0x0116", "request_type": "Empty", "response_type": "Empty" }
+    {
+      "name": "StartService",
+      "id": "0x0110",
+      "request_type": "ServiceNameRequest",
+      "response_type": "Empty",
+      "description": "Start a stopped service.",
+      "request_description": "Service unit name to start.",
+      "response_description": "No payload is returned."
+    },
+    {
+      "name": "StopService",
+      "id": "0x0111",
+      "request_type": "ServiceNameRequest",
+      "response_type": "Empty",
+      "description": "Stop a running service.",
+      "request_description": "Service unit name to stop.",
+      "response_description": "No payload is returned."
+    },
+    {
+      "name": "RestartService",
+      "id": "0x0112",
+      "request_type": "ServiceNameRequest",
+      "response_type": "Empty",
+      "description": "Restart an existing service.",
+      "request_description": "Service unit name to restart.",
+      "response_description": "No payload is returned."
+    },
+    {
+      "name": "GetStatus",
+      "id": "0x0113",
+      "request_type": "ServiceNameRequest",
+      "response_type": "ServiceStatus",
+      "description": "Read status for a specific service.",
+      "request_description": "Service unit name to inspect.",
+      "response_description": "Returns a service status snapshot."
+    },
+    {
+      "name": "ListServices",
+      "id": "0x0114",
+      "request_type": "Empty",
+      "response_type": "ServiceStatusList",
+      "description": "List status for all discovered services.",
+      "request_description": "No input is required.",
+      "response_description": "Returns all service status entries."
+    },
+    {
+      "name": "SystemPoweroff",
+      "id": "0x0115",
+      "request_type": "Empty",
+      "response_type": "Empty",
+      "description": "Request a full system poweroff.",
+      "request_description": "No input is required.",
+      "response_description": "No payload is returned."
+    },
+    {
+      "name": "SystemReboot",
+      "id": "0x0116",
+      "request_type": "Empty",
+      "response_type": "Empty",
+      "description": "Request a system reboot.",
+      "request_description": "No input is required.",
+      "response_description": "No payload is returned."
+    }
   ]
 }

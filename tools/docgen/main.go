@@ -19,6 +19,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -31,10 +33,12 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -55,6 +59,8 @@ type markdownDoc struct {
 type apiDoc struct {
 	ImportPath string
 	Title      string
+	ShortPath  string
+	Section    string
 	BodyHTML   template.HTML
 	HTMLFile   string
 }
@@ -64,17 +70,113 @@ type apiPackage struct {
 	Dir        string
 }
 
+type commandHelpRow struct {
+	Name        string
+	Description string
+}
+
+type commandHelpFlag struct {
+	Name        string
+	Type        string
+	Description string
+}
+
+type commandHelpDoc struct {
+	Title       string
+	Command     string
+	Synopsis    string
+	Summary     []string
+	Usage       []string
+	Subcommands []commandHelpRow
+	Flags       []commandHelpFlag
+	ExitCodes   []commandHelpRow
+	Raw         string
+}
+
+type apiSchema struct {
+	Service  apiSchemaService  `json:"service"`
+	Imports  []string          `json:"imports,omitempty"`
+	Types    []apiSchemaType   `json:"types,omitempty"`
+	Requests []apiSchemaMethod `json:"requests,omitempty"`
+	Events   []apiSchemaMethod `json:"events,omitempty"`
+}
+
+type apiSchemaService struct {
+	Name        string     `json:"name"`
+	ID          flexJSONID `json:"id"`
+	Package     string     `json:"package,omitempty"`
+	Description string     `json:"description,omitempty"`
+}
+
+type apiSchemaType struct {
+	Name        string           `json:"name"`
+	Description string           `json:"description,omitempty"`
+	Fields      []apiSchemaField `json:"fields,omitempty"`
+}
+
+type apiSchemaField struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Description string `json:"description,omitempty"`
+}
+
+type apiSchemaMethod struct {
+	Name                string     `json:"name"`
+	ID                  flexJSONID `json:"id"`
+	RequestType         string     `json:"request_type,omitempty"`
+	ResponseType        string     `json:"response_type,omitempty"`
+	PayloadType         string     `json:"payload_type,omitempty"`
+	OneWay              bool       `json:"one_way,omitempty"`
+	Description         string     `json:"description,omitempty"`
+	RequestDescription  string     `json:"request_description,omitempty"`
+	ResponseDescription string     `json:"response_description,omitempty"`
+}
+
+type flexJSONID string
+
+func (v *flexJSONID) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || string(data) == "null" {
+		*v = ""
+		return nil
+	}
+	if data[0] == '"' {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		*v = flexJSONID(strings.TrimSpace(s))
+		return nil
+	}
+	*v = flexJSONID(strings.TrimSpace(string(data)))
+	return nil
+}
+
+type docsIndexMeta struct {
+	Order  map[string]int
+	Titles map[string]string
+}
+
 type navEntry struct {
 	Title  string
 	Href   string
 	Active bool
 }
 
+type navGroup struct {
+	Title   string
+	Entries []navEntry
+}
+
+type navSection struct {
+	Title  string
+	Groups []navGroup
+}
+
 type pageData struct {
 	Head        template.HTML
 	CurrentPath string
-	ProjectDocs []navEntry
-	APIDocs     []navEntry
+	Sidebar     []navSection
 	BodyHTML    template.HTML
 }
 
@@ -99,6 +201,7 @@ var (
 	htmlOpenTagPattern    = regexp.MustCompile(`^<([A-Za-z][A-Za-z0-9:-]*)(\s[^>]*)?>$`)
 	htmlCloseTagPattern   = regexp.MustCompile(`^</([A-Za-z][A-Za-z0-9:-]*)\s*>$`)
 	htmlSelfTagPattern    = regexp.MustCompile(`^<([A-Za-z][A-Za-z0-9:-]*)(\s[^>]*)?/\s*>$`)
+	commandFlagLineRegex  = regexp.MustCompile(`^\s*-(\S+)(?:\s+(.+))?$`)
 )
 
 var pageTemplate = template.Must(template.New("docs-page").Parse(`<!doctype html>
@@ -119,18 +222,17 @@ var pageTemplate = template.Must(template.New("docs-page").Parse(`<!doctype html
   <main class="doc-shell">
     <div class="container doc-layout">
       <aside class="doc-sidebar card" aria-label="Documentation navigation">
+        {{ range .Sidebar }}
         <section class="doc-nav-group">
-          <h2>Project</h2>
-          {{ range .ProjectDocs }}
+          <h2>{{ .Title }}</h2>
+          {{ range .Groups }}
+          {{ if .Title }}<p class="doc-subtitle">{{ .Title }}</p>{{ end }}
+          {{ range .Entries }}
           <a class="doc-link{{ if .Active }} active{{ end }}" href="{{ .Href }}">{{ .Title }}</a>
           {{ end }}
-        </section>
-        <section class="doc-nav-group">
-          <h2>API</h2>
-          {{ range .APIDocs }}
-          <a class="doc-link{{ if .Active }} active{{ end }}" href="{{ .Href }}">{{ .Title }}</a>
           {{ end }}
         </section>
+        {{ end }}
       </aside>
 
       <article class="doc-content card">
@@ -211,6 +313,16 @@ const docgenStyles = `
   font-size: 0.82rem;
   font-family: var(--display);
   letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.doc-subtitle {
+  margin: 0.4rem 0 0.2rem;
+  padding: 0 0.25rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -376,6 +488,23 @@ const docgenStyles = `
     background: rgba(232, 239, 255, 0.1);
     box-shadow: inset 0 0 0 1px rgba(17, 182, 232, 0.2);
   }
+
+  .doc-ref-hero {
+    background: rgba(17, 182, 232, 0.12);
+  }
+
+  .doc-ref-table th {
+    background: rgba(17, 182, 232, 0.14);
+  }
+
+  .doc-ref-code {
+    background: rgba(232, 239, 255, 0.1);
+  }
+
+  .doc-ref-callout {
+    border-left-color: rgba(17, 182, 232, 0.45);
+    background: rgba(17, 182, 232, 0.11);
+  }
 }
 
 .doc-markdown code,
@@ -452,6 +581,174 @@ const docgenStyles = `
   margin: 0.9rem 0;
 }
 
+.doc-ref-shell {
+  display: block;
+}
+
+.doc-ref-hero {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  background: rgba(13, 99, 243, 0.05);
+}
+
+.doc-ref-hero h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(1.5rem, 2.2vw, 2rem);
+  line-height: 1.1;
+}
+
+.doc-ref-hero .doc-path {
+  margin-top: 0.3rem;
+  margin-bottom: 0;
+}
+
+.doc-ref-lead {
+  margin: 0.55rem 0 0;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.doc-ref-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.1rem;
+  margin-top: 1.05rem;
+}
+
+.doc-ref-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  margin-top: 1.15rem;
+}
+
+.doc-ref-shell > .doc-ref-card {
+  padding-top: 0.95rem;
+  border-top: 1px solid var(--border);
+}
+
+.doc-ref-grid .doc-ref-card {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.doc-ref-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  font-family: var(--display);
+}
+
+.doc-ref-meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.45rem 0.7rem;
+}
+
+.doc-ref-meta dt {
+  margin: 0;
+  font-size: 0.83rem;
+  font-family: var(--mono);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.doc-ref-meta dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.doc-ref-preview {
+  margin: 0;
+}
+
+.doc-ref-preview img {
+  width: 100%;
+  max-width: 560px;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-2);
+}
+
+.doc-ref-preview figcaption {
+  margin-top: 0.45rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.doc-ref-empty {
+  margin: 0;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.doc-ref-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.doc-ref-table th,
+.doc-ref-table td {
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 0.5rem 0.62rem;
+  vertical-align: top;
+}
+
+.doc-ref-table th:last-child,
+.doc-ref-table td:last-child {
+  border-right: 0;
+}
+
+.doc-ref-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.doc-ref-table th {
+  font-family: var(--display);
+  font-size: 0.9rem;
+  background: rgba(13, 99, 243, 0.1);
+}
+
+.doc-ref-list {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.doc-ref-list li + li {
+  margin-top: 0.35rem;
+}
+
+.doc-ref-code {
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.7rem 0.8rem;
+  background: rgba(16, 26, 43, 0.08);
+}
+
+.doc-ref-callout {
+  margin-top: 1rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid rgba(13, 99, 243, 0.44);
+  border-radius: 10px;
+  padding: 0.68rem 0.78rem;
+  background: rgba(13, 99, 243, 0.08);
+  color: var(--text);
+}
+
 @media (max-width: 1080px) {
   .doc-shell .container {
     width: calc(100% - 30px);
@@ -516,26 +813,50 @@ func run(cfg config) error {
 	if err != nil {
 		return err
 	}
+	indexMeta := parseDocsIndex(projectDocs)
 
-	readmeDoc, hasReadme := findProjectDoc(projectDocs, "README.md")
+	homeRelPath := ""
+	if _, ok := findProjectDoc(projectDocs, "docs/index.md"); ok {
+		homeRelPath = "docs/index.md"
+	} else if _, ok := findProjectDoc(projectDocs, "README.md"); ok {
+		homeRelPath = "README.md"
+	}
 
 	markdownMap := map[string]string{}
 	for i := range projectDocs {
-		if projectDocs[i].RelPath == "README.md" {
+		if projectDocs[i].RelPath == homeRelPath {
 			markdownMap[projectDocs[i].RelPath] = "index.html"
-			continue
+		} else {
+			markdownMap[projectDocs[i].RelPath] = projectDocs[i].HTMLFile
 		}
-		markdownMap[projectDocs[i].RelPath] = projectDocs[i].HTMLFile
 	}
 
-	apiPackages, err := collectAPIPackages(cfg.root, cfg.modulePath)
+	appDocs, err := renderProgramDocs(cfg.root, "apps", []string{"doc.go", "docs.go"})
 	if err != nil {
 		return err
 	}
-	apiDocs, err := renderAPIDocs(cfg.modulePath, apiPackages)
+	commandDocs, err := renderCommandDocs(cfg.root)
 	if err != nil {
 		return err
 	}
+	serviceDocs, err := renderProgramDocs(cfg.root, "services", []string{"docs.go", "doc.go"})
+	if err != nil {
+		return err
+	}
+	apiDocs, err := renderAPIJSONDocs(cfg.root)
+	if err != nil {
+		return err
+	}
+	pkgDocs, err := renderPkgDocs(cfg.root, cfg.modulePath)
+	if err != nil {
+		return err
+	}
+	allGeneratedDocs := make([]apiDoc, 0, len(appDocs)+len(commandDocs)+len(serviceDocs)+len(apiDocs)+len(pkgDocs))
+	allGeneratedDocs = append(allGeneratedDocs, appDocs...)
+	allGeneratedDocs = append(allGeneratedDocs, commandDocs...)
+	allGeneratedDocs = append(allGeneratedDocs, serviceDocs...)
+	allGeneratedDocs = append(allGeneratedDocs, apiDocs...)
+	allGeneratedDocs = append(allGeneratedDocs, pkgDocs...)
 
 	if err := copyFile(resolvePath(cfg.root, cfg.themeStyle), filepath.Join(outDir, "styles.css")); err != nil {
 		return err
@@ -546,12 +867,15 @@ func run(cfg config) error {
 	if err := copyDirIfExists(filepath.Join(cfg.root, "docs", "assets"), filepath.Join(outDir, "assets")); err != nil {
 		return err
 	}
+	if err := copyAppPreviewAssets(cfg.root, outDir); err != nil {
+		return err
+	}
 	if err := copyOptionalFile(filepath.Join(cfg.root, "data", "icons", "logo", "logo.png"), filepath.Join(outDir, "assets", "logo.png")); err != nil {
 		return err
 	}
 
 	for _, d := range projectDocs {
-		if d.RelPath == "README.md" {
+		if d.RelPath == homeRelPath {
 			continue
 		}
 		rewritten := rewriteDocLinks(d.Source, d.RelPath, markdownMap)
@@ -560,8 +884,7 @@ func run(cfg config) error {
 		page := pageData{
 			Head:        head,
 			CurrentPath: d.HTMLFile,
-			ProjectDocs: navForProject(projectDocs, d.HTMLFile),
-			APIDocs:     navForAPI(apiDocs, ""),
+			Sidebar:     buildSidebar(projectDocs, allGeneratedDocs, indexMeta, homeRelPath, d.HTMLFile),
 			BodyHTML:    body,
 		}
 		if err := renderPage(filepath.Join(outDir, d.HTMLFile), page); err != nil {
@@ -569,14 +892,13 @@ func run(cfg config) error {
 		}
 	}
 
-	for _, d := range apiDocs {
+	for _, d := range allGeneratedDocs {
 		body := renderAPIBody(d)
-		head := buildHead(d.ImportPath+" | AvyOS API", "API documentation for "+d.ImportPath)
+		head := buildHead(d.ImportPath+" | AvyOS Docs", "Documentation for "+d.ImportPath)
 		page := pageData{
 			Head:        head,
 			CurrentPath: d.HTMLFile,
-			ProjectDocs: navForProject(projectDocs, ""),
-			APIDocs:     navForAPI(apiDocs, d.HTMLFile),
+			Sidebar:     buildSidebar(projectDocs, allGeneratedDocs, indexMeta, homeRelPath, d.HTMLFile),
 			BodyHTML:    body,
 		}
 		if err := renderPage(filepath.Join(outDir, d.HTMLFile), page); err != nil {
@@ -587,19 +909,19 @@ func run(cfg config) error {
 	var homeBody template.HTML
 	homeTitle := "Project Documentation | AvyOS Docs"
 	homeDesc := "Project documentation and API reference for AvyOS"
-	if hasReadme {
-		rewritten := rewriteDocLinks(readmeDoc.Source, readmeDoc.RelPath, markdownMap)
-		homeBody = renderReadmeIndexBody(readmeDoc.RelPath, rewritten)
-		homeTitle = "Project Documentation | AvyOS Docs"
-		homeDesc = "README and project documentation for AvyOS"
+	if homeRelPath != "" {
+		homeDoc, _ := findProjectDoc(projectDocs, homeRelPath)
+		rewritten := rewriteDocLinks(homeDoc.Source, homeDoc.RelPath, markdownMap)
+		homeBody = renderReadmeIndexBody(homeDoc.RelPath, rewritten)
+		homeTitle = homeDoc.Title + " | AvyOS Docs"
+		homeDesc = "Documentation index for AvyOS"
 	} else {
 		homeBody = renderProjectIndexBody(projectDocs)
 	}
 	home := pageData{
 		Head:        buildHead(homeTitle, homeDesc),
 		CurrentPath: "index.html",
-		ProjectDocs: navForProject(projectDocs, "index.html"),
-		APIDocs:     navForAPI(apiDocs, ""),
+		Sidebar:     buildSidebar(projectDocs, allGeneratedDocs, indexMeta, homeRelPath, "index.html"),
 		BodyHTML:    homeBody,
 	}
 	if err := renderPage(filepath.Join(outDir, "index.html"), home); err != nil {
@@ -607,7 +929,7 @@ func run(cfg config) error {
 	}
 
 	fmt.Printf("[*] Project docs: %d\n", len(projectDocs))
-	fmt.Printf("[*] API docs: %d\n", len(apiDocs))
+	fmt.Printf("[*] Generated docs: %d\n", len(allGeneratedDocs))
 	fmt.Printf("[✓] Documentation site generated at %s\n", filepath.Join(outDir, "index.html"))
 	return nil
 }
@@ -669,10 +991,21 @@ func collectProjectDocs(root string) ([]markdownDoc, error) {
 	return docs, nil
 }
 
-func collectAPIPackages(root, modulePath string) ([]apiPackage, error) {
+func collectGoPackages(root, modulePath, prefix string, includeMain bool) ([]apiPackage, error) {
 	var packages []apiPackage
+	searchRoot := filepath.Join(root, prefix)
+	st, err := os.Stat(searchRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if !st.IsDir() {
+		return nil, nil
+	}
 
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+	err = filepath.WalkDir(searchRoot, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -686,15 +1019,18 @@ func collectAPIPackages(root, modulePath string) ([]apiPackage, error) {
 		}
 		rel = filepath.ToSlash(rel)
 
-		if rel != "." && shouldSkipDir(rel) {
-			return filepath.SkipDir
-		}
-
 		pkgName, hasGoFiles, err := packageNameForDir(path)
 		if err != nil {
 			return err
 		}
-		if !hasGoFiles || pkgName == "main" {
+		if !hasGoFiles {
+			return nil
+		}
+		if includeMain {
+			if pkgName != "main" {
+				return nil
+			}
+		} else if pkgName == "main" {
 			return nil
 		}
 
@@ -718,7 +1054,269 @@ func collectAPIPackages(root, modulePath string) ([]apiPackage, error) {
 	return packages, nil
 }
 
-func renderAPIDocs(modulePath string, packages []apiPackage) ([]apiDoc, error) {
+func collectMainProgramDirs(root, prefix string) ([]string, error) {
+	searchRoot := filepath.Join(root, prefix)
+	st, err := os.Stat(searchRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if !st.IsDir() {
+		return nil, nil
+	}
+
+	seen := map[string]struct{}{}
+	var dirs []string
+	err = filepath.WalkDir(searchRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if !d.IsDir() {
+			return nil
+		}
+
+		mainFile := filepath.Join(path, "main.go")
+		if _, statErr := os.Stat(mainFile); statErr != nil {
+			if errors.Is(statErr, os.ErrNotExist) {
+				return nil
+			}
+			return statErr
+		}
+
+		pkgName, hasGoFiles, pkgErr := packageNameForDir(path)
+		if pkgErr != nil {
+			return pkgErr
+		}
+		if !hasGoFiles || pkgName != "main" {
+			return nil
+		}
+
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		rel = filepath.ToSlash(rel)
+		if _, ok := seen[rel]; ok {
+			return nil
+		}
+		seen[rel] = struct{}{}
+		dirs = append(dirs, rel)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Strings(dirs)
+	return dirs, nil
+}
+
+func renderProgramDocs(root, section string, preferredDocFiles []string) ([]apiDoc, error) {
+	dirs, err := collectMainProgramDirs(root, section)
+	if err != nil {
+		return nil, err
+	}
+
+	used := map[string]int{}
+	out := make([]apiDoc, 0, len(dirs))
+	for _, relDir := range dirs {
+		title := filepath.Base(relDir)
+		docText, sourceFile, readErr := readProgramDoc(root, relDir, preferredDocFiles)
+		if readErr != nil {
+			fmt.Fprintf(os.Stderr, "docgen: warning: failed to read docs for %s: %v\n", relDir, readErr)
+		}
+		previewPath := ""
+		if section == "apps" {
+			previewPath = appPreviewPath(root, relDir)
+		}
+
+		baseName := "api-" + slugify(relDir)
+		htmlName := uniqueHTMLName(baseName, used)
+		out = append(out, apiDoc{
+			ImportPath: relDir,
+			Title:      title,
+			ShortPath:  relDir,
+			Section:    section,
+			BodyHTML:   renderProgramReferenceBody(section, title, relDir, docText, sourceFile, previewPath),
+			HTMLFile:   htmlName,
+		})
+	}
+
+	return out, nil
+}
+
+func appPreviewPath(root, relDir string) string {
+	name := strings.TrimSpace(filepath.Base(relDir))
+	if name == "" {
+		return ""
+	}
+	sourcePath := filepath.Join(root, relDir, "preview.png")
+	if _, err := os.Stat(sourcePath); err != nil {
+		return ""
+	}
+	return "assets/apps/" + name + "/preview.png"
+}
+
+func renderCommandDocs(root string) ([]apiDoc, error) {
+	dirs, err := collectMainProgramDirs(root, "cmd")
+	if err != nil {
+		return nil, err
+	}
+
+	used := map[string]int{}
+	out := make([]apiDoc, 0, len(dirs))
+	for _, relDir := range dirs {
+		title := filepath.Base(relDir)
+		docText, sourceFile, readErr := readProgramDoc(root, relDir, []string{"doc.go", "docs.go"})
+		if readErr != nil {
+			fmt.Fprintf(os.Stderr, "docgen: warning: failed to read docs for %s: %v\n", relDir, readErr)
+		}
+
+		usage := ""
+		captureErr := ""
+		usesFlags, detectErr := commandUsesFlagPackage(filepath.Join(root, relDir))
+		if detectErr != nil {
+			fmt.Fprintf(os.Stderr, "docgen: warning: failed to inspect command flags for %s: %v\n", relDir, detectErr)
+			usesFlags = true
+		}
+		if usesFlags {
+			captured, usageErr := commandUsageText(root, relDir)
+			if usageErr != nil {
+				fmt.Fprintf(os.Stderr, "docgen: warning: failed to capture flag.Usage for %s: %v\n", relDir, usageErr)
+				captureErr = usageErr.Error()
+			}
+			usage = captured
+		}
+		usage = strings.TrimSpace(usage)
+		parsed := parseCommandHelp(usage)
+
+		baseName := "api-" + slugify(relDir)
+		htmlName := uniqueHTMLName(baseName, used)
+		out = append(out, apiDoc{
+			ImportPath: relDir,
+			Title:      title,
+			ShortPath:  relDir,
+			Section:    "cmd",
+			BodyHTML:   renderCommandReferenceBody(title, relDir, docText, sourceFile, parsed, usesFlags, captureErr),
+			HTMLFile:   htmlName,
+		})
+	}
+
+	return out, nil
+}
+
+func commandUsesFlagPackage(dir string) (bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		content, readErr := os.ReadFile(filepath.Join(dir, name))
+		if readErr != nil {
+			return false, readErr
+		}
+		source := string(content)
+		if strings.Contains(source, `"flag"`) || strings.Contains(source, "flag.") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func renderAPIJSONDocs(root string) ([]apiDoc, error) {
+	apiRoot := filepath.Join(root, "api")
+	st, err := os.Stat(apiRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if !st.IsDir() {
+		return nil, nil
+	}
+
+	var files []string
+	if err := filepath.WalkDir(apiRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if strings.EqualFold(d.Name(), "api.json") {
+			files = append(files, path)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	sort.Strings(files)
+
+	used := map[string]int{}
+	out := make([]apiDoc, 0, len(files))
+	for _, path := range files {
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil, readErr
+		}
+
+		var spec apiSchema
+		if unmarshalErr := json.Unmarshal(content, &spec); unmarshalErr != nil {
+			return nil, fmt.Errorf("%s: %w", path, unmarshalErr)
+		}
+
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return nil, relErr
+		}
+		rel = filepath.ToSlash(rel)
+		shortPath := strings.TrimSuffix(rel, "/api.json")
+		shortPath = strings.TrimSuffix(shortPath, ".json")
+		shortPath = filepath.ToSlash(strings.TrimSpace(shortPath))
+		if shortPath == "" || shortPath == "." {
+			continue
+		}
+
+		title := filepath.Base(shortPath)
+		importPath := shortPath
+		if name := strings.TrimSpace(spec.Service.Name); name != "" {
+			importPath = name
+		}
+		if pkg := strings.TrimSpace(spec.Service.Package); pkg != "" {
+			title = pkg
+		}
+
+		baseName := "api-" + slugify(shortPath)
+		htmlName := uniqueHTMLName(baseName, used)
+		out = append(out, apiDoc{
+			ImportPath: importPath,
+			Title:      title,
+			ShortPath:  shortPath,
+			Section:    "api",
+			BodyHTML:   renderAPIJSONBody(rel, spec),
+			HTMLFile:   htmlName,
+		})
+	}
+
+	return out, nil
+}
+
+func renderPkgDocs(root, modulePath string) ([]apiDoc, error) {
+	packages, err := collectGoPackages(root, modulePath, "pkg", false)
+	if err != nil {
+		return nil, err
+	}
+
 	used := map[string]int{}
 	out := make([]apiDoc, 0, len(packages))
 
@@ -731,14 +1329,792 @@ func renderAPIDocs(modulePath string, packages []apiPackage) ([]apiDoc, error) {
 
 		baseName := "api-" + slugify(pkg.ImportPath)
 		htmlName := uniqueHTMLName(baseName, used)
+		shortPath := shortenImportPath(modulePath, pkg.ImportPath)
 		out = append(out, apiDoc{
 			ImportPath: pkg.ImportPath,
-			Title:      shortenImportPath(modulePath, pkg.ImportPath),
+			Title:      shortPath,
+			ShortPath:  shortPath,
+			Section:    "pkg",
 			BodyHTML:   bodyHTML,
 			HTMLFile:   htmlName,
 		})
 	}
 	return out, nil
+}
+
+func readProgramDoc(root, relDir string, preferredDocFiles []string) (docText, sourceFile string, err error) {
+	for _, name := range preferredDocFiles {
+		candidate := filepath.Join(root, relDir, name)
+		st, statErr := os.Stat(candidate)
+		if statErr != nil {
+			if errors.Is(statErr, os.ErrNotExist) {
+				continue
+			}
+			return "", "", statErr
+		}
+		if st.IsDir() {
+			continue
+		}
+
+		docText, parseErr := packageDocFromFile(candidate)
+		if parseErr != nil {
+			return "", "", parseErr
+		}
+		docText = strings.TrimSpace(docText)
+		if docText == "" {
+			continue
+		}
+		rel, relErr := filepath.Rel(root, candidate)
+		if relErr != nil {
+			return docText, "", nil
+		}
+		return docText, filepath.ToSlash(rel), nil
+	}
+
+	docText, parseErr := packageDocForDir(filepath.Join(root, relDir), relDir)
+	if parseErr != nil {
+		return "", "", parseErr
+	}
+	return strings.TrimSpace(docText), "", nil
+}
+
+func packageDocFromFile(path string) (string, error) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+	if err != nil {
+		return "", err
+	}
+	if file == nil || file.Doc == nil {
+		return "", nil
+	}
+	return strings.TrimSpace(file.Doc.Text()), nil
+}
+
+func packageDocForDir(dir, importPath string) (string, error) {
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, dir, func(info fs.FileInfo) bool {
+		name := info.Name()
+		return strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go")
+	}, parser.ParseComments)
+	if err != nil {
+		return "", err
+	}
+	if len(pkgs) == 0 {
+		return "", nil
+	}
+
+	var parsedPkg *ast.Package
+	for _, p := range pkgs {
+		parsedPkg = p
+		break
+	}
+	if parsedPkg == nil {
+		return "", nil
+	}
+	pkgDoc := doc.New(parsedPkg, importPath, 0)
+	if pkgDoc == nil {
+		return "", nil
+	}
+	return strings.TrimSpace(pkgDoc.Doc), nil
+}
+
+func commandUsageText(root, relDir string) (string, error) {
+	tempDir, err := os.MkdirTemp("", "docgen-cmd-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(tempDir)
+
+	binPath := filepath.Join(tempDir, slugify(relDir))
+	buildCtx, buildCancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer buildCancel()
+
+	buildCmd := exec.CommandContext(buildCtx, "go", "build", "-o", binPath, "./"+relDir)
+	buildCmd.Dir = root
+	buildOut, buildErr := buildCmd.CombinedOutput()
+	if buildCtx.Err() == context.DeadlineExceeded {
+		return strings.TrimSpace(string(buildOut)), fmt.Errorf("timeout while building command")
+	}
+	if buildErr != nil {
+		return strings.TrimSpace(string(buildOut)), buildErr
+	}
+
+	runCtx, runCancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer runCancel()
+
+	runCmd := exec.CommandContext(runCtx, binPath, "-h")
+	runCmd.Dir = root
+	out, runErr := runCmd.CombinedOutput()
+	text := strings.TrimSpace(string(out))
+	if runCtx.Err() == context.DeadlineExceeded {
+		return text, fmt.Errorf("timeout while capturing usage")
+	}
+	if runErr != nil && text == "" {
+		return "", runErr
+	}
+	return text, nil
+}
+
+func parseCommandHelp(raw string) commandHelpDoc {
+	doc := commandHelpDoc{
+		Raw: strings.TrimSpace(strings.ReplaceAll(raw, "\r\n", "\n")),
+	}
+	if doc.Raw == "" {
+		return doc
+	}
+
+	lines := strings.Split(doc.Raw, "\n")
+	titleIdx := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			titleIdx = i
+			break
+		}
+	}
+	if titleIdx < 0 {
+		return doc
+	}
+
+	doc.Title = strings.TrimSpace(lines[titleIdx])
+	if parts := strings.SplitN(doc.Title, " - ", 2); len(parts) == 2 {
+		doc.Command = strings.TrimSpace(parts[0])
+		doc.Synopsis = strings.TrimSpace(parts[1])
+	}
+
+	type sectionRef struct {
+		key   string
+		start int
+		end   int
+	}
+
+	sections := make([]sectionRef, 0, 4)
+	for i := titleIdx + 1; i < len(lines); i++ {
+		if key := normalizeCommandHelpHeading(strings.TrimSpace(lines[i])); key != "" {
+			sections = append(sections, sectionRef{
+				key:   key,
+				start: i,
+			})
+		}
+	}
+	for i := range sections {
+		if i+1 < len(sections) {
+			sections[i].end = sections[i+1].start
+		} else {
+			sections[i].end = len(lines)
+		}
+	}
+
+	firstSection := len(lines)
+	if len(sections) > 0 {
+		firstSection = sections[0].start
+	}
+	for _, line := range lines[titleIdx+1 : firstSection] {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		doc.Summary = append(doc.Summary, trimmed)
+	}
+
+	sectionStart := map[string]int{}
+	sectionEnd := map[string]int{}
+	for _, section := range sections {
+		body := lines[section.start+1 : section.end]
+		sectionStart[section.key] = section.start
+		sectionEnd[section.key] = section.end
+		switch section.key {
+		case "usage":
+			doc.Usage = parsePlainLines(body)
+		case "subcommands":
+			subcommandLines, flagLines := splitSubcommandAndFlagBlock(body)
+			doc.Subcommands = parseCommandRows(subcommandLines)
+			if len(doc.Flags) == 0 && len(flagLines) > 0 {
+				doc.Flags = parseCommandFlags(flagLines)
+			}
+		case "exit_codes":
+			doc.ExitCodes = parseCommandRows(body)
+		case "flags":
+			doc.Flags = parseCommandFlags(body)
+		}
+	}
+
+	if len(doc.Flags) == 0 {
+		start := titleIdx + 1
+		if end, ok := sectionEnd["subcommands"]; ok {
+			start = end
+		} else if end, ok := sectionEnd["usage"]; ok {
+			start = end
+		}
+		end := len(lines)
+		if flagStart, ok := sectionStart["exit_codes"]; ok {
+			end = flagStart
+		}
+		if start < end {
+			doc.Flags = parseCommandFlags(lines[start:end])
+		}
+	}
+
+	if len(doc.Summary) == 0 && doc.Synopsis != "" {
+		doc.Summary = append(doc.Summary, doc.Synopsis)
+	}
+
+	return doc
+}
+
+func normalizeCommandHelpHeading(line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" || !strings.HasSuffix(line, ":") {
+		return ""
+	}
+	line = strings.TrimSuffix(line, ":")
+	line = strings.ToLower(strings.TrimSpace(line))
+	switch line {
+	case "usage":
+		return "usage"
+	case "subcommands":
+		return "subcommands"
+	case "flags", "options":
+		return "flags"
+	case "exit codes", "exit code":
+		return "exit_codes"
+	default:
+		return ""
+	}
+}
+
+func parsePlainLines(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, trimmed)
+	}
+	return out
+}
+
+func parseCommandRows(lines []string) []commandHelpRow {
+	out := make([]commandHelpRow, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if commandFlagLineRegex.MatchString(line) {
+			continue
+		}
+		if trimmed == "(none)" {
+			out = append(out, commandHelpRow{Name: "(none)", Description: ""})
+			continue
+		}
+		fields := strings.Fields(trimmed)
+		if len(fields) == 0 {
+			continue
+		}
+		name := fields[0]
+		desc := strings.TrimSpace(trimmed[len(name):])
+		if desc == "" && len(fields) > 1 {
+			desc = strings.Join(fields[1:], " ")
+		}
+		out = append(out, commandHelpRow{
+			Name:        name,
+			Description: strings.TrimSpace(desc),
+		})
+	}
+	return out
+}
+
+func splitSubcommandAndFlagBlock(lines []string) (subcommands []string, flags []string) {
+	for i, line := range lines {
+		if commandFlagLineRegex.MatchString(line) {
+			return lines[:i], lines[i:]
+		}
+	}
+	return lines, nil
+}
+
+func parseCommandFlags(lines []string) []commandHelpFlag {
+	out := make([]commandHelpFlag, 0, 8)
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		match := commandFlagLineRegex.FindStringSubmatch(line)
+		if len(match) != 3 {
+			continue
+		}
+
+		flagName := "-" + strings.TrimSpace(match[1])
+		flagType := strings.TrimSpace(match[2])
+		descriptionLines := make([]string, 0, 2)
+		for i+1 < len(lines) {
+			next := lines[i+1]
+			nextTrimmed := strings.TrimSpace(next)
+			if nextTrimmed == "" {
+				i++
+				if len(descriptionLines) > 0 {
+					break
+				}
+				continue
+			}
+			if commandFlagLineRegex.MatchString(next) || normalizeCommandHelpHeading(nextTrimmed) != "" {
+				break
+			}
+			descriptionLines = append(descriptionLines, nextTrimmed)
+			i++
+		}
+
+		description := strings.TrimSpace(strings.Join(descriptionLines, " "))
+		if description == "" {
+			description = "-"
+		}
+		if flagType == "" {
+			flagType = "-"
+		}
+
+		out = append(out, commandHelpFlag{
+			Name:        flagName,
+			Type:        flagType,
+			Description: description,
+		})
+	}
+
+	return out
+}
+
+func renderProgramReferenceBody(section, title, relPath, docText, sourceFile, previewPath string) template.HTML {
+	if section == "apps" {
+		return renderAppReferenceBody(title, relPath, docText, sourceFile, previewPath)
+	}
+
+	var md strings.Builder
+	kind := "Program"
+	switch section {
+	case "apps":
+		kind = "Application"
+	case "services":
+		kind = "Service"
+	}
+
+	docText = strings.TrimSpace(docText)
+	if docText != "" {
+		md.WriteString("## Overview\n\n")
+		md.WriteString(docText)
+		md.WriteString("\n\n")
+	} else {
+		md.WriteString("## Overview\n\n")
+		md.WriteString("Documentation not available yet. Add package comments in `doc.go` or `docs.go`.\n\n")
+	}
+
+	md.WriteString("## Reference\n\n")
+	md.WriteString("| Field | Value |\n")
+	md.WriteString("| --- | --- |\n")
+	md.WriteString("| Type | " + markdownCell(kind) + " |\n")
+	md.WriteString("| Path | " + markdownInlineCode(relPath) + " |\n")
+	if sourceFile != "" {
+		md.WriteString("| Doc Source | " + markdownInlineCode(sourceFile) + " |\n")
+	} else {
+		md.WriteString("| Doc Source | package comments |\n")
+	}
+	if previewPath != "" {
+		md.WriteString("| Preview | available |\n")
+	} else {
+		md.WriteString("| Preview | not provided |\n")
+	}
+
+	if previewPath != "" {
+		md.WriteString("\n## Preview\n\n")
+		md.WriteString("![" + markdownCell(title) + " preview](" + previewPath + ")\n\n")
+	}
+
+	return renderSectionMarkdownBody(title, relPath, md.String())
+}
+
+func renderCommandReferenceBody(title, relPath, docText, sourceFile string, help commandHelpDoc, usesFlags bool, captureErr string) template.HTML {
+	var b strings.Builder
+	docText = strings.TrimSpace(docText)
+	commandName := strings.TrimSpace(help.Command)
+	if commandName == "" {
+		commandName = filepath.Base(relPath)
+	}
+
+	lead := strings.TrimSpace(help.Synopsis)
+	if lead == "" && len(help.Summary) > 0 {
+		lead = strings.TrimSpace(help.Summary[0])
+	}
+	if lead == "" {
+		lead = "Command reference"
+	}
+
+	usagePrimary := ""
+	if len(help.Usage) > 0 {
+		usagePrimary = strings.TrimSpace(help.Usage[0])
+	}
+	if usagePrimary == "" {
+		usagePrimary = commandName
+	}
+
+	docSource := "package comments"
+	if sourceFile != "" {
+		docSource = sourceFile
+	}
+
+	helpSource := "command does not use `flag` package"
+	if usesFlags {
+		helpSource = "flag.Usage via -h"
+	}
+
+	b.WriteString(`<section class="doc-ref-shell">`)
+	b.WriteString(`<header class="doc-ref-hero">`)
+	b.WriteString(`<h1>` + template.HTMLEscapeString(title) + `</h1>`)
+	b.WriteString(`<p class="muted mono doc-path">` + template.HTMLEscapeString(relPath) + `</p>`)
+	b.WriteString(`<p class="doc-ref-lead">` + template.HTMLEscapeString(lead) + `</p>`)
+	b.WriteString(`</header>`)
+
+	b.WriteString(`<section class="doc-ref-grid">`)
+	b.WriteString(`<section class="doc-ref-card">`)
+	b.WriteString(`<h2>Quick Start</h2>`)
+	b.WriteString(`<pre class="doc-ref-code"><code>` + template.HTMLEscapeString(usagePrimary) + `</code></pre>`)
+	b.WriteString(`</section>`)
+
+	b.WriteString(`<section class="doc-ref-card">`)
+	b.WriteString(`<h2>At A Glance</h2>`)
+	b.WriteString(`<dl class="doc-ref-meta">`)
+	b.WriteString(`<dt>Name</dt><dd><code>` + template.HTMLEscapeString(commandName) + `</code></dd>`)
+	b.WriteString(`<dt>Help Source</dt><dd>` + template.HTMLEscapeString(helpSource) + `</dd>`)
+	b.WriteString(`<dt>Doc Source</dt><dd>` + template.HTMLEscapeString(docSource) + `</dd>`)
+	b.WriteString(`<dt>Flags</dt><dd>` + fmt.Sprintf("%d", len(help.Flags)) + `</dd>`)
+	b.WriteString(`<dt>Subcommands</dt><dd>` + fmt.Sprintf("%d", countCommandRows(help.Subcommands)) + `</dd>`)
+	b.WriteString(`</dl>`)
+	b.WriteString(`</section>`)
+	b.WriteString(`</section>`)
+
+	if docText != "" {
+		b.WriteString(`<section class="doc-ref-card">`)
+		b.WriteString(`<h2>Overview</h2>`)
+		b.WriteString(`<div class="doc-markdown">`)
+		b.WriteString(string(renderMarkdown(docText)))
+		b.WriteString(`</div>`)
+		b.WriteString(`</section>`)
+	}
+
+	b.WriteString(`<section class="doc-ref-card">`)
+	b.WriteString(`<h2>Usage</h2>`)
+	if len(help.Usage) > 0 {
+		b.WriteString(`<ul class="doc-ref-list">`)
+		for _, usage := range help.Usage {
+			usage = strings.TrimSpace(usage)
+			if usage == "" {
+				continue
+			}
+			b.WriteString(`<li><code>` + template.HTMLEscapeString(usage) + `</code></li>`)
+		}
+		b.WriteString(`</ul>`)
+	} else {
+		b.WriteString(`<p class="doc-ref-empty">Usage information is not available.</p>`)
+	}
+	b.WriteString(`</section>`)
+
+	b.WriteString(`<section class="doc-ref-card">`)
+	b.WriteString(`<h2>Subcommands</h2>`)
+	if countCommandRows(help.Subcommands) > 0 {
+		b.WriteString(`<table class="doc-ref-table">`)
+		b.WriteString(`<thead><tr><th>Name</th><th>Description</th></tr></thead><tbody>`)
+		for _, row := range help.Subcommands {
+			if strings.TrimSpace(row.Name) == "" || row.Name == "(none)" {
+				continue
+			}
+			description := strings.TrimSpace(row.Description)
+			if description == "" {
+				description = "-"
+			}
+			b.WriteString(`<tr><td><code>` + template.HTMLEscapeString(row.Name) + `</code></td><td>` + template.HTMLEscapeString(description) + `</td></tr>`)
+		}
+		b.WriteString(`</tbody></table>`)
+	} else {
+		b.WriteString(`<p class="doc-ref-empty">No subcommands.</p>`)
+	}
+	b.WriteString(`</section>`)
+
+	b.WriteString(`<section class="doc-ref-card">`)
+	b.WriteString(`<h2>Flags</h2>`)
+	if len(help.Flags) > 0 {
+		b.WriteString(`<table class="doc-ref-table">`)
+		b.WriteString(`<thead><tr><th>Flag</th><th>Type</th><th>Description</th></tr></thead><tbody>`)
+		for _, option := range help.Flags {
+			flagName := strings.TrimSpace(option.Name)
+			if flagName == "" {
+				continue
+			}
+			flagType := strings.TrimSpace(option.Type)
+			if flagType == "" {
+				flagType = "-"
+			}
+			description := strings.TrimSpace(option.Description)
+			if description == "" {
+				description = "-"
+			}
+			b.WriteString(`<tr><td><code>` + template.HTMLEscapeString(flagName) + `</code></td><td><code>` + template.HTMLEscapeString(flagType) + `</code></td><td>` + template.HTMLEscapeString(description) + `</td></tr>`)
+		}
+		b.WriteString(`</tbody></table>`)
+	} else {
+		b.WriteString(`<p class="doc-ref-empty">No flags documented.</p>`)
+	}
+	b.WriteString(`</section>`)
+
+	b.WriteString(`<section class="doc-ref-card">`)
+	b.WriteString(`<h2>Exit Codes</h2>`)
+	if len(help.ExitCodes) > 0 {
+		b.WriteString(`<table class="doc-ref-table">`)
+		b.WriteString(`<thead><tr><th>Code</th><th>Meaning</th></tr></thead><tbody>`)
+		for _, row := range help.ExitCodes {
+			code := strings.TrimSpace(row.Name)
+			if code == "" {
+				continue
+			}
+			meaning := strings.TrimSpace(row.Description)
+			if meaning == "" {
+				meaning = "-"
+			}
+			b.WriteString(`<tr><td><code>` + template.HTMLEscapeString(code) + `</code></td><td>` + template.HTMLEscapeString(meaning) + `</td></tr>`)
+		}
+		b.WriteString(`</tbody></table>`)
+	} else {
+		b.WriteString(`<p class="doc-ref-empty">No exit code table provided.</p>`)
+	}
+	b.WriteString(`</section>`)
+
+	if captureErr != "" {
+		b.WriteString(`<p class="doc-ref-callout">Help capture warning: ` + template.HTMLEscapeString(captureErr) + `</p>`)
+	}
+	if !usesFlags && docText == "" {
+		b.WriteString(`<p class="doc-ref-callout">This command has no flag usage output and no package-level documentation yet.</p>`)
+	}
+	if len(help.Usage) == 0 && len(help.Subcommands) == 0 && len(help.Flags) == 0 && strings.TrimSpace(help.Raw) != "" {
+		b.WriteString(`<section class="doc-ref-card">`)
+		b.WriteString(`<h2>Raw Help Output</h2>`)
+		b.WriteString(`<pre class="doc-ref-code"><code>` + template.HTMLEscapeString(help.Raw) + `</code></pre>`)
+		b.WriteString(`</section>`)
+	}
+
+	b.WriteString(`</section>`)
+	return template.HTML(b.String())
+}
+
+func renderAppReferenceBody(title, relPath, docText, sourceFile, previewPath string) template.HTML {
+	var b strings.Builder
+	docText = strings.TrimSpace(docText)
+	if docText == "" {
+		docText = "Documentation not available yet. Add package comments in `doc.go` or `docs.go`."
+	}
+	docSource := "package comments"
+	if sourceFile != "" {
+		docSource = sourceFile
+	}
+
+	lead := firstLine(docText)
+	if lead == "" {
+		lead = "Application reference"
+	}
+
+	b.WriteString(`<section class="doc-ref-shell">`)
+	b.WriteString(`<header class="doc-ref-hero">`)
+	b.WriteString(`<h1>` + template.HTMLEscapeString(title) + `</h1>`)
+	b.WriteString(`<p class="muted mono doc-path">` + template.HTMLEscapeString(relPath) + `</p>`)
+	b.WriteString(`<p class="doc-ref-lead">` + template.HTMLEscapeString(lead) + `</p>`)
+	b.WriteString(`</header>`)
+
+	b.WriteString(`<section class="doc-ref-grid">`)
+	b.WriteString(`<section class="doc-ref-card">`)
+	b.WriteString(`<h2>At A Glance</h2>`)
+	b.WriteString(`<dl class="doc-ref-meta">`)
+	b.WriteString(`<dt>Type</dt><dd>Application</dd>`)
+	b.WriteString(`<dt>Path</dt><dd><code>` + template.HTMLEscapeString(relPath) + `</code></dd>`)
+	b.WriteString(`<dt>Doc Source</dt><dd>` + template.HTMLEscapeString(docSource) + `</dd>`)
+	if previewPath != "" {
+		b.WriteString(`<dt>Preview</dt><dd>Available</dd>`)
+	} else {
+		b.WriteString(`<dt>Preview</dt><dd>Not provided</dd>`)
+	}
+	b.WriteString(`</dl>`)
+	b.WriteString(`</section>`)
+
+	b.WriteString(`<section class="doc-ref-card">`)
+	if previewPath != "" {
+		b.WriteString(`<h2>Preview</h2>`)
+		b.WriteString(`<figure class="doc-ref-preview">`)
+		b.WriteString(`<img src="` + template.HTMLEscapeString(previewPath) + `" alt="` + template.HTMLEscapeString(title) + ` preview" />`)
+		b.WriteString(`<figcaption>` + template.HTMLEscapeString(title) + ` preview image</figcaption>`)
+		b.WriteString(`</figure>`)
+	} else {
+		b.WriteString(`<h2>Preview</h2>`)
+		b.WriteString(`<p class="doc-ref-empty">Add <code>` + template.HTMLEscapeString(relPath) + `/preview.png</code> to show an app screenshot here.</p>`)
+	}
+	b.WriteString(`</section>`)
+	b.WriteString(`</section>`)
+
+	b.WriteString(`<section class="doc-ref-card">`)
+	b.WriteString(`<h2>Overview</h2>`)
+	b.WriteString(`<div class="doc-markdown">`)
+	b.WriteString(string(renderMarkdown(docText)))
+	b.WriteString(`</div>`)
+	b.WriteString(`</section>`)
+
+	b.WriteString(`</section>`)
+	return template.HTML(b.String())
+}
+
+func firstLine(value string) string {
+	for _, line := range strings.Split(strings.ReplaceAll(value, "\r\n", "\n"), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		line = strings.TrimLeft(line, "#*- ")
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
+func countCommandRows(rows []commandHelpRow) int {
+	count := 0
+	for _, row := range rows {
+		if strings.TrimSpace(row.Name) == "" || row.Name == "(none)" {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
+func renderSectionMarkdownBody(title, relPath, markdown string) template.HTML {
+	var b strings.Builder
+	b.WriteString("<h1>" + template.HTMLEscapeString(title) + "</h1>\n")
+	b.WriteString(`<p class="muted mono doc-path">` + template.HTMLEscapeString(relPath) + "</p>\n")
+	b.WriteString(`<section class="doc-markdown">`)
+	b.WriteString(string(renderMarkdown(markdown)))
+	b.WriteString("</section>")
+	return template.HTML(b.String())
+}
+
+func renderAPIJSONBody(relPath string, spec apiSchema) template.HTML {
+	title := strings.TrimSpace(spec.Service.Name)
+	if title == "" {
+		title = filepath.Base(filepath.Dir(relPath))
+	}
+
+	var md strings.Builder
+	if description := strings.TrimSpace(spec.Service.Description); description != "" {
+		md.WriteString(description)
+		md.WriteString("\n\n")
+	}
+
+	md.WriteString("## Service\n\n")
+	md.WriteString("| Field | Value |\n")
+	md.WriteString("| --- | --- |\n")
+	md.WriteString("| Name | " + markdownInlineCode(spec.Service.Name) + " |\n")
+	md.WriteString("| Package | " + markdownInlineCode(spec.Service.Package) + " |\n")
+	md.WriteString("| Service ID | " + markdownInlineCode(string(spec.Service.ID)) + " |\n")
+	if len(spec.Imports) > 0 {
+		md.WriteString("| Imports | " + markdownCell(strings.Join(spec.Imports, ", ")) + " |\n")
+	}
+
+	if len(spec.Types) > 0 {
+		md.WriteString("\n## Types\n\n")
+		for _, t := range spec.Types {
+			md.WriteString("### " + markdownCell(t.Name) + "\n\n")
+			if description := strings.TrimSpace(t.Description); description != "" {
+				md.WriteString(description + "\n\n")
+			}
+			if len(t.Fields) == 0 {
+				md.WriteString("_No fields._\n\n")
+				continue
+			}
+			md.WriteString("| Field | Type | Description |\n")
+			md.WriteString("| --- | --- | --- |\n")
+			for _, field := range t.Fields {
+				description := strings.TrimSpace(field.Description)
+				if description == "" {
+					description = "-"
+				}
+				md.WriteString("| " + markdownCell(field.Name) + " | " + markdownInlineCode(field.Type) + " | " + markdownCell(description) + " |\n")
+			}
+			md.WriteString("\n")
+		}
+	}
+
+	if len(spec.Requests) > 0 {
+		md.WriteString("## Requests\n\n")
+		for _, req := range spec.Requests {
+			md.WriteString("### " + markdownCell(req.Name) + "\n\n")
+			if description := strings.TrimSpace(req.Description); description != "" {
+				md.WriteString(description + "\n\n")
+			}
+			md.WriteString("| Field | Value |\n")
+			md.WriteString("| --- | --- |\n")
+			md.WriteString("| ID | " + markdownInlineCode(string(req.ID)) + " |\n")
+			md.WriteString("| Request Type | " + markdownInlineCode(methodPayloadType(req)) + " |\n")
+			if req.OneWay {
+				md.WriteString("| Mode | one-way |\n")
+			} else {
+				md.WriteString("| Mode | request-response |\n")
+			}
+			md.WriteString("| Response Type | " + markdownInlineCode(req.ResponseType) + " |\n")
+			if requestDesc := strings.TrimSpace(req.RequestDescription); requestDesc != "" {
+				md.WriteString("\n" + requestDesc + "\n\n")
+			}
+			if responseDesc := strings.TrimSpace(req.ResponseDescription); responseDesc != "" {
+				md.WriteString(responseDesc + "\n\n")
+			}
+		}
+	}
+
+	if len(spec.Events) > 0 {
+		md.WriteString("## Events\n\n")
+		for _, ev := range spec.Events {
+			md.WriteString("### " + markdownCell(ev.Name) + "\n\n")
+			if description := strings.TrimSpace(ev.Description); description != "" {
+				md.WriteString(description + "\n\n")
+			}
+			md.WriteString("| Field | Value |\n")
+			md.WriteString("| --- | --- |\n")
+			md.WriteString("| ID | " + markdownInlineCode(string(ev.ID)) + " |\n")
+			md.WriteString("| Payload Type | " + markdownInlineCode(methodPayloadType(ev)) + " |\n")
+			if payloadDesc := strings.TrimSpace(ev.RequestDescription); payloadDesc != "" {
+				md.WriteString("\n" + payloadDesc + "\n\n")
+			}
+		}
+	}
+
+	return renderSectionMarkdownBody(title, relPath, md.String())
+}
+
+func methodPayloadType(method apiSchemaMethod) string {
+	if value := strings.TrimSpace(method.RequestType); value != "" {
+		return value
+	}
+	return strings.TrimSpace(method.PayloadType)
+}
+
+func markdownInlineCode(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "-"
+	}
+	value = strings.ReplaceAll(value, "`", "\\`")
+	return "`" + value + "`"
+}
+
+func markdownCell(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "-"
+	}
+	value = strings.ReplaceAll(value, "\n", " ")
+	value = strings.ReplaceAll(value, "|", "\\|")
+	return value
 }
 
 func renderProjectBody(title, relPath, source string) template.HTML {
@@ -788,12 +2164,23 @@ func renderPackageBody(pkg apiPackage) (template.HTML, error) {
 	b.WriteString(`<section class="doc-api">`)
 	b.WriteString("<h1>" + template.HTMLEscapeString(pkg.ImportPath) + "</h1>\n")
 	b.WriteString(`<p class="muted mono doc-path">package ` + template.HTMLEscapeString(pkgDoc.Name) + "</p>\n")
-
+	var overview strings.Builder
+	overview.WriteString("## Package Overview\n\n")
 	if strings.TrimSpace(pkgDoc.Doc) != "" {
-		b.WriteString(`<section class="doc-markdown">`)
-		b.WriteString(string(renderMarkdown(pkgDoc.Doc)))
-		b.WriteString(`</section>`)
+		overview.WriteString(strings.TrimSpace(pkgDoc.Doc))
+		overview.WriteString("\n\n")
+	} else {
+		overview.WriteString("No package-level documentation is provided.\n\n")
 	}
+	overview.WriteString("| Export Group | Count |\n")
+	overview.WriteString("| --- | --- |\n")
+	overview.WriteString(fmt.Sprintf("| Constants | %d |\n", len(pkgDoc.Consts)))
+	overview.WriteString(fmt.Sprintf("| Variables | %d |\n", len(pkgDoc.Vars)))
+	overview.WriteString(fmt.Sprintf("| Functions | %d |\n", len(pkgDoc.Funcs)))
+	overview.WriteString(fmt.Sprintf("| Types | %d |\n", len(pkgDoc.Types)))
+	b.WriteString(`<section class="doc-markdown">`)
+	b.WriteString(string(renderMarkdown(overview.String())))
+	b.WriteString(`</section>`)
 
 	appendValueSection(&b, "Constants", pkgDoc.Consts, fset)
 	appendValueSection(&b, "Variables", pkgDoc.Vars, fset)
@@ -909,28 +2296,6 @@ func formattedDecl(fset *token.FileSet, node any) string {
 		return ""
 	}
 	return strings.TrimSpace(buf.String())
-}
-
-func renderHomeBody(projectDocs []markdownDoc, apiDocs []apiDoc) template.HTML {
-	var b strings.Builder
-	b.WriteString("<h1>AvyOS Documentation</h1>\n")
-	b.WriteString(`<p class="muted">Generated docs for project guides and API reference.</p>`)
-
-	b.WriteString("<h2>Project Docs</h2>\n")
-	b.WriteString(`<ul class="doc-list">`)
-	for _, d := range projectDocs {
-		b.WriteString(`<li><a href="` + template.HTMLEscapeString(d.HTMLFile) + `">` + template.HTMLEscapeString(d.Title) + "</a></li>")
-	}
-	b.WriteString("</ul>")
-
-	b.WriteString("<h2>API Reference</h2>\n")
-	b.WriteString(`<ul class="doc-list">`)
-	for _, d := range apiDocs {
-		b.WriteString(`<li><a href="` + template.HTMLEscapeString(d.HTMLFile) + `">` + template.HTMLEscapeString(d.Title) + "</a></li>")
-	}
-	b.WriteString("</ul>")
-
-	return template.HTML(b.String())
 }
 
 func renderProjectIndexBody(projectDocs []markdownDoc) template.HTML {
@@ -1439,45 +2804,257 @@ func insertBeforeHeadClose(head, insert string) string {
 	return head[:idx] + "  " + insert + "\n" + head[idx:]
 }
 
-func navForProject(docs []markdownDoc, active string) []navEntry {
-	entries := []navEntry{{
-		Title:  "Overview",
-		Href:   "index.html",
-		Active: active == "index.html",
-	}}
+func parseDocsIndex(projectDocs []markdownDoc) docsIndexMeta {
+	meta := docsIndexMeta{
+		Order:  map[string]int{},
+		Titles: map[string]string{},
+	}
 
-	for _, d := range docs {
-		if d.RelPath == "README.md" {
-			continue
+	indexDoc, ok := findProjectDoc(projectDocs, "docs/index.md")
+	if !ok {
+		return meta
+	}
+
+	order := 0
+	for _, line := range strings.Split(indexDoc.Source, "\n") {
+		matches := mdLinkPattern.FindAllStringSubmatch(line, -1)
+		for _, match := range matches {
+			if len(match) != 3 {
+				continue
+			}
+			title := strings.TrimSpace(match[1])
+			target := strings.TrimSpace(match[2])
+			targetPath, _ := splitLinkTarget(target)
+			relPath, ok := resolveMarkdownRelPath(indexDoc.RelPath, targetPath)
+			if !ok {
+				continue
+			}
+			if strings.ToLower(filepath.Ext(relPath)) != ".md" {
+				continue
+			}
+			if _, exists := meta.Order[relPath]; !exists {
+				meta.Order[relPath] = order
+				order++
+			}
+			if title != "" {
+				meta.Titles[relPath] = title
+			}
 		}
-		entries = append(entries, navEntry{
-			Title:  d.Title,
-			Href:   d.HTMLFile,
-			Active: d.HTMLFile == active,
-		})
 	}
 
-	if len(entries) > 1 {
-		sort.Slice(entries[1:], func(i, j int) bool {
-			return strings.ToLower(entries[1+i].Title) < strings.ToLower(entries[1+j].Title)
-		})
-	}
-	return entries
+	return meta
 }
 
-func navForAPI(docs []apiDoc, active string) []navEntry {
-	entries := make([]navEntry, 0, len(docs))
-	for _, d := range docs {
-		entries = append(entries, navEntry{
-			Title:  d.Title,
+func buildSidebar(projectDocs []markdownDoc, apiDocs []apiDoc, docsIndex docsIndexMeta, homeRelPath, active string) []navSection {
+	var sections []navSection
+
+	if docsSection := buildDocsSection(projectDocs, docsIndex, homeRelPath, active); len(docsSection.Groups) > 0 {
+		sections = append(sections, docsSection)
+	}
+
+	for _, spec := range []struct {
+		title   string
+		section string
+	}{
+		{title: "Apps", section: "apps"},
+		{title: "Commands", section: "cmd"},
+		{title: "Services", section: "services"},
+		{title: "API", section: "api"},
+		{title: "Packages", section: "pkg"},
+	} {
+		navSection := buildGoSection(spec.title, spec.section, apiDocs, active)
+		if len(navSection.Groups) > 0 {
+			sections = append(sections, navSection)
+		}
+	}
+
+	return sections
+}
+
+func buildDocsSection(projectDocs []markdownDoc, docsIndex docsIndexMeta, homeRelPath, active string) navSection {
+	type rankedEntry struct {
+		entry navEntry
+		order int
+	}
+
+	groups := map[string][]rankedEntry{}
+	for i, d := range projectDocs {
+		if d.RelPath == homeRelPath || d.RelPath == "README.md" {
+			continue
+		}
+		if !strings.HasPrefix(d.RelPath, "docs/") {
+			continue
+		}
+
+		title := strings.TrimSpace(d.Title)
+		if override, ok := docsIndex.Titles[d.RelPath]; ok && strings.TrimSpace(override) != "" {
+			title = strings.TrimSpace(override)
+		}
+		if title == "" {
+			title = strings.TrimSuffix(filepath.Base(d.RelPath), filepath.Ext(d.RelPath))
+		}
+
+		sortOrder := 100000 + i
+		if order, ok := docsIndex.Order[d.RelPath]; ok {
+			sortOrder = order
+		}
+
+		group := docsGroupName(d.RelPath)
+		groups[group] = append(groups[group], rankedEntry{
+			entry: navEntry{
+				Title:  title,
+				Href:   d.HTMLFile,
+				Active: d.HTMLFile == active,
+			},
+			order: sortOrder,
+		})
+	}
+
+	out := navSection{
+		Title: "Docs",
+		Groups: []navGroup{{
+			Entries: []navEntry{{
+				Title:  "Overview",
+				Href:   "index.html",
+				Active: active == "index.html",
+			}},
+		}},
+	}
+
+	groupNames := make([]string, 0, len(groups))
+	for group := range groups {
+		groupNames = append(groupNames, group)
+	}
+	sort.Slice(groupNames, func(i, j int) bool {
+		if groupNames[i] == "General" {
+			return true
+		}
+		if groupNames[j] == "General" {
+			return false
+		}
+		return strings.ToLower(groupNames[i]) < strings.ToLower(groupNames[j])
+	})
+
+	for _, group := range groupNames {
+		entries := groups[group]
+		sort.Slice(entries, func(i, j int) bool {
+			if entries[i].order != entries[j].order {
+				return entries[i].order < entries[j].order
+			}
+			return strings.ToLower(entries[i].entry.Title) < strings.ToLower(entries[j].entry.Title)
+		})
+
+		groupNav := navGroup{Title: group}
+		groupNav.Entries = make([]navEntry, 0, len(entries))
+		for _, ranked := range entries {
+			groupNav.Entries = append(groupNav.Entries, ranked.entry)
+		}
+		out.Groups = append(out.Groups, groupNav)
+	}
+
+	return out
+}
+
+func buildGoSection(title, section string, apiDocs []apiDoc, active string) navSection {
+	groups := map[string][]navEntry{}
+
+	for _, d := range apiDocs {
+		if d.Section != section {
+			continue
+		}
+
+		tail := strings.TrimPrefix(d.ShortPath, section+"/")
+		if tail == d.ShortPath {
+			tail = d.ShortPath
+		}
+		tail = strings.TrimSpace(tail)
+		if tail == "" {
+			continue
+		}
+
+		group := filepath.ToSlash(filepath.Dir(tail))
+		if group == "." {
+			group = ""
+		}
+		linkTitle := filepath.Base(tail)
+		if linkTitle == "." || linkTitle == "/" || linkTitle == "" {
+			linkTitle = tail
+		}
+
+		groups[group] = append(groups[group], navEntry{
+			Title:  linkTitle,
 			Href:   d.HTMLFile,
 			Active: d.HTMLFile == active,
 		})
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return strings.ToLower(entries[i].Title) < strings.ToLower(entries[j].Title)
+
+	groupNames := make([]string, 0, len(groups))
+	for group := range groups {
+		groupNames = append(groupNames, group)
+	}
+	sort.Slice(groupNames, func(i, j int) bool {
+		if groupNames[i] == "" {
+			return true
+		}
+		if groupNames[j] == "" {
+			return false
+		}
+		return strings.ToLower(groupNames[i]) < strings.ToLower(groupNames[j])
 	})
-	return entries
+
+	out := navSection{Title: title}
+	for _, group := range groupNames {
+		entries := groups[group]
+		sort.Slice(entries, func(i, j int) bool {
+			return strings.ToLower(entries[i].Title) < strings.ToLower(entries[j].Title)
+		})
+		groupTitle := group
+		if groupTitle == "" {
+			groupTitle = "Core"
+		}
+		out.Groups = append(out.Groups, navGroup{
+			Title:   groupTitle,
+			Entries: entries,
+		})
+	}
+	return out
+}
+
+func docsGroupName(relPath string) string {
+	if !strings.HasPrefix(relPath, "docs/") {
+		return "General"
+	}
+	inside := strings.TrimPrefix(relPath, "docs/")
+	dir := filepath.ToSlash(filepath.Dir(inside))
+	if dir == "." || dir == "" {
+		return "General"
+	}
+	return dir
+}
+
+func resolveMarkdownRelPath(currentRel, target string) (string, bool) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return "", false
+	}
+	if strings.HasPrefix(target, "http://") ||
+		strings.HasPrefix(target, "https://") ||
+		strings.HasPrefix(target, "mailto:") ||
+		strings.HasPrefix(target, "#") {
+		return "", false
+	}
+
+	if idx := strings.Index(target, "#"); idx >= 0 {
+		target = target[:idx]
+	}
+	target = strings.TrimPrefix(target, "./")
+	target = strings.TrimPrefix(target, "/")
+
+	rel := filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(currentRel), target)))
+	if rel == "." || rel == "" {
+		return "", false
+	}
+	return rel, true
 }
 
 func renderPage(path string, data pageData) error {
@@ -1517,24 +3094,6 @@ func findProjectDoc(docs []markdownDoc, relPath string) (markdownDoc, bool) {
 		}
 	}
 	return markdownDoc{}, false
-}
-
-func shouldSkipDir(rel string) bool {
-	if rel == "." {
-		return false
-	}
-
-	parts := strings.Split(rel, "/")
-	if len(parts) == 0 {
-		return false
-	}
-	root := parts[0]
-
-	switch root {
-	case ".git", "_cache", "external", "tools":
-		return true
-	}
-	return strings.HasPrefix(root, ".")
 }
 
 func packageNameForDir(dir string) (name string, hasGoFiles bool, err error) {
@@ -1681,6 +3240,42 @@ func copyDirIfExists(src, dst string) error {
 		}
 		return copyFile(path, target)
 	})
+}
+
+func copyAppPreviewAssets(root, outDir string) error {
+	appsDir := filepath.Join(root, "apps")
+	entries, err := os.ReadDir(appsDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := strings.TrimSpace(entry.Name())
+		if name == "" || strings.HasPrefix(name, ".") {
+			continue
+		}
+
+		src := filepath.Join(appsDir, name, "preview.png")
+		if _, statErr := os.Stat(src); statErr != nil {
+			if errors.Is(statErr, os.ErrNotExist) {
+				continue
+			}
+			return statErr
+		}
+
+		dst := filepath.Join(outDir, "assets", "apps", name, "preview.png")
+		if err := copyFile(src, dst); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func copyOptionalFile(src, dst string) error {

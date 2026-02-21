@@ -2,65 +2,133 @@
   "service": {
     "name": "dev.avyos.settings",
     "id": "0x00000060",
-    "package": "settings"
+    "package": "settings",
+    "description": "Persistent key/value settings service used by desktop and system apps."
   },
   "types": [
     {
       "name": "Empty",
-      "fields": []
+      "description": "Empty payload used where no data is required."
     },
     {
       "name": "KeyRequest",
+      "description": "Lookup payload for a single settings key.",
       "fields": [
-        { "name": "Key", "type": "string" }
+        {
+          "name": "Key",
+          "type": "string"
+        }
       ]
     },
     {
       "name": "SetRequest",
+      "description": "Write payload for a key/value update.",
       "fields": [
-        { "name": "Key", "type": "string" },
-        { "name": "Value", "type": "string" }
+        {
+          "name": "Key",
+          "type": "string"
+        },
+        {
+          "name": "Value",
+          "type": "string"
+        }
       ]
     },
     {
       "name": "ListRequest",
+      "description": "List query payload filtered by key prefix.",
       "fields": [
-        { "name": "Prefix", "type": "string" }
+        {
+          "name": "Prefix",
+          "type": "string"
+        }
       ]
     },
     {
       "name": "GetResponse",
+      "description": "Response payload for value retrieval.",
       "fields": [
-        { "name": "Value", "type": "string" }
+        {
+          "name": "Value",
+          "type": "string"
+        }
       ]
     },
     {
       "name": "Entry",
+      "description": "Single key/value entry.",
       "fields": [
-        { "name": "Key", "type": "string" },
-        { "name": "Value", "type": "string" }
+        {
+          "name": "Key",
+          "type": "string"
+        },
+        {
+          "name": "Value",
+          "type": "string"
+        }
       ]
     },
     {
       "name": "EntryList",
+      "description": "List of settings entries.",
       "fields": [
-        { "name": "Items", "type": "[]Entry" }
+        {
+          "name": "Items",
+          "type": "[]Entry"
+        }
       ]
     },
     {
       "name": "ChangedEvent",
+      "description": "Event payload emitted when a value changes.",
       "fields": [
-        { "name": "Key", "type": "string" },
-        { "name": "Value", "type": "string" }
+        {
+          "name": "Key",
+          "type": "string"
+        },
+        {
+          "name": "Value",
+          "type": "string"
+        }
       ]
     }
   ],
   "requests": [
-    { "name": "RawGet", "id": "0x0201", "request_type": "KeyRequest", "response_type": "GetResponse" },
-    { "name": "RawSet", "id": "0x0202", "request_type": "SetRequest", "response_type": "Empty" },
-    { "name": "RawList", "id": "0x0203", "request_type": "ListRequest", "response_type": "EntryList" }
+    {
+      "name": "RawGet",
+      "id": "0x0201",
+      "request_type": "KeyRequest",
+      "response_type": "GetResponse",
+      "description": "Read a setting value by key.",
+      "request_description": "Contains the full key path to read.",
+      "response_description": "Returns the stored value."
+    },
+    {
+      "name": "RawSet",
+      "id": "0x0202",
+      "request_type": "SetRequest",
+      "response_type": "Empty",
+      "description": "Write or update a setting value by key.",
+      "request_description": "Contains key and value to persist.",
+      "response_description": "No payload is returned."
+    },
+    {
+      "name": "RawList",
+      "id": "0x0203",
+      "request_type": "ListRequest",
+      "response_type": "EntryList",
+      "description": "List settings entries with an optional prefix filter.",
+      "request_description": "Optional prefix to limit returned keys.",
+      "response_description": "Returns matching key/value entries."
+    }
   ],
   "events": [
-    { "name": "SettingsChanged", "id": "0x0301", "request_type": "ChangedEvent" }
+    {
+      "name": "SettingsChanged",
+      "id": "0x0301",
+      "request_type": "ChangedEvent",
+      "description": "Published when a key is created or updated.",
+      "request_description": "Contains changed key and new value."
+    }
   ]
 }

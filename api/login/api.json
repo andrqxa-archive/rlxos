@@ -2,30 +2,80 @@
   "service": {
     "name": "dev.avyos.login",
     "id": "0x00000040",
-    "package": "login"
+    "package": "login",
+    "description": "Session authentication and lock-state service."
   },
   "types": [
     {
       "name": "Empty",
-      "fields": []
+      "description": "Empty payload used when a request or event carries no fields."
     },
     {
       "name": "SessionInfo",
+      "description": "Identity and process information for the active user session.",
       "fields": [
-        { "name": "Username", "type": "string" },
-        { "name": "UID", "type": "uint32" },
-        { "name": "PID", "type": "int" },
-        { "name": "Active", "type": "bool" }
+        {
+          "name": "Username",
+          "type": "string"
+        },
+        {
+          "name": "UID",
+          "type": "uint32"
+        },
+        {
+          "name": "PID",
+          "type": "int"
+        },
+        {
+          "name": "Active",
+          "type": "bool"
+        }
       ]
     }
   ],
   "requests": [
-    { "name": "Logout", "id": "0x0201", "request_type": "Empty", "response_type": "Empty" },
-    { "name": "Lock", "id": "0x0202", "request_type": "Empty", "response_type": "Empty" },
-    { "name": "GetSession", "id": "0x0203", "request_type": "Empty", "response_type": "SessionInfo" }
+    {
+      "name": "Logout",
+      "id": "0x0201",
+      "request_type": "Empty",
+      "response_type": "Empty",
+      "description": "Terminate the current user session.",
+      "request_description": "No input is required.",
+      "response_description": "No payload is returned."
+    },
+    {
+      "name": "Lock",
+      "id": "0x0202",
+      "request_type": "Empty",
+      "response_type": "Empty",
+      "description": "Lock the current user session.",
+      "request_description": "No input is required.",
+      "response_description": "No payload is returned."
+    },
+    {
+      "name": "GetSession",
+      "id": "0x0203",
+      "request_type": "Empty",
+      "response_type": "SessionInfo",
+      "description": "Fetch details for the active session.",
+      "request_description": "No input is required.",
+      "response_description": "Returns active session metadata."
+    }
   ],
   "events": [
-    { "name": "SessionStarted", "id": "0x0301", "request_type": "SessionInfo" },
-    { "name": "SessionEnded", "id": "0x0302", "request_type": "Empty" }
+    {
+      "name": "SessionStarted",
+      "id": "0x0301",
+      "request_type": "SessionInfo",
+      "description": "Published when a user session starts.",
+      "request_description": "Contains metadata for the started session."
+    },
+    {
+      "name": "SessionEnded",
+      "id": "0x0302",
+      "request_type": "Empty",
+      "description": "Published when the active session ends.",
+      "request_description": "No payload is emitted."
+    }
   ]
 }

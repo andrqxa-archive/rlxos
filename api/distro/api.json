@@ -2,132 +2,328 @@
   "service": {
     "name": "dev.avyos.distro",
     "id": "0x00000070",
-    "package": "distro"
+    "package": "distro",
+    "description": "Distribution image management API with pull/run/shell lifecycle operations."
   },
   "types": [
     {
       "name": "Empty",
-      "fields": []
+      "description": "Empty payload used for requests and responses without data."
     },
     {
       "name": "ListRequest",
+      "description": "Filter for listing available and installed distros.",
       "fields": [
-        { "name": "Available", "type": "bool" }
+        {
+          "name": "Available",
+          "type": "bool"
+        }
       ]
     },
     {
       "name": "DistroInfo",
+      "description": "Metadata for one distro image.",
       "fields": [
-        { "name": "Name", "type": "string" },
-        { "name": "URL", "type": "string" },
-        { "name": "Version", "type": "string" },
-        { "name": "Path", "type": "string" },
-        { "name": "Size", "type": "int" }
+        {
+          "name": "Name",
+          "type": "string"
+        },
+        {
+          "name": "URL",
+          "type": "string"
+        },
+        {
+          "name": "Version",
+          "type": "string"
+        },
+        {
+          "name": "Path",
+          "type": "string"
+        },
+        {
+          "name": "Size",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "DistroList",
+      "description": "Collection of distro metadata entries.",
       "fields": [
-        { "name": "Items", "type": "[]DistroInfo" }
+        {
+          "name": "Items",
+          "type": "[]DistroInfo"
+        }
       ]
     },
     {
       "name": "PullRequest",
+      "description": "Payload for pulling a distro image by name and source URL.",
       "fields": [
-        { "name": "Name", "type": "string" },
-        { "name": "URL", "type": "string" }
+        {
+          "name": "Name",
+          "type": "string"
+        },
+        {
+          "name": "URL",
+          "type": "string"
+        }
       ]
     },
     {
       "name": "RunRequest",
+      "description": "Execution payload for running a command inside a distro context.",
       "fields": [
-        { "name": "Distro", "type": "string" },
-        { "name": "Command", "type": "string" },
-        { "name": "Workdir", "type": "string" },
-        { "name": "Bind", "type": "string" },
-        { "name": "Env", "type": "string" },
-        { "name": "Input", "type": "[]byte" }
+        {
+          "name": "Distro",
+          "type": "string"
+        },
+        {
+          "name": "Command",
+          "type": "string"
+        },
+        {
+          "name": "Workdir",
+          "type": "string"
+        },
+        {
+          "name": "Bind",
+          "type": "string"
+        },
+        {
+          "name": "Env",
+          "type": "string"
+        },
+        {
+          "name": "Input",
+          "type": "[]byte"
+        }
       ]
     },
     {
       "name": "RunResult",
+      "description": "Execution output for a distro command run.",
       "fields": [
-        { "name": "Stdout", "type": "[]byte" },
-        { "name": "Stderr", "type": "[]byte" },
-        { "name": "ExitCode", "type": "int" }
+        {
+          "name": "Stdout",
+          "type": "[]byte"
+        },
+        {
+          "name": "Stderr",
+          "type": "[]byte"
+        },
+        {
+          "name": "ExitCode",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "RemoveRequest",
+      "description": "Payload for removing an installed distro image.",
       "fields": [
-        { "name": "Name", "type": "string" }
+        {
+          "name": "Name",
+          "type": "string"
+        }
       ]
     },
     {
       "name": "ShellOpenRequest",
+      "description": "Payload to open an interactive shell session in a distro.",
       "fields": [
-        { "name": "Distro", "type": "string" },
-        { "name": "Workdir", "type": "string" },
-        { "name": "Bind", "type": "string" },
-        { "name": "Env", "type": "string" },
-        { "name": "Rows", "type": "int" },
-        { "name": "Cols", "type": "int" }
+        {
+          "name": "Distro",
+          "type": "string"
+        },
+        {
+          "name": "Workdir",
+          "type": "string"
+        },
+        {
+          "name": "Bind",
+          "type": "string"
+        },
+        {
+          "name": "Env",
+          "type": "string"
+        },
+        {
+          "name": "Rows",
+          "type": "int"
+        },
+        {
+          "name": "Cols",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "ShellSession",
+      "description": "Shell session identifier assigned by the service.",
       "fields": [
-        { "name": "SessionID", "type": "uint32" }
+        {
+          "name": "SessionID",
+          "type": "uint32"
+        }
       ]
     },
     {
       "name": "ShellInputRequest",
+      "description": "Input payload for an open shell session.",
       "fields": [
-        { "name": "SessionID", "type": "uint32" },
-        { "name": "Data", "type": "[]byte" }
+        {
+          "name": "SessionID",
+          "type": "uint32"
+        },
+        {
+          "name": "Data",
+          "type": "[]byte"
+        }
       ]
     },
     {
       "name": "ShellResizeRequest",
+      "description": "Resize payload for a shell pseudo-terminal.",
       "fields": [
-        { "name": "SessionID", "type": "uint32" },
-        { "name": "Rows", "type": "int" },
-        { "name": "Cols", "type": "int" }
+        {
+          "name": "SessionID",
+          "type": "uint32"
+        },
+        {
+          "name": "Rows",
+          "type": "int"
+        },
+        {
+          "name": "Cols",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "ShellCloseRequest",
+      "description": "Request to close an active shell session.",
       "fields": [
-        { "name": "SessionID", "type": "uint32" }
+        {
+          "name": "SessionID",
+          "type": "uint32"
+        }
       ]
     },
     {
       "name": "ShellOutputEvent",
+      "description": "Streamed terminal output for an active shell session.",
       "fields": [
-        { "name": "SessionID", "type": "uint32" },
-        { "name": "Data", "type": "[]byte" }
+        {
+          "name": "SessionID",
+          "type": "uint32"
+        },
+        {
+          "name": "Data",
+          "type": "[]byte"
+        }
       ]
     },
     {
       "name": "ShellExitEvent",
+      "description": "Exit notification for a shell session.",
       "fields": [
-        { "name": "SessionID", "type": "uint32" },
-        { "name": "ExitCode", "type": "int" }
+        {
+          "name": "SessionID",
+          "type": "uint32"
+        },
+        {
+          "name": "ExitCode",
+          "type": "int"
+        }
       ]
     }
   ],
   "requests": [
-    { "name": "List", "id": "0x0201", "request_type": "ListRequest", "response_type": "DistroList" },
-    { "name": "Pull", "id": "0x0202", "request_type": "PullRequest", "response_type": "Empty" },
-    { "name": "Run", "id": "0x0203", "request_type": "RunRequest", "response_type": "RunResult" },
-    { "name": "Remove", "id": "0x0204", "request_type": "RemoveRequest", "response_type": "Empty" },
-    { "name": "ShellOpen", "id": "0x0205", "request_type": "ShellOpenRequest", "response_type": "ShellSession" },
-    { "name": "ShellInput", "id": "0x0206", "request_type": "ShellInputRequest", "one_way": true },
-    { "name": "ShellResize", "id": "0x0207", "request_type": "ShellResizeRequest", "one_way": true },
-    { "name": "ShellClose", "id": "0x0208", "request_type": "ShellCloseRequest", "one_way": true }
+    {
+      "name": "List",
+      "id": "0x0201",
+      "request_type": "ListRequest",
+      "response_type": "DistroList",
+      "description": "List installed or available distro images.",
+      "request_description": "Set `Available=true` to query remote/available entries.",
+      "response_description": "Returns distro metadata list."
+    },
+    {
+      "name": "Pull",
+      "id": "0x0202",
+      "request_type": "PullRequest",
+      "response_type": "Empty",
+      "description": "Pull and install a distro image.",
+      "request_description": "Contains distro name and optional source URL.",
+      "response_description": "No payload is returned."
+    },
+    {
+      "name": "Run",
+      "id": "0x0203",
+      "request_type": "RunRequest",
+      "response_type": "RunResult",
+      "description": "Run a non-interactive command in a distro environment.",
+      "request_description": "Command plus execution environment options.",
+      "response_description": "Returns stdout, stderr, and exit code."
+    },
+    {
+      "name": "Remove",
+      "id": "0x0204",
+      "request_type": "RemoveRequest",
+      "response_type": "Empty",
+      "description": "Remove an installed distro image.",
+      "request_description": "Contains distro name to remove.",
+      "response_description": "No payload is returned."
+    },
+    {
+      "name": "ShellOpen",
+      "id": "0x0205",
+      "request_type": "ShellOpenRequest",
+      "response_type": "ShellSession",
+      "description": "Open an interactive shell session inside a distro.",
+      "request_description": "Initial shell context and terminal size.",
+      "response_description": "Returns the created shell session id."
+    },
+    {
+      "name": "ShellInput",
+      "id": "0x0206",
+      "request_type": "ShellInputRequest",
+      "one_way": true,
+      "description": "Send user input to an active shell session.",
+      "request_description": "Session id plus input bytes."
+    },
+    {
+      "name": "ShellResize",
+      "id": "0x0207",
+      "request_type": "ShellResizeRequest",
+      "one_way": true,
+      "description": "Resize the pseudo-terminal for an active shell session.",
+      "request_description": "Session id and new row/column dimensions."
+    },
+    {
+      "name": "ShellClose",
+      "id": "0x0208",
+      "request_type": "ShellCloseRequest",
+      "one_way": true,
+      "description": "Close an active shell session.",
+      "request_description": "Session id to terminate."
+    }
   ],
   "events": [
-    { "name": "ShellOutput", "id": "0x0301", "request_type": "ShellOutputEvent" },
-    { "name": "ShellExit", "id": "0x0302", "request_type": "ShellExitEvent" }
+    {
+      "name": "ShellOutput",
+      "id": "0x0301",
+      "request_type": "ShellOutputEvent",
+      "description": "Published when shell output data is available.",
+      "request_description": "Contains session id and output bytes."
+    },
+    {
+      "name": "ShellExit",
+      "id": "0x0302",
+      "request_type": "ShellExitEvent",
+      "description": "Published when a shell session exits.",
+      "request_description": "Contains session id and exit code."
+    }
   ]
 }

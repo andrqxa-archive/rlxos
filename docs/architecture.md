@@ -1,306 +1,108 @@
 # AvyOS Architecture
 
-This document describes the source code organization and system architecture of AvyOS.
+This document describes how AvyOS is organized in source code and how major runtime components fit together.
 
-## Source Tree
+## Architecture Goals
 
-```
+AvyOS is built as a pure Go userspace stack with these constraints:
+
+- no CGO dependencies in core userspace binaries
+- no POSIX-compatibility target as a design requirement
+- service-first architecture for system capabilities
+- small, readable codebase that is easy to iterate on
+
+## Repository Layout
+
+```text
 avyos/
-├── cmd/            # Command-line utilities
-├── apps/           # User applications
-├── services/       # System services
-├── pkg/            # Core libraries
-├── tools/          # Development tools
-├── config/         # Default configurations
-├── data/           # Static data files
-├── scripts/        # Build scripts
-├── external/       # Cross-platform binaries
-├── docs/           # Documentation
-└── _cache/         # Build artifacts
+|- api/        IPC contracts (`api.json`) and generated client bindings
+|- apps/       User-facing applications
+|- cmd/        Command-line tools and core user commands
+|- services/   Long-running daemons (display, login, settings, etc.)
+|- pkg/        Shared libraries used by apps/commands/services
+|- docs/       Project and user documentation
+|- tools/      Build and code generation tools
+|- config/     Default runtime config and service definitions
+|- data/       Static runtime assets (icons, wallpapers, themes)
+|- kernel/     Kernel integration/config artifacts
+`- _cache/     Build outputs and generated docs
 ```
 
-## Core Packages (`pkg/`)
-
-The `pkg/` directory contains reusable libraries that form the foundation of AvyOS.
-
-### UI Toolkit (`pkg/ui/`)
-
-A complete TUI widget toolkit for building terminal applications.
-
-**Core (`pkg/ui/`):**
-- `app.go` — Application lifecycle management
-- `canvas.go` — Drawing surface and rendering
-- `widget.go` — Base widget interface
-- `style.go` — Styling and theming
-- `event.go` — Event types (keyboard, mouse)
-- `layout.go` — Layout calculations
-
-**Widgets (`pkg/ui/widgets/`):**
-| Widget | Description |
-|--------|-------------|
-| `box.go` | Container with borders |
-| `button.go` | Clickable button |
-| `input.go` | Single-line text input |
-| `textarea.go` | Multi-line text area |
-| `list.go` | Selectable list |
-| `table.go` | Data table |
-| `tabs.go` | Tab container |
-| `scroll.go` | Scrollable container |
-| `modal.go` | Modal dialog |
-| `checkbox.go` | Checkbox input |
-| `radio.go` | Radio button group |
-| `progress.go` | Progress bar |
-| `select.go` | Dropdown select |
-| `flex.go` | Flexbox layout |
-| `stack.go` | Stack layout |
-| `text.go` | Static text display |
-
-**Backend (`pkg/ui/backend/`):**
-- `term.go` — Terminal rendering backend
+## Runtime Layers
 
-### IPC System (`pkg/sutra/`)
+### 1. Boot and Init
 
-Message bus for inter-process communication.
+- boot artifacts are built into an image
+- `cmd/init` runs as PID 1
+- init mounts and prepares runtime state, then starts configured services
 
-- `bus.go` — Message bus implementation
-- `client.go` — Client connection handling
-- `service.go` — Service registration
-- `protocol.go` — Wire protocol
+### 2. Core Services
 
-### Identity System (`pkg/identity/`)
+Services expose system functionality through IPC APIs:
 
-User authentication and capability management.
+- `services/display` - compositor/windowing backend
+- `services/login` - authentication and session startup
+- `services/settings` - key/value settings storage and watch events
+- `services/service` - service control and lifecycle operations
+- `services/uevent` - device event forwarding
+- `services/distro` - distro/container-style runtime operations
 
-- `identity.go` — User identity management
-- `auth.go` — Authentication (password hashing)
-- `capability.go` — Capability definitions
-- `types.go` — Common types
+### 3. APIs and IPC Contracts
 
-### Other Packages
+`api/<name>/api.json` defines wire-level contracts:
 
-| Package | File | Description |
-|---------|------|-------------|
-| `pkg/fs/` | `fs.go`, `resolve.go` | Filesystem utilities |
-| `pkg/pty/` | `pty.go` | Pseudo-terminal support |
-| `pkg/term/` | `term.go` | Terminal utilities |
-| `pkg/logger/` | `logger.go` | Structured logging |
-| `pkg/format/` | `format.go` | Text formatting/colors |
-| `flag` (stdlib) | `flag` package | Command-line parsing |
-| `pkg/ini/` | `ini.go` | INI file parsing |
+- service metadata (name, id, package)
+- data types (request/response/event payloads)
+- request and event IDs
+- human-readable descriptions for docs generation
 
-## Commands (`cmd/`)
+`tools/apigen` turns these contracts into generated client/server glue.
 
-Commands are standalone executables that provide system functionality.
+### 4. Applications and Commands
 
-### System Management
+- `apps/` contains desktop applications
+- `cmd/` contains shell commands and system tools
+- both layers use `pkg/` libraries plus IPC clients from `api/`
 
-| Command | Description |
-|---------|-------------|
-| `cmd/init/` | Init system (PID 1), service supervisor |
-| `cmd/shell/` | Interactive command shell |
-| `cmd/system/` | System management utilities |
-| `cmd/power/` | Shutdown, reboot, suspend |
+### 5. Shared Libraries (`pkg/`)
 
-### File Operations
+`pkg/` is the reusable core used everywhere:
 
-| Command | Description |
-|---------|-------------|
-| `cmd/list/` | List directory contents |
-| `cmd/read/` | Read file contents |
-| `cmd/write/` | Write to files |
-| `cmd/copy/` | Copy files and directories |
-| `cmd/move/` | Move/rename files |
-| `cmd/delete/` | Delete files |
-| `cmd/mkdir/` | Create directories |
-| `cmd/link/` | Create symbolic links |
-| `cmd/find/` | Search for files |
-| `cmd/tree/` | Display directory tree |
-| `cmd/info/` | File information |
-| `cmd/mount/` | Mount filesystems |
+- rendering/input/UI support (`pkg/graphics/...`)
+- IPC transport (`pkg/sutra`)
+- filesystem and identity helpers (`pkg/fs`, `pkg/identity`)
+- logging/formatting/utilities (`pkg/logger`, `pkg/format`, etc.)
 
-### Networking & IPC
+## API and Process Model
 
-| Command | Description |
-|---------|-------------|
-| `cmd/net/` | Network configuration |
-| `cmd/request/` | Send IPC requests |
+At a high level:
 
-### Process & Identity
+1. apps/commands connect to a service client in `api/<name>`.
+2. client sends typed payloads over Sutra IPC.
+3. service receives request and executes privileged/system logic.
+4. response/event payloads return through typed API bindings.
 
-| Command | Description |
-|---------|-------------|
-| `cmd/process/` | Process management |
-| `cmd/identity/` | User management |
+This keeps application logic isolated from low-level service internals.
 
-## Applications (`apps/`)
+## Documentation Model
 
-Applications are user-facing programs with TUI interfaces.
+`tools/docgen` generates the docs site with grouped sections:
 
-### Welcome (`apps/welcome/`)
+- `docs/` markdown guides
+- `apps/` reference pages (doc comments)
+- `cmd/` reference pages (structured from `flag.Usage` output)
+- `services/` reference pages (doc comments)
+- `api/` reference pages (from `api.json` metadata)
+- `pkg/` API reference (godoc-style exports)
 
-First-boot setup wizard. Features:
-- Multi-page wizard UI
-- Language selection (12 languages)
-- Timezone configuration (15+ zones)
-- User account creation
-- Password setup with strength indicator
+## Build Artifacts
 
-### Notepad (`apps/notepad/`)
+A typical build produces:
 
-Simple text editor with nano-style keybindings.
+- system binaries and assets in `_cache/`
+- bootable disk image(s)
+- generated docs in `_cache/docs/`
 
-### Browser (`apps/browser/`)
+## Current Scope
 
-Web browser application.
-
-## Services (`services/`)
-
-Services are long-running daemons with elevated privileges.
-
-### Sutra (`services/sutra/`)
-
-IPC message bus service.
-- Listens on Unix socket (`/cache/runtime/sutra.sock`)
-- Routes messages between clients and services
-- Handles service registration and discovery
-
-### Login (`services/login/`)
-
-Authentication and login manager.
-- Displays login UI with ASCII logo
-- Authenticates users against identity database
-- Launches first-boot wizard if needed
-- Starts desktop service after successful login
-
-### Desktop (`services/desktop/`)
-
-Tiling window manager (compositor).
-- BSP (Binary Space Partitioning) layout
-- Grid, Main+Stack, and Spiral layouts
-- Real PTY for each terminal pane
-- Prefix-key commands (Ctrl+A)
-- Vim-style command mode
-- Mouse support
-
-## Init System
-
-The init system (`cmd/init/`) is PID 1 and manages:
-
-1. **Early boot** — Mount filesystems, set up environment
-2. **Service supervision** — Start and monitor services
-3. **Process reaping** — Clean up orphaned processes
-
-### Configuration (`config/init.conf`)
-
-```ini
-[init]
-services = sutra login
-```
-
-### Service Files (`config/services/*.service`)
-
-```ini
-[service]
-name = login
-command = /avyos/services/login
-tty = /cache/kernel/devices/tty1
-restart = always
-depends = firstboot
-```
-
-## Build System
-
-### Makefile Targets
-
-```bash
-make GOARCH=arm64       # Build disk image
-make GOARCH=arm64 run   # Build and run in QEMU
-make clean              # Clean build artifacts
-```
-
-### Build Process
-
-1. Compile Go binaries → `_cache/<arch>/system/`
-2. Copy config and data files
-3. Create squashfs image (`system.img`)
-4. Create initramfs (`initramfs.img`)
-5. Generate bootable disk with Limine bootloader
-
-### Build Flags
-
-- `CGO_ENABLED=0` — Pure Go, no C dependencies
-- `-tags netgo` — Pure Go networking
-- `-ldflags="-s -w"` — Strip debug info
-
-## Security Model
-
-### Capability-Based Access
-
-Users have capabilities that grant permissions:
-
-```
-Identity:
-  - ID: 1000
-  - Name: alice
-  - Home: /users/alice
-  - Capabilities: ["unix:users", "unix:audio", "unix:video"]
-  - Shell: /avyos/cmd/shell
-```
-
-### Authentication
-
-Passwords are hashed using bcrypt:
-
-```
-Auth:
-  - Type: "password" | "none" | "locked"
-  - Hash: bcrypt hash
-```
-
-### Application Isolation
-
-Applications in `/avyos/apps/` run with:
-- Restricted capabilities
-- Container isolation (planned)
-- Limited filesystem access
-
-## Data Flow
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                         Init                             │
-│                    (PID 1, /cmd/init)                   │
-└─────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Sutra (IPC Bus)                      │
-│                  (/services/sutra)                      │
-└─────────────────────────────────────────────────────────┘
-                            │
-            ┌───────────────┼───────────────┐
-            ▼               ▼               ▼
-     ┌───────────┐   ┌───────────┐   ┌───────────┐
-     │   Login   │   │  Desktop  │   │   Apps    │
-     │ (service) │──▶│ (service) │──▶│ (welcome, │
-     └───────────┘   └───────────┘   │  notepad) │
-                                     └───────────┘
-```
-
-## Module Dependencies
-
-```
-avyos.dev
-├── pkg/ui          (no deps)
-├── pkg/term        (no deps)
-├── pkg/pty         → pkg/term
-├── pkg/logger      (no deps)
-├── pkg/format      (no deps)
-├── pkg/ini         (no deps)
-├── pkg/fs          (no deps)
-├── pkg/identity    → pkg/ini
-├── pkg/sutra       (no deps)
-├── cmd/*           → pkg/*
-├── apps/*          → pkg/ui, pkg/identity
-└── services/*      → pkg/ui, pkg/pty, pkg/sutra
-```
+AvyOS is still experimental. Interfaces, service boundaries, and UX details are actively changing as the platform evolves.

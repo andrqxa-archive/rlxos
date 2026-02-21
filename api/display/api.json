@@ -2,7 +2,8 @@
   "service": {
     "name": "dev.avyos.display",
     "id": "0x00000010",
-    "package": "display"
+    "package": "display",
+    "description": "Display service API."
   },
   "imports": [
     "avyos.dev/pkg/graphics"
@@ -10,254 +11,749 @@
   "types": [
     {
       "name": "Empty",
-      "fields": []
+      "description": "Empty payload type."
     },
     {
       "name": "CreateWindowRequest",
+      "description": "Create Window Request payload type.",
       "fields": [
-        { "name": "ShmKey", "type": "string" },
-        { "name": "Width", "type": "int" },
-        { "name": "Height", "type": "int" },
-        { "name": "Stride", "type": "int" }
+        {
+          "name": "ShmKey",
+          "type": "string"
+        },
+        {
+          "name": "Width",
+          "type": "int"
+        },
+        {
+          "name": "Height",
+          "type": "int"
+        },
+        {
+          "name": "Stride",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "CreateLayerRequest",
+      "description": "Create Layer Request payload type.",
       "fields": [
-        { "name": "Layer", "type": "uint32" },
-        { "name": "Anchor", "type": "uint32" },
-        { "name": "Exclusive", "type": "int" },
-        { "name": "OpaqueHint", "type": "bool" },
-        { "name": "ShmKey", "type": "string" },
-        { "name": "Width", "type": "int" },
-        { "name": "Height", "type": "int" },
-        { "name": "Stride", "type": "int" }
+        {
+          "name": "Layer",
+          "type": "uint32"
+        },
+        {
+          "name": "Anchor",
+          "type": "uint32"
+        },
+        {
+          "name": "Exclusive",
+          "type": "int"
+        },
+        {
+          "name": "OpaqueHint",
+          "type": "bool"
+        },
+        {
+          "name": "ShmKey",
+          "type": "string"
+        },
+        {
+          "name": "Width",
+          "type": "int"
+        },
+        {
+          "name": "Height",
+          "type": "int"
+        },
+        {
+          "name": "Stride",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "CreatePopupRequest",
+      "description": "Create Popup Request payload type.",
       "fields": [
-        { "name": "ParentID", "type": "uint32" },
-        { "name": "X", "type": "int" },
-        { "name": "Y", "type": "int" },
-        { "name": "ShmKey", "type": "string" },
-        { "name": "Width", "type": "int" },
-        { "name": "Height", "type": "int" },
-        { "name": "Stride", "type": "int" }
+        {
+          "name": "ParentID",
+          "type": "uint32"
+        },
+        {
+          "name": "X",
+          "type": "int"
+        },
+        {
+          "name": "Y",
+          "type": "int"
+        },
+        {
+          "name": "ShmKey",
+          "type": "string"
+        },
+        {
+          "name": "Width",
+          "type": "int"
+        },
+        {
+          "name": "Height",
+          "type": "int"
+        },
+        {
+          "name": "Stride",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "DestroyWindowRequest",
-      "fields": [{ "name": "WindowID", "type": "uint32" }]
+      "description": "Destroy Window Request payload type.",
+      "fields": [
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        }
+      ]
     },
     {
       "name": "SetTitleRequest",
+      "description": "Set Title Request payload type.",
       "fields": [
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "Title", "type": "string" }
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "Title",
+          "type": "string"
+        }
       ]
     },
     {
       "name": "DamageRequest",
+      "description": "Damage Request payload type.",
       "fields": [
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "X", "type": "int" },
-        { "name": "Y", "type": "int" },
-        { "name": "Width", "type": "int" },
-        { "name": "Height", "type": "int" }
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "X",
+          "type": "int"
+        },
+        {
+          "name": "Y",
+          "type": "int"
+        },
+        {
+          "name": "Width",
+          "type": "int"
+        },
+        {
+          "name": "Height",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "ResizeRequest",
+      "description": "Resize Request payload type.",
       "fields": [
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "ShmKey", "type": "string" },
-        { "name": "Width", "type": "int" },
-        { "name": "Height", "type": "int" },
-        { "name": "Stride", "type": "int" }
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "ShmKey",
+          "type": "string"
+        },
+        {
+          "name": "Width",
+          "type": "int"
+        },
+        {
+          "name": "Height",
+          "type": "int"
+        },
+        {
+          "name": "Stride",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "MoveRequest",
+      "description": "Move Request payload type.",
       "fields": [
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "X", "type": "int" },
-        { "name": "Y", "type": "int" }
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "X",
+          "type": "int"
+        },
+        {
+          "name": "Y",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "SetWindowStateRequest",
+      "description": "Set Window State Request payload type.",
       "fields": [
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "Action", "type": "uint32" }
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "Action",
+          "type": "uint32"
+        }
       ]
     },
     {
       "name": "WindowCreatedEvent",
+      "description": "Window Created Event payload type.",
       "fields": [
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "X", "type": "int" },
-        { "name": "Y", "type": "int" }
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "X",
+          "type": "int"
+        },
+        {
+          "name": "Y",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "ConfigureEvent",
+      "description": "Configure Event payload type.",
       "fields": [
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "Width", "type": "int" },
-        { "name": "Height", "type": "int" }
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "Width",
+          "type": "int"
+        },
+        {
+          "name": "Height",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "CloseEvent",
-      "fields": [{ "name": "WindowID", "type": "uint32" }]
+      "description": "Close Event payload type.",
+      "fields": [
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        }
+      ]
     },
     {
       "name": "PointerEnterEvent",
+      "description": "Pointer Enter Event payload type.",
       "fields": [
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "X", "type": "int" },
-        { "name": "Y", "type": "int" }
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "X",
+          "type": "int"
+        },
+        {
+          "name": "Y",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "PointerLeaveEvent",
-      "fields": [{ "name": "WindowID", "type": "uint32" }]
+      "description": "Pointer Leave Event payload type.",
+      "fields": [
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        }
+      ]
     },
     {
       "name": "PointerMotionEvent",
+      "description": "Pointer Motion Event payload type.",
       "fields": [
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "X", "type": "int" },
-        { "name": "Y", "type": "int" }
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "X",
+          "type": "int"
+        },
+        {
+          "name": "Y",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "PointerButtonEvent",
+      "description": "Pointer Button Event payload type.",
       "fields": [
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "Button", "type": "int" },
-        { "name": "Pressed", "type": "bool" }
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "Button",
+          "type": "int"
+        },
+        {
+          "name": "Pressed",
+          "type": "bool"
+        }
       ]
     },
     {
       "name": "KeyEvent",
+      "description": "Key Event payload type.",
       "fields": [
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "Key", "type": "graphics.Key" },
-        { "name": "Char", "type": "rune" },
-        { "name": "Pressed", "type": "bool" }
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "Key",
+          "type": "graphics.Key"
+        },
+        {
+          "name": "Char",
+          "type": "rune"
+        },
+        {
+          "name": "Pressed",
+          "type": "bool"
+        }
       ]
     },
     {
       "name": "FocusEvent",
+      "description": "Focus Event payload type.",
       "fields": [
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "Focused", "type": "bool" }
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "Focused",
+          "type": "bool"
+        }
       ]
     },
     {
       "name": "MovedEvent",
+      "description": "Moved Event payload type.",
       "fields": [
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "X", "type": "int" },
-        { "name": "Y", "type": "int" }
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "X",
+          "type": "int"
+        },
+        {
+          "name": "Y",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "WindowListItem",
+      "description": "Window List Item payload type.",
       "fields": [
-        { "name": "ID", "type": "uint32" },
-        { "name": "Flags", "type": "uint32" },
-        { "name": "Title", "type": "string" }
+        {
+          "name": "ID",
+          "type": "uint32"
+        },
+        {
+          "name": "Flags",
+          "type": "uint32"
+        },
+        {
+          "name": "Title",
+          "type": "string"
+        }
       ]
     },
     {
       "name": "WindowListEvent",
+      "description": "Window List Event payload type.",
       "fields": [
-        { "name": "Windows", "type": "[]WindowListItem" }
+        {
+          "name": "Windows",
+          "type": "[]WindowListItem"
+        }
       ]
     },
     {
       "name": "RegisterSessionRequest",
+      "description": "Register Session Request payload type.",
       "fields": [
-        { "name": "SessionID", "type": "uint32" },
-        { "name": "UID", "type": "uint32" }
+        {
+          "name": "SessionID",
+          "type": "uint32"
+        },
+        {
+          "name": "UID",
+          "type": "uint32"
+        }
       ]
     },
     {
       "name": "SetActiveSessionRequest",
+      "description": "Set Active Session Request payload type.",
       "fields": [
-        { "name": "SessionID", "type": "uint32" }
+        {
+          "name": "SessionID",
+          "type": "uint32"
+        }
       ]
     },
     {
       "name": "ActiveSessionEvent",
+      "description": "Active Session Event payload type.",
       "fields": [
-        { "name": "SessionID", "type": "uint32" }
+        {
+          "name": "SessionID",
+          "type": "uint32"
+        }
       ]
     },
     {
       "name": "RegisterShortcutRequest",
+      "description": "Register Shortcut Request payload type.",
       "fields": [
-        { "name": "ShortcutID", "type": "uint32" },
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "Scope", "type": "uint32" },
-        { "name": "Key", "type": "graphics.Key" },
-        { "name": "Rune", "type": "rune" },
-        { "name": "Modifiers", "type": "uint8" }
+        {
+          "name": "ShortcutID",
+          "type": "uint32"
+        },
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "Scope",
+          "type": "uint32"
+        },
+        {
+          "name": "Key",
+          "type": "graphics.Key"
+        },
+        {
+          "name": "Rune",
+          "type": "rune"
+        },
+        {
+          "name": "Modifiers",
+          "type": "uint8"
+        }
       ]
     },
     {
       "name": "UnregisterShortcutRequest",
+      "description": "Unregister Shortcut Request payload type.",
       "fields": [
-        { "name": "ShortcutID", "type": "uint32" }
+        {
+          "name": "ShortcutID",
+          "type": "uint32"
+        }
       ]
     },
     {
       "name": "ShortcutEvent",
+      "description": "Shortcut Event payload type.",
       "fields": [
-        { "name": "ShortcutID", "type": "uint32" },
-        { "name": "WindowID", "type": "uint32" },
-        { "name": "Scope", "type": "uint32" },
-        { "name": "Key", "type": "graphics.Key" },
-        { "name": "Rune", "type": "rune" },
-        { "name": "Modifiers", "type": "uint8" }
+        {
+          "name": "ShortcutID",
+          "type": "uint32"
+        },
+        {
+          "name": "WindowID",
+          "type": "uint32"
+        },
+        {
+          "name": "Scope",
+          "type": "uint32"
+        },
+        {
+          "name": "Key",
+          "type": "graphics.Key"
+        },
+        {
+          "name": "Rune",
+          "type": "rune"
+        },
+        {
+          "name": "Modifiers",
+          "type": "uint8"
+        }
       ]
     }
   ],
   "requests": [
-    { "name": "CreateWindow", "id": "0x0201", "request_type": "CreateWindowRequest", "response_type": "WindowCreatedEvent" },
-    { "name": "DestroyWindow", "id": "0x0202", "request_type": "DestroyWindowRequest", "response_type": "Empty" },
-    { "name": "SetTitle", "id": "0x0203", "request_type": "SetTitleRequest", "response_type": "Empty" },
-    { "name": "Damage", "id": "0x0204", "request_type": "DamageRequest", "response_type": "Empty" },
-    { "name": "Resize", "id": "0x0205", "request_type": "ResizeRequest", "response_type": "Empty" },
-    { "name": "Move", "id": "0x0206", "request_type": "MoveRequest", "response_type": "Empty" },
-    { "name": "CreateLayer", "id": "0x0207", "request_type": "CreateLayerRequest", "response_type": "WindowCreatedEvent" },
-    { "name": "CreatePopup", "id": "0x0208", "request_type": "CreatePopupRequest", "response_type": "WindowCreatedEvent" },
-    { "name": "ListWindows", "id": "0x0209", "request_type": "Empty", "response_type": "WindowListEvent" },
-    { "name": "SetWindowState", "id": "0x020A", "request_type": "SetWindowStateRequest", "response_type": "Empty" },
-    { "name": "RegisterSession", "id": "0x020B", "request_type": "RegisterSessionRequest", "response_type": "Empty" },
-    { "name": "SetActiveSession", "id": "0x020C", "request_type": "SetActiveSessionRequest", "response_type": "Empty" },
-    { "name": "GetActiveSession", "id": "0x020D", "request_type": "Empty", "response_type": "ActiveSessionEvent" },
-    { "name": "RegisterShortcut", "id": "0x020E", "request_type": "RegisterShortcutRequest", "response_type": "Empty" },
-    { "name": "UnregisterShortcut", "id": "0x020F", "request_type": "UnregisterShortcutRequest", "response_type": "Empty" }
+    {
+      "name": "CreateWindow",
+      "id": "0x0201",
+      "request_type": "CreateWindowRequest",
+      "response_type": "WindowCreatedEvent",
+      "description": "Create Window request.",
+      "request_description": "Request payload type: CreateWindowRequest.",
+      "response_description": "Response payload type: WindowCreatedEvent."
+    },
+    {
+      "name": "DestroyWindow",
+      "id": "0x0202",
+      "request_type": "DestroyWindowRequest",
+      "response_type": "Empty",
+      "description": "Destroy Window request.",
+      "request_description": "Request payload type: DestroyWindowRequest.",
+      "response_description": "No response payload is returned."
+    },
+    {
+      "name": "SetTitle",
+      "id": "0x0203",
+      "request_type": "SetTitleRequest",
+      "response_type": "Empty",
+      "description": "Set Title request.",
+      "request_description": "Request payload type: SetTitleRequest.",
+      "response_description": "No response payload is returned."
+    },
+    {
+      "name": "Damage",
+      "id": "0x0204",
+      "request_type": "DamageRequest",
+      "response_type": "Empty",
+      "description": "Damage request.",
+      "request_description": "Request payload type: DamageRequest.",
+      "response_description": "No response payload is returned."
+    },
+    {
+      "name": "Resize",
+      "id": "0x0205",
+      "request_type": "ResizeRequest",
+      "response_type": "Empty",
+      "description": "Resize request.",
+      "request_description": "Request payload type: ResizeRequest.",
+      "response_description": "No response payload is returned."
+    },
+    {
+      "name": "Move",
+      "id": "0x0206",
+      "request_type": "MoveRequest",
+      "response_type": "Empty",
+      "description": "Move request.",
+      "request_description": "Request payload type: MoveRequest.",
+      "response_description": "No response payload is returned."
+    },
+    {
+      "name": "CreateLayer",
+      "id": "0x0207",
+      "request_type": "CreateLayerRequest",
+      "response_type": "WindowCreatedEvent",
+      "description": "Create Layer request.",
+      "request_description": "Request payload type: CreateLayerRequest.",
+      "response_description": "Response payload type: WindowCreatedEvent."
+    },
+    {
+      "name": "CreatePopup",
+      "id": "0x0208",
+      "request_type": "CreatePopupRequest",
+      "response_type": "WindowCreatedEvent",
+      "description": "Create Popup request.",
+      "request_description": "Request payload type: CreatePopupRequest.",
+      "response_description": "Response payload type: WindowCreatedEvent."
+    },
+    {
+      "name": "ListWindows",
+      "id": "0x0209",
+      "request_type": "Empty",
+      "response_type": "WindowListEvent",
+      "description": "List Windows request.",
+      "request_description": "No input payload is required.",
+      "response_description": "Response payload type: WindowListEvent."
+    },
+    {
+      "name": "SetWindowState",
+      "id": "0x020A",
+      "request_type": "SetWindowStateRequest",
+      "response_type": "Empty",
+      "description": "Set Window State request.",
+      "request_description": "Request payload type: SetWindowStateRequest.",
+      "response_description": "No response payload is returned."
+    },
+    {
+      "name": "RegisterSession",
+      "id": "0x020B",
+      "request_type": "RegisterSessionRequest",
+      "response_type": "Empty",
+      "description": "Register Session request.",
+      "request_description": "Request payload type: RegisterSessionRequest.",
+      "response_description": "No response payload is returned."
+    },
+    {
+      "name": "SetActiveSession",
+      "id": "0x020C",
+      "request_type": "SetActiveSessionRequest",
+      "response_type": "Empty",
+      "description": "Set Active Session request.",
+      "request_description": "Request payload type: SetActiveSessionRequest.",
+      "response_description": "No response payload is returned."
+    },
+    {
+      "name": "GetActiveSession",
+      "id": "0x020D",
+      "request_type": "Empty",
+      "response_type": "ActiveSessionEvent",
+      "description": "Get Active Session request.",
+      "request_description": "No input payload is required.",
+      "response_description": "Response payload type: ActiveSessionEvent."
+    },
+    {
+      "name": "RegisterShortcut",
+      "id": "0x020E",
+      "request_type": "RegisterShortcutRequest",
+      "response_type": "Empty",
+      "description": "Register Shortcut request.",
+      "request_description": "Request payload type: RegisterShortcutRequest.",
+      "response_description": "No response payload is returned."
+    },
+    {
+      "name": "UnregisterShortcut",
+      "id": "0x020F",
+      "request_type": "UnregisterShortcutRequest",
+      "response_type": "Empty",
+      "description": "Unregister Shortcut request.",
+      "request_description": "Request payload type: UnregisterShortcutRequest.",
+      "response_description": "No response payload is returned."
+    }
   ],
   "events": [
-    { "name": "WindowCreated", "id": "0x0301", "request_type": "WindowCreatedEvent" },
-    { "name": "Configure", "id": "0x0302", "request_type": "ConfigureEvent" },
-    { "name": "Close", "id": "0x0303", "request_type": "CloseEvent" },
-    { "name": "PointerEnter", "id": "0x0304", "request_type": "PointerEnterEvent" },
-    { "name": "PointerLeave", "id": "0x0305", "request_type": "PointerLeaveEvent" },
-    { "name": "PointerMotion", "id": "0x0306", "request_type": "PointerMotionEvent" },
-    { "name": "PointerButton", "id": "0x0307", "request_type": "PointerButtonEvent" },
-    { "name": "Key", "id": "0x0308", "request_type": "KeyEvent" },
-    { "name": "Focus", "id": "0x0309", "request_type": "FocusEvent" },
-    { "name": "Moved", "id": "0x030A", "request_type": "MovedEvent" },
-    { "name": "WindowList", "id": "0x030B", "request_type": "WindowListEvent" },
-    { "name": "SessionActivated", "id": "0x030C", "request_type": "ActiveSessionEvent" },
-    { "name": "SessionSuspended", "id": "0x030D", "request_type": "ActiveSessionEvent" },
-    { "name": "SessionResumed", "id": "0x030E", "request_type": "ActiveSessionEvent" },
-    { "name": "Shortcut", "id": "0x030F", "request_type": "ShortcutEvent" }
+    {
+      "name": "WindowCreated",
+      "id": "0x0301",
+      "request_type": "WindowCreatedEvent",
+      "description": "Window Created event.",
+      "request_description": "Event payload type: WindowCreatedEvent."
+    },
+    {
+      "name": "Configure",
+      "id": "0x0302",
+      "request_type": "ConfigureEvent",
+      "description": "Configure event.",
+      "request_description": "Event payload type: ConfigureEvent."
+    },
+    {
+      "name": "Close",
+      "id": "0x0303",
+      "request_type": "CloseEvent",
+      "description": "Close event.",
+      "request_description": "Event payload type: CloseEvent."
+    },
+    {
+      "name": "PointerEnter",
+      "id": "0x0304",
+      "request_type": "PointerEnterEvent",
+      "description": "Pointer Enter event.",
+      "request_description": "Event payload type: PointerEnterEvent."
+    },
+    {
+      "name": "PointerLeave",
+      "id": "0x0305",
+      "request_type": "PointerLeaveEvent",
+      "description": "Pointer Leave event.",
+      "request_description": "Event payload type: PointerLeaveEvent."
+    },
+    {
+      "name": "PointerMotion",
+      "id": "0x0306",
+      "request_type": "PointerMotionEvent",
+      "description": "Pointer Motion event.",
+      "request_description": "Event payload type: PointerMotionEvent."
+    },
+    {
+      "name": "PointerButton",
+      "id": "0x0307",
+      "request_type": "PointerButtonEvent",
+      "description": "Pointer Button event.",
+      "request_description": "Event payload type: PointerButtonEvent."
+    },
+    {
+      "name": "Key",
+      "id": "0x0308",
+      "request_type": "KeyEvent",
+      "description": "Key event.",
+      "request_description": "Event payload type: KeyEvent."
+    },
+    {
+      "name": "Focus",
+      "id": "0x0309",
+      "request_type": "FocusEvent",
+      "description": "Focus event.",
+      "request_description": "Event payload type: FocusEvent."
+    },
+    {
+      "name": "Moved",
+      "id": "0x030A",
+      "request_type": "MovedEvent",
+      "description": "Moved event.",
+      "request_description": "Event payload type: MovedEvent."
+    },
+    {
+      "name": "WindowList",
+      "id": "0x030B",
+      "request_type": "WindowListEvent",
+      "description": "Window List event.",
+      "request_description": "Event payload type: WindowListEvent."
+    },
+    {
+      "name": "SessionActivated",
+      "id": "0x030C",
+      "request_type": "ActiveSessionEvent",
+      "description": "Session Activated event.",
+      "request_description": "Event payload type: ActiveSessionEvent."
+    },
+    {
+      "name": "SessionSuspended",
+      "id": "0x030D",
+      "request_type": "ActiveSessionEvent",
+      "description": "Session Suspended event.",
+      "request_description": "Event payload type: ActiveSessionEvent."
+    },
+    {
+      "name": "SessionResumed",
+      "id": "0x030E",
+      "request_type": "ActiveSessionEvent",
+      "description": "Session Resumed event.",
+      "request_description": "Event payload type: ActiveSessionEvent."
+    },
+    {
+      "name": "Shortcut",
+      "id": "0x030F",
+      "request_type": "ShortcutEvent",
+      "description": "Shortcut event.",
+      "request_description": "Event payload type: ShortcutEvent."
+    }
   ]
 }

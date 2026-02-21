@@ -2,58 +2,153 @@
   "service": {
     "name": "dev.avyos.uevent",
     "id": "0x00000030",
-    "package": "uevent"
+    "package": "uevent",
+    "description": "Kernel uevent bridge for device discovery and hotplug notifications."
   },
   "types": [
     {
       "name": "Empty",
-      "fields": []
+      "description": "Empty payload used where no fields are required."
     },
     {
       "name": "DeviceEvent",
+      "description": "Hotplug event payload reported by the uevent stream.",
       "fields": [
-        { "name": "Action", "type": "string" },
-        { "name": "Subsystem", "type": "string" },
-        { "name": "DevPath", "type": "string" },
-        { "name": "DevName", "type": "string" },
-        { "name": "DevType", "type": "string" },
-        { "name": "Major", "type": "int" },
-        { "name": "Minor", "type": "int" }
+        {
+          "name": "Action",
+          "type": "string"
+        },
+        {
+          "name": "Subsystem",
+          "type": "string"
+        },
+        {
+          "name": "DevPath",
+          "type": "string"
+        },
+        {
+          "name": "DevName",
+          "type": "string"
+        },
+        {
+          "name": "DevType",
+          "type": "string"
+        },
+        {
+          "name": "Major",
+          "type": "int"
+        },
+        {
+          "name": "Minor",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "DeviceInfo",
+      "description": "Snapshot of a device entry known to the system.",
       "fields": [
-        { "name": "DevPath", "type": "string" },
-        { "name": "DevName", "type": "string" },
-        { "name": "Subsystem", "type": "string" },
-        { "name": "DevType", "type": "string" },
-        { "name": "Driver", "type": "string" },
-        { "name": "Major", "type": "int" },
-        { "name": "Minor", "type": "int" }
+        {
+          "name": "DevPath",
+          "type": "string"
+        },
+        {
+          "name": "DevName",
+          "type": "string"
+        },
+        {
+          "name": "Subsystem",
+          "type": "string"
+        },
+        {
+          "name": "DevType",
+          "type": "string"
+        },
+        {
+          "name": "Driver",
+          "type": "string"
+        },
+        {
+          "name": "Major",
+          "type": "int"
+        },
+        {
+          "name": "Minor",
+          "type": "int"
+        }
       ]
     },
     {
       "name": "DeviceList",
+      "description": "Collection of discovered device entries.",
       "fields": [
-        { "name": "Devices", "type": "[]DeviceInfo" }
+        {
+          "name": "Devices",
+          "type": "[]DeviceInfo"
+        }
       ]
     },
     {
       "name": "TriggerRequest",
+      "description": "Request payload to re-trigger scan/events for a subsystem.",
       "fields": [
-        { "name": "Subsystem", "type": "string" }
+        {
+          "name": "Subsystem",
+          "type": "string"
+        }
       ]
     }
   ],
   "requests": [
-    { "name": "ListDevices", "id": "0x0201", "request_type": "Empty", "response_type": "DeviceList" },
-    { "name": "GetDevice", "id": "0x0202", "request_type": "DeviceInfo", "response_type": "DeviceInfo" },
-    { "name": "Trigger", "id": "0x0203", "request_type": "TriggerRequest", "response_type": "Empty" }
+    {
+      "name": "ListDevices",
+      "id": "0x0201",
+      "request_type": "Empty",
+      "response_type": "DeviceList",
+      "description": "List currently known devices.",
+      "request_description": "No input is required.",
+      "response_description": "Returns all discovered devices."
+    },
+    {
+      "name": "GetDevice",
+      "id": "0x0202",
+      "request_type": "DeviceInfo",
+      "response_type": "DeviceInfo",
+      "description": "Query one device by identity fields in the request payload.",
+      "request_description": "Provide identifying fields to match a device.",
+      "response_description": "Returns the matched device information."
+    },
+    {
+      "name": "Trigger",
+      "id": "0x0203",
+      "request_type": "TriggerRequest",
+      "response_type": "Empty",
+      "description": "Trigger a uevent refresh for a subsystem.",
+      "request_description": "Optional subsystem name to limit the trigger scope.",
+      "response_description": "No payload is returned."
+    }
   ],
   "events": [
-    { "name": "DeviceAdded", "id": "0x0301", "request_type": "DeviceEvent" },
-    { "name": "DeviceRemoved", "id": "0x0302", "request_type": "DeviceEvent" },
-    { "name": "DeviceChanged", "id": "0x0303", "request_type": "DeviceEvent" }
+    {
+      "name": "DeviceAdded",
+      "id": "0x0301",
+      "request_type": "DeviceEvent",
+      "description": "Published when a device is added.",
+      "request_description": "Contains the added device metadata."
+    },
+    {
+      "name": "DeviceRemoved",
+      "id": "0x0302",
+      "request_type": "DeviceEvent",
+      "description": "Published when a device is removed.",
+      "request_description": "Contains the removed device metadata."
+    },
+    {
+      "name": "DeviceChanged",
+      "id": "0x0303",
+      "request_type": "DeviceEvent",
+      "description": "Published when a device property changes.",
+      "request_description": "Contains updated device metadata."
+    }
   ]
 }
