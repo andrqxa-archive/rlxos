@@ -180,6 +180,11 @@ type pageData struct {
 	BodyHTML    template.HTML
 }
 
+type markdownSection struct {
+	Title   string
+	Content string
+}
+
 var (
 	titleTagPattern       = regexp.MustCompile(`(?is)<title>.*?</title>`)
 	descriptionMetaTag    = regexp.MustCompile(`(?is)<meta[^>]*name=["']description["'][^>]*>`)
@@ -353,8 +358,17 @@ const docgenStyles = `
 }
 
 .doc-content {
-  padding: clamp(1.2rem, 2vw, 2rem);
+  padding: 0;
   min-height: 80vh;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.doc-content.card {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .doc-content > *:first-child {
@@ -493,6 +507,16 @@ const docgenStyles = `
     background: rgba(17, 182, 232, 0.12);
   }
 
+  .doc-ref-card,
+  .doc-section-card,
+  .api-io-card {
+    background: rgba(232, 239, 255, 0.06);
+  }
+
+  .api-item-card {
+    background: rgba(17, 182, 232, 0.09);
+  }
+
   .doc-ref-table th {
     background: rgba(17, 182, 232, 0.14);
   }
@@ -582,14 +606,16 @@ const docgenStyles = `
 }
 
 .doc-ref-shell {
-  display: block;
+  display: grid;
+  gap: 1rem;
 }
 
 .doc-ref-hero {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1rem 1.1rem;
-  background: rgba(13, 99, 243, 0.05);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
 }
 
 .doc-ref-hero h1 {
@@ -613,31 +639,19 @@ const docgenStyles = `
 .doc-ref-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1.1rem;
-  margin-top: 1.05rem;
+  gap: 0.95rem;
 }
 
 .doc-ref-card {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-  margin-top: 1.15rem;
-}
-
-.doc-ref-shell > .doc-ref-card {
-  padding-top: 0.95rem;
-  border-top: 1px solid var(--border);
-}
-
-.doc-ref-grid .doc-ref-card {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 0.85rem 0.95rem;
+  box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
 }
 
 .doc-ref-card h2 {
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.62rem;
   font-size: 1.05rem;
   font-family: var(--display);
 }
@@ -740,13 +754,87 @@ const docgenStyles = `
 }
 
 .doc-ref-callout {
-  margin-top: 1rem;
+  margin: 0;
   border: 1px solid var(--border);
   border-left: 4px solid rgba(13, 99, 243, 0.44);
   border-radius: 10px;
   padding: 0.68rem 0.78rem;
   background: rgba(13, 99, 243, 0.08);
   color: var(--text);
+}
+
+.doc-card-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.doc-section-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 0.9rem 1rem;
+  box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
+}
+
+.doc-section-card > h2 {
+  margin: 0 0 0.55rem;
+  font-family: var(--display);
+  font-size: 1.15rem;
+}
+
+.api-card-list {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.api-item-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0.75rem 0.8rem;
+  box-shadow: 0 6px 18px rgba(16, 24, 40, 0.07);
+}
+
+.api-item-card > h3,
+.api-item-head h3 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.02rem;
+}
+
+.api-item-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.api-item-id {
+  margin: 0;
+}
+
+.api-io-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.api-io-card {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 0.65rem 0.72rem;
+}
+
+.api-io-card h4 {
+  margin: 0 0 0.35rem;
+  font-family: var(--display);
+  font-size: 0.98rem;
+}
+
+.api-io-card p {
+  margin: 0.4rem 0;
 }
 
 @media (max-width: 1080px) {
@@ -831,7 +919,7 @@ func run(cfg config) error {
 		}
 	}
 
-	appDocs, err := renderProgramDocs(cfg.root, "apps", []string{"doc.go", "docs.go"})
+	appDocs, err := renderAppDocs(cfg.root)
 	if err != nil {
 		return err
 	}
@@ -1127,10 +1215,6 @@ func renderProgramDocs(root, section string, preferredDocFiles []string) ([]apiD
 		if readErr != nil {
 			fmt.Fprintf(os.Stderr, "docgen: warning: failed to read docs for %s: %v\n", relDir, readErr)
 		}
-		previewPath := ""
-		if section == "apps" {
-			previewPath = appPreviewPath(root, relDir)
-		}
 
 		baseName := "api-" + slugify(relDir)
 		htmlName := uniqueHTMLName(baseName, used)
@@ -1139,7 +1223,55 @@ func renderProgramDocs(root, section string, preferredDocFiles []string) ([]apiD
 			Title:      title,
 			ShortPath:  relDir,
 			Section:    section,
-			BodyHTML:   renderProgramReferenceBody(section, title, relDir, docText, sourceFile, previewPath),
+			BodyHTML:   renderProgramReferenceBody(section, title, relDir, docText, sourceFile),
+			HTMLFile:   htmlName,
+		})
+	}
+
+	return out, nil
+}
+
+func renderAppDocs(root string) ([]apiDoc, error) {
+	dirs, err := collectMainProgramDirs(root, "apps")
+	if err != nil {
+		return nil, err
+	}
+
+	used := map[string]int{}
+	out := make([]apiDoc, 0, len(dirs))
+	for _, relDir := range dirs {
+		title := filepath.Base(relDir)
+		docText, sourceFile, readErr := readProgramDoc(root, relDir, []string{"docs.go", "doc.go"})
+		if readErr != nil {
+			fmt.Fprintf(os.Stderr, "docgen: warning: failed to read docs for %s: %v\n", relDir, readErr)
+		}
+
+		previewPath := appPreviewPath(root, relDir)
+		usage := ""
+		captureErr := ""
+		usesFlags, detectErr := commandUsesFlagPackage(filepath.Join(root, relDir))
+		if detectErr != nil {
+			fmt.Fprintf(os.Stderr, "docgen: warning: failed to inspect app flags for %s: %v\n", relDir, detectErr)
+			usesFlags = true
+		}
+		if usesFlags {
+			captured, usageErr := commandUsageText(root, relDir)
+			if usageErr != nil {
+				fmt.Fprintf(os.Stderr, "docgen: warning: failed to capture app help for %s: %v\n", relDir, usageErr)
+				captureErr = usageErr.Error()
+			}
+			usage = captured
+		}
+		help := parseCommandHelp(strings.TrimSpace(usage))
+
+		baseName := "api-" + slugify(relDir)
+		htmlName := uniqueHTMLName(baseName, used)
+		out = append(out, apiDoc{
+			ImportPath: relDir,
+			Title:      title,
+			ShortPath:  relDir,
+			Section:    "apps",
+			BodyHTML:   renderAppReferenceBody(title, relDir, docText, sourceFile, previewPath, help, usesFlags, captureErr),
 			HTMLFile:   htmlName,
 		})
 	}
@@ -1681,11 +1813,7 @@ func parseCommandFlags(lines []string) []commandHelpFlag {
 	return out
 }
 
-func renderProgramReferenceBody(section, title, relPath, docText, sourceFile, previewPath string) template.HTML {
-	if section == "apps" {
-		return renderAppReferenceBody(title, relPath, docText, sourceFile, previewPath)
-	}
-
+func renderProgramReferenceBody(section, title, relPath, docText, sourceFile string) template.HTML {
 	var md strings.Builder
 	kind := "Program"
 	switch section {
@@ -1714,16 +1842,6 @@ func renderProgramReferenceBody(section, title, relPath, docText, sourceFile, pr
 		md.WriteString("| Doc Source | " + markdownInlineCode(sourceFile) + " |\n")
 	} else {
 		md.WriteString("| Doc Source | package comments |\n")
-	}
-	if previewPath != "" {
-		md.WriteString("| Preview | available |\n")
-	} else {
-		md.WriteString("| Preview | not provided |\n")
-	}
-
-	if previewPath != "" {
-		md.WriteString("\n## Preview\n\n")
-		md.WriteString("![" + markdownCell(title) + " preview](" + previewPath + ")\n\n")
 	}
 
 	return renderSectionMarkdownBody(title, relPath, md.String())
@@ -1900,7 +2018,7 @@ func renderCommandReferenceBody(title, relPath, docText, sourceFile string, help
 	return template.HTML(b.String())
 }
 
-func renderAppReferenceBody(title, relPath, docText, sourceFile, previewPath string) template.HTML {
+func renderAppReferenceBody(title, relPath, docText, sourceFile, previewPath string, help commandHelpDoc, usesFlags bool, captureErr string) template.HTML {
 	var b strings.Builder
 	docText = strings.TrimSpace(docText)
 	if docText == "" {
@@ -1953,11 +2071,66 @@ func renderAppReferenceBody(title, relPath, docText, sourceFile, previewPath str
 	b.WriteString(`</section>`)
 
 	b.WriteString(`<section class="doc-ref-card">`)
-	b.WriteString(`<h2>Overview</h2>`)
+	b.WriteString(`<h2>Description</h2>`)
 	b.WriteString(`<div class="doc-markdown">`)
 	b.WriteString(string(renderMarkdown(docText)))
 	b.WriteString(`</div>`)
 	b.WriteString(`</section>`)
+
+	b.WriteString(`<section class="doc-ref-card">`)
+	b.WriteString(`<h2>Flags</h2>`)
+	if len(help.Flags) > 0 {
+		b.WriteString(`<table class="doc-ref-table">`)
+		b.WriteString(`<thead><tr><th>Flag</th><th>Type</th><th>Description</th></tr></thead><tbody>`)
+		for _, option := range help.Flags {
+			flagName := strings.TrimSpace(option.Name)
+			if flagName == "" {
+				continue
+			}
+			flagType := strings.TrimSpace(option.Type)
+			if flagType == "" {
+				flagType = "-"
+			}
+			desc := strings.TrimSpace(option.Description)
+			if desc == "" {
+				desc = "-"
+			}
+			b.WriteString(`<tr><td><code>` + template.HTMLEscapeString(flagName) + `</code></td><td><code>` + template.HTMLEscapeString(flagType) + `</code></td><td>` + template.HTMLEscapeString(desc) + `</td></tr>`)
+		}
+		b.WriteString(`</tbody></table>`)
+	} else {
+		msg := "This app does not expose `flag.Usage` output."
+		if usesFlags {
+			msg = "No flags documented by app help output."
+		}
+		b.WriteString(`<p class="doc-ref-empty">` + template.HTMLEscapeString(msg) + `</p>`)
+	}
+	b.WriteString(`</section>`)
+
+	b.WriteString(`<section class="doc-ref-card">`)
+	b.WriteString(`<h2>Subcommands</h2>`)
+	if countCommandRows(help.Subcommands) > 0 {
+		b.WriteString(`<table class="doc-ref-table">`)
+		b.WriteString(`<thead><tr><th>Name</th><th>Description</th></tr></thead><tbody>`)
+		for _, row := range help.Subcommands {
+			if strings.TrimSpace(row.Name) == "" || row.Name == "(none)" {
+				continue
+			}
+			desc := strings.TrimSpace(row.Description)
+			if desc == "" {
+				desc = "-"
+			}
+			b.WriteString(`<tr><td><code>` + template.HTMLEscapeString(row.Name) + `</code></td><td>` + template.HTMLEscapeString(desc) + `</td></tr>`)
+		}
+		b.WriteString(`</tbody></table>`)
+	} else {
+		b.WriteString(`<p class="doc-ref-empty">No subcommands.</p>`)
+	}
+	b.WriteString(`</section>`)
+
+	if captureErr != "" {
+		b.WriteString(`<p class="doc-ref-callout">Help capture warning: ` + template.HTMLEscapeString(captureErr) + `</p>`)
+	}
 
 	b.WriteString(`</section>`)
 	return template.HTML(b.String())
@@ -1989,6 +2162,86 @@ func countCommandRows(rows []commandHelpRow) int {
 	return count
 }
 
+func renderMarkdownCards(source string) template.HTML {
+	sections := splitMarkdownSections(source)
+	if len(sections) == 0 {
+		return template.HTML(`<section class="doc-card-stack"><section class="doc-section-card"><div class="doc-markdown"><p>No content.</p></div></section></section>`)
+	}
+
+	var b strings.Builder
+	b.WriteString(`<section class="doc-card-stack">`)
+	for _, section := range sections {
+		b.WriteString(`<section class="doc-section-card">`)
+		if strings.TrimSpace(section.Title) != "" {
+			b.WriteString(`<h2>` + template.HTMLEscapeString(section.Title) + `</h2>`)
+		}
+		b.WriteString(`<div class="doc-markdown">`)
+		b.WriteString(string(renderMarkdown(section.Content)))
+		b.WriteString(`</div>`)
+		b.WriteString(`</section>`)
+	}
+	b.WriteString(`</section>`)
+	return template.HTML(b.String())
+}
+
+func splitMarkdownSections(source string) []markdownSection {
+	source = strings.ReplaceAll(source, "\r\n", "\n")
+	lines := strings.Split(source, "\n")
+
+	currentTitle := "Overview"
+	body := make([]string, 0, 32)
+	out := make([]markdownSection, 0, 8)
+	seenH2 := false
+
+	flush := func() {
+		content := strings.TrimSpace(strings.Join(body, "\n"))
+		if content == "" {
+			body = body[:0]
+			return
+		}
+		out = append(out, markdownSection{
+			Title:   strings.TrimSpace(currentTitle),
+			Content: content,
+		})
+		body = body[:0]
+	}
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "# ") {
+			// Top heading is already rendered separately by docgen templates.
+			continue
+		}
+		if strings.HasPrefix(trimmed, "## ") {
+			flush()
+			currentTitle = strings.TrimSpace(strings.TrimPrefix(trimmed, "## "))
+			if currentTitle == "" {
+				currentTitle = "Section"
+			}
+			seenH2 = true
+			continue
+		}
+		body = append(body, line)
+	}
+	flush()
+
+	if len(out) == 0 {
+		content := strings.TrimSpace(source)
+		if content == "" {
+			return nil
+		}
+		return []markdownSection{{
+			Title:   "Overview",
+			Content: content,
+		}}
+	}
+
+	if !seenH2 && len(out) == 1 && strings.TrimSpace(out[0].Title) == "" {
+		out[0].Title = "Overview"
+	}
+	return out
+}
+
 func renderSectionMarkdownBody(title, relPath, markdown string) template.HTML {
 	var b strings.Builder
 	b.WriteString("<h1>" + template.HTMLEscapeString(title) + "</h1>\n")
@@ -2005,90 +2258,149 @@ func renderAPIJSONBody(relPath string, spec apiSchema) template.HTML {
 		title = filepath.Base(filepath.Dir(relPath))
 	}
 
-	var md strings.Builder
-	if description := strings.TrimSpace(spec.Service.Description); description != "" {
-		md.WriteString(description)
-		md.WriteString("\n\n")
+	var b strings.Builder
+	serviceDescription := strings.TrimSpace(spec.Service.Description)
+	lead := serviceDescription
+	if lead == "" {
+		lead = "API reference for " + title
 	}
 
-	md.WriteString("## Service\n\n")
-	md.WriteString("| Field | Value |\n")
-	md.WriteString("| --- | --- |\n")
-	md.WriteString("| Name | " + markdownInlineCode(spec.Service.Name) + " |\n")
-	md.WriteString("| Package | " + markdownInlineCode(spec.Service.Package) + " |\n")
-	md.WriteString("| Service ID | " + markdownInlineCode(string(spec.Service.ID)) + " |\n")
+	b.WriteString(`<section class="doc-ref-shell doc-api-shell">`)
+	b.WriteString(`<header class="doc-ref-hero">`)
+	b.WriteString(`<h1>` + template.HTMLEscapeString(title) + `</h1>`)
+	b.WriteString(`<p class="muted mono doc-path">` + template.HTMLEscapeString(relPath) + `</p>`)
+	b.WriteString(`<p class="doc-ref-lead">` + template.HTMLEscapeString(lead) + `</p>`)
+	b.WriteString(`</header>`)
+
+	b.WriteString(`<section class="doc-section-card">`)
+	b.WriteString(`<h2>Service</h2>`)
+	b.WriteString(`<table class="doc-ref-table">`)
+	b.WriteString(`<thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>`)
+	b.WriteString(`<tr><td>Name</td><td><code>` + template.HTMLEscapeString(spec.Service.Name) + `</code></td></tr>`)
+	b.WriteString(`<tr><td>Package</td><td><code>` + template.HTMLEscapeString(spec.Service.Package) + `</code></td></tr>`)
+	b.WriteString(`<tr><td>Service ID</td><td><code>` + template.HTMLEscapeString(string(spec.Service.ID)) + `</code></td></tr>`)
 	if len(spec.Imports) > 0 {
-		md.WriteString("| Imports | " + markdownCell(strings.Join(spec.Imports, ", ")) + " |\n")
+		b.WriteString(`<tr><td>Imports</td><td><code>` + template.HTMLEscapeString(strings.Join(spec.Imports, ", ")) + `</code></td></tr>`)
 	}
+	b.WriteString(`</tbody></table>`)
+	if serviceDescription != "" {
+		b.WriteString(`<div class="doc-markdown">`)
+		b.WriteString(string(renderMarkdown(serviceDescription)))
+		b.WriteString(`</div>`)
+	}
+	b.WriteString(`</section>`)
 
 	if len(spec.Types) > 0 {
-		md.WriteString("\n## Types\n\n")
+		b.WriteString(`<section class="doc-section-card">`)
+		b.WriteString(`<h2>Types</h2>`)
+		b.WriteString(`<div class="api-card-list">`)
 		for _, t := range spec.Types {
-			md.WriteString("### " + markdownCell(t.Name) + "\n\n")
-			if description := strings.TrimSpace(t.Description); description != "" {
-				md.WriteString(description + "\n\n")
+			b.WriteString(`<article class="api-item-card">`)
+			b.WriteString(`<h3>` + template.HTMLEscapeString(t.Name) + `</h3>`)
+			if desc := strings.TrimSpace(t.Description); desc != "" {
+				b.WriteString(`<div class="doc-markdown">` + string(renderMarkdown(desc)) + `</div>`)
 			}
 			if len(t.Fields) == 0 {
-				md.WriteString("_No fields._\n\n")
-				continue
-			}
-			md.WriteString("| Field | Type | Description |\n")
-			md.WriteString("| --- | --- | --- |\n")
-			for _, field := range t.Fields {
-				description := strings.TrimSpace(field.Description)
-				if description == "" {
-					description = "-"
+				b.WriteString(`<p class="doc-ref-empty">No fields.</p>`)
+			} else {
+				b.WriteString(`<table class="doc-ref-table">`)
+				b.WriteString(`<thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody>`)
+				for _, field := range t.Fields {
+					desc := strings.TrimSpace(field.Description)
+					if desc == "" {
+						desc = "-"
+					}
+					b.WriteString(`<tr><td><code>` + template.HTMLEscapeString(field.Name) + `</code></td><td><code>` + template.HTMLEscapeString(field.Type) + `</code></td><td>` + template.HTMLEscapeString(desc) + `</td></tr>`)
 				}
-				md.WriteString("| " + markdownCell(field.Name) + " | " + markdownInlineCode(field.Type) + " | " + markdownCell(description) + " |\n")
+				b.WriteString(`</tbody></table>`)
 			}
-			md.WriteString("\n")
+			b.WriteString(`</article>`)
 		}
+		b.WriteString(`</div>`)
+		b.WriteString(`</section>`)
 	}
 
 	if len(spec.Requests) > 0 {
-		md.WriteString("## Requests\n\n")
+		b.WriteString(`<section class="doc-section-card">`)
+		b.WriteString(`<h2>Requests</h2>`)
+		b.WriteString(`<div class="api-card-list">`)
 		for _, req := range spec.Requests {
-			md.WriteString("### " + markdownCell(req.Name) + "\n\n")
-			if description := strings.TrimSpace(req.Description); description != "" {
-				md.WriteString(description + "\n\n")
+			b.WriteString(`<article class="api-item-card">`)
+			b.WriteString(`<header class="api-item-head">`)
+			b.WriteString(`<h3>` + template.HTMLEscapeString(req.Name) + `</h3>`)
+			b.WriteString(`<p class="api-item-id"><code>` + template.HTMLEscapeString(string(req.ID)) + `</code></p>`)
+			b.WriteString(`</header>`)
+			if desc := strings.TrimSpace(req.Description); desc != "" {
+				b.WriteString(`<div class="doc-markdown">` + string(renderMarkdown(desc)) + `</div>`)
 			}
-			md.WriteString("| Field | Value |\n")
-			md.WriteString("| --- | --- |\n")
-			md.WriteString("| ID | " + markdownInlineCode(string(req.ID)) + " |\n")
-			md.WriteString("| Request Type | " + markdownInlineCode(methodPayloadType(req)) + " |\n")
+			b.WriteString(`<div class="api-io-grid">`)
+			b.WriteString(`<section class="api-io-card">`)
+			b.WriteString(`<h4>Input</h4>`)
+			b.WriteString(`<p><strong>Type:</strong> <code>` + template.HTMLEscapeString(methodPayloadType(req)) + `</code></p>`)
+			reqDesc := strings.TrimSpace(req.RequestDescription)
+			if reqDesc == "" {
+				reqDesc = "No input description."
+			}
+			b.WriteString(`<div class="doc-markdown">` + string(renderMarkdown(reqDesc)) + `</div>`)
+			b.WriteString(`</section>`)
+			b.WriteString(`<section class="api-io-card">`)
+			b.WriteString(`<h4>Output</h4>`)
+			respType := strings.TrimSpace(req.ResponseType)
 			if req.OneWay {
-				md.WriteString("| Mode | one-way |\n")
-			} else {
-				md.WriteString("| Mode | request-response |\n")
+				respType = "none (one-way)"
 			}
-			md.WriteString("| Response Type | " + markdownInlineCode(req.ResponseType) + " |\n")
-			if requestDesc := strings.TrimSpace(req.RequestDescription); requestDesc != "" {
-				md.WriteString("\n" + requestDesc + "\n\n")
+			if respType == "" {
+				respType = "none"
 			}
-			if responseDesc := strings.TrimSpace(req.ResponseDescription); responseDesc != "" {
-				md.WriteString(responseDesc + "\n\n")
+			b.WriteString(`<p><strong>Type:</strong> <code>` + template.HTMLEscapeString(respType) + `</code></p>`)
+			respDesc := strings.TrimSpace(req.ResponseDescription)
+			if req.OneWay && respDesc == "" {
+				respDesc = "No response payload for one-way request."
 			}
+			if !req.OneWay && respDesc == "" {
+				respDesc = "No output description."
+			}
+			b.WriteString(`<div class="doc-markdown">` + string(renderMarkdown(respDesc)) + `</div>`)
+			b.WriteString(`</section>`)
+			b.WriteString(`</div>`)
+			b.WriteString(`</article>`)
 		}
+		b.WriteString(`</div>`)
+		b.WriteString(`</section>`)
 	}
 
 	if len(spec.Events) > 0 {
-		md.WriteString("## Events\n\n")
+		b.WriteString(`<section class="doc-section-card">`)
+		b.WriteString(`<h2>Events</h2>`)
+		b.WriteString(`<div class="api-card-list">`)
 		for _, ev := range spec.Events {
-			md.WriteString("### " + markdownCell(ev.Name) + "\n\n")
-			if description := strings.TrimSpace(ev.Description); description != "" {
-				md.WriteString(description + "\n\n")
+			b.WriteString(`<article class="api-item-card">`)
+			b.WriteString(`<header class="api-item-head">`)
+			b.WriteString(`<h3>` + template.HTMLEscapeString(ev.Name) + `</h3>`)
+			b.WriteString(`<p class="api-item-id"><code>` + template.HTMLEscapeString(string(ev.ID)) + `</code></p>`)
+			b.WriteString(`</header>`)
+			if desc := strings.TrimSpace(ev.Description); desc != "" {
+				b.WriteString(`<div class="doc-markdown">` + string(renderMarkdown(desc)) + `</div>`)
 			}
-			md.WriteString("| Field | Value |\n")
-			md.WriteString("| --- | --- |\n")
-			md.WriteString("| ID | " + markdownInlineCode(string(ev.ID)) + " |\n")
-			md.WriteString("| Payload Type | " + markdownInlineCode(methodPayloadType(ev)) + " |\n")
-			if payloadDesc := strings.TrimSpace(ev.RequestDescription); payloadDesc != "" {
-				md.WriteString("\n" + payloadDesc + "\n\n")
+			b.WriteString(`<div class="api-io-grid">`)
+			b.WriteString(`<section class="api-io-card">`)
+			b.WriteString(`<h4>Payload</h4>`)
+			b.WriteString(`<p><strong>Type:</strong> <code>` + template.HTMLEscapeString(methodPayloadType(ev)) + `</code></p>`)
+			payloadDesc := strings.TrimSpace(ev.RequestDescription)
+			if payloadDesc == "" {
+				payloadDesc = "No payload description."
 			}
+			b.WriteString(`<div class="doc-markdown">` + string(renderMarkdown(payloadDesc)) + `</div>`)
+			b.WriteString(`</section>`)
+			b.WriteString(`</div>`)
+			b.WriteString(`</article>`)
 		}
+		b.WriteString(`</div>`)
+		b.WriteString(`</section>`)
 	}
 
-	return renderSectionMarkdownBody(title, relPath, md.String())
+	b.WriteString(`</section>`)
+	return template.HTML(b.String())
 }
 
 func methodPayloadType(method apiSchemaMethod) string {
@@ -2118,14 +2430,10 @@ func markdownCell(value string) string {
 }
 
 func renderProjectBody(title, relPath, source string) template.HTML {
-	markdownHTML := renderMarkdown(source)
-
 	var b strings.Builder
 	b.WriteString("<h1>" + template.HTMLEscapeString(title) + "</h1>\n")
 	b.WriteString(`<p class="muted mono doc-path">` + template.HTMLEscapeString(relPath) + "</p>\n")
-	b.WriteString(`<section class="doc-markdown">`)
-	b.WriteString(string(markdownHTML))
-	b.WriteString("</section>")
+	b.WriteString(string(renderMarkdownCards(source)))
 	return template.HTML(b.String())
 }
 
@@ -2316,9 +2624,7 @@ func renderProjectIndexBody(projectDocs []markdownDoc) template.HTML {
 func renderReadmeIndexBody(relPath, source string) template.HTML {
 	var b strings.Builder
 	b.WriteString(`<p class="muted mono doc-path">` + template.HTMLEscapeString(relPath) + "</p>\n")
-	b.WriteString(`<section class="doc-markdown">`)
-	b.WriteString(string(renderMarkdown(source)))
-	b.WriteString("</section>")
+	b.WriteString(string(renderMarkdownCards(source)))
 	return template.HTML(b.String())
 }
 
