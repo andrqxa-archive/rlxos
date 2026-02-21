@@ -28,6 +28,8 @@ const (
 	taskbarHeight    = 54
 	taskbarExclusive = taskbarHeight + 2
 	defaultDockPos   = "bottom"
+	keyDockPosition  = "/dev/rlxos/dock/position"
+	legacyDockKey    = "dock.position"
 
 	startTileSize = 92
 	startIconSize = 48
@@ -943,7 +945,7 @@ func run() error {
 func resolveDockPosition(flagValue string) string {
 	position := strings.ToLower(strings.TrimSpace(flagValue))
 	if !flagProvided("position") {
-		if configured := loadSetting("dock.position"); configured != "" {
+		if configured, ok := loadSettingCompat(keyDockPosition, legacyDockKey); ok {
 			position = strings.ToLower(strings.TrimSpace(configured))
 		}
 	}
@@ -982,16 +984,16 @@ func watchDockSettings() {
 		})
 
 		client.OnChanged(func(ev settingsapi.ChangedEvent) {
-			if ev.Key != "dock.position" {
+			if ev.Key != keyDockPosition && ev.Key != legacyDockKey {
 				return
 			}
 			position := strings.ToLower(strings.TrimSpace(ev.Value))
 			if position != "top" && position != "bottom" {
-				log.Warn("ignoring invalid dock.position setting %q", ev.Value)
+				log.Warn("ignoring invalid %s setting %q", ev.Key, ev.Value)
 				return
 			}
 			if err := db.ReconfigureLayer(layerAnchorForPosition(position), taskbarExclusive); err != nil {
-				log.Warn("failed to apply dock.position %q: %v", position, err)
+				log.Warn("failed to apply %s %q: %v", ev.Key, position, err)
 			}
 		})
 
@@ -1001,20 +1003,38 @@ func watchDockSettings() {
 	}
 }
 
-func loadSetting(key string) string {
+func loadSettingCompat(primary string, fallback ...string) (string, bool) {
 	for range 6 {
 		client, err := settingsapi.Connect()
 		if err == nil {
-			value, err := client.Get(key)
-			_ = client.Close()
-			if err == nil {
-				return strings.TrimSpace(value)
+			if value, ok := getSetting(client, primary); ok {
+				_ = client.Close()
+				return strings.TrimSpace(value), true
 			}
-			return ""
+			for _, key := range fallback {
+				if value, ok := getSetting(client, key); ok {
+					_ = client.Close()
+					return strings.TrimSpace(value), true
+				}
+			}
+			_ = client.Close()
+			return "", false
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	return ""
+	return "", false
+}
+
+func getSetting(client *settingsapi.Client, key string) (string, bool) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", false
+	}
+	value, err := client.Get(key)
+	if err != nil {
+		return "", false
+	}
+	return value, true
 }
 
 func flagProvided(name string) bool {

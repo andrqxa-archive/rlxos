@@ -82,6 +82,15 @@ func (c *Client) OnChanged(fn func(ChangedEvent)) {
 	})
 }
 
+func (c *Client) OnBranchChanged(prefix string, fn func(ChangedEvent)) {
+	prefix = strings.TrimSpace(prefix)
+	c.OnChanged(func(ev ChangedEvent) {
+		if prefix == "" || strings.HasPrefix(ev.Key, prefix) {
+			fn(ev)
+		}
+	})
+}
+
 func (c *Client) OnDisconnect(fn func()) {
 	c.client.OnDisconnect(fn)
 }

@@ -1,212 +1,106 @@
 Page {
-    spacing: 8
-    padding: "10"
-    overflow: "visible"
+    spacing: 10
+    padding: "12"
+    background: "transparent"
+    overflow: "hidden"
 
     VBox {
-        spacing: 8
+        spacing: 10
         expand: true
 
         HBox {
-            spacing: 10
+            spacing: 12
             expand: true
 
             Card {
-                minWidth: 220
-                maxWidth: 260
-                padding: "10"
+                id: SidebarCard
+                minWidth: 250
+                maxWidth: 280
+                padding: "12"
                 expand: false
 
                 VBox {
-                    spacing: 6
+                    spacing: 8
                     expand: true
 
-                    Subheading {
-                        text: "Sections"
+                    Heading {
+                        text: "Settings"
                     }
 
-                    GhostButton {
-                        text: "Desktop"
-                        onClicked: ShowDesktop
-                        minHeight: 36
-                        expand: false
+                    Paragraph {
+                        text: "Configure system preferences and app behavior."
                     }
 
-                    GhostButton {
-                        text: "Dock"
-                        onClicked: ShowDock
-                        minHeight: 36
-                        expand: false
+                    ListView {
+                        id: PageList
+                        items: "Appearance|About System"
+                        selected: 0
+                        rowHeight: 36
+                        onChanged: SelectPage
+                        expand: true
                     }
 
-                    Spacer {}
+                    Paragraph {
+                        text: "Settings tree root: /dev/rlxos"
+                    }
                 }
             }
 
             VBox {
+                id: PageView
                 spacing: 10
                 expand: true
+                background: "transparent"
 
-                Card {
-                    id: DesktopCard
-                    padding: "12"
-                    expand: true
-                    overflow: "auto"
-                    scrollStep: 32
-
-                    VBox {
-                        spacing: 10
-                        expand: true
-
-                        Heading {
-                            text: "Desktop"
-                        }
-
-                        Paragraph {
-                            text: "Configure wallpaper and background styling."
-                            textColor: "theme.color.text.secondary"
-                        }
-
-                        Label {
-                            text: "Selected Wallpaper"
-                        }
-
-                        Label {
-                            id: SelectedWallpaper
-                            text: "(none)"
-                            textColor: "theme.color.text.secondary"
-                            clipText: true
-                            expand: false
-                        }
-
-                        Label {
-                            text: "Wallpapers"
-                        }
-
-                        Flow {
-                            id: WallpaperFlow
-                            expand: true
-                            rowSpacing: 8
-                            colSpacing: 8
-                            overflow: "auto"
-                            scrollStep: 32
-                            minHeight: 160
-                        }
-
-                        HSeparator {}
-
-                        Label {
-                            text: "Background Color"
-                        }
-
-                        Label {
-                            id: SelectedColor
-                            text: "Default theme"
-                            textColor: "theme.color.text.secondary"
-                            expand: false
-                        }
-
-                        Flow {
-                            id: ColorFlow
-                            expand: false
-                            rowSpacing: 6
-                            colSpacing: 6
-                            minHeight: 40
-                        }
-
-                        TextInput {
-                            id: CustomColorInput
-                            placeholder: "#11161e"
-                            onSubmitted: BackgroundColorSubmitted
-                            expand: true
-                        }
-
-                        HBox {
-                            spacing: 8
-                            expand: false
-
-                            Button {
-                                text: "Select Custom Color"
-                                onClicked: SelectCustomColor
-                                expand: false
-                            }
-                        }
-                    }
+                Heading {
+                    id: PageTitle
+                    text: "Appearance"
                 }
 
-                Card {
-                    id: DockCard
-                    padding: "12"
+                Paragraph {
+                    id: PageDescription
+                    text: "Configure wallpaper, fit mode, background color, and dock placement."
+                }
+
+                VBox {
+                    id: SectionsHost
+                    spacing: 10
                     expand: true
                     overflow: "auto"
                     scrollStep: 32
-
-                    VBox {
-                        spacing: 10
-                        expand: true
-
-                        Heading {
-                            text: "Dock"
-                        }
-
-                        Paragraph {
-                            text: "Choose where the dock is anchored on screen."
-                            textColor: "theme.color.text.secondary"
-                        }
-
-                        Label {
-                            text: "Current Position"
-                        }
-
-                        Label {
-                            id: DockPosition
-                            text: "bottom"
-                            expand: false
-                        }
-
-                        HBox {
-                            spacing: 8
-                            expand: false
-
-                            Button {
-                                text: "Top"
-                                onClicked: SetDockTop
-                                expand: false
-                            }
-
-                            Button {
-                                text: "Bottom"
-                                onClicked: SetDockBottom
-                                expand: false
-                            }
-                        }
-                    }
+                    padding: "2"
+                    background: "transparent"
                 }
             }
         }
 
-        HBox {
-            spacing: 8
+        Card {
+            padding: "10"
             expand: false
 
-            StatusLabel {
-                id: Status
-                text: " "
-                minHeight: 22
-                expand: true
-                textAlign: "left"
-            }
-
-            PrimaryButton {
-                text: "Apply"
-                onClicked: Apply
+            HBox {
+                spacing: 10
                 expand: false
-            }
 
-            Button {
-                text: "Reset"
-                onClicked: Reset
-                expand: false
+                StatusLabel {
+                    id: Status
+                    text: " "
+                    minHeight: 22
+                    expand: true
+                    textAlign: "left"
+                }
+
+                PrimaryButton {
+                    text: "Apply"
+                    onClicked: Apply
+                    expand: false
+                }
+
+                Button {
+                    text: "Cancel"
+                    onClicked: Reset
+                    expand: false
+                }
             }
         }
     }
