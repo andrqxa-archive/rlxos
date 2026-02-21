@@ -21,6 +21,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -59,8 +60,20 @@ func Connect(socketPath string) (*Client, error) {
 	if socketPath == "" {
 		socketPath = DefaultSocketPath
 	}
+	return connectNetwork("unix", socketPath)
+}
 
-	conn, err := net.Dial("unix", socketPath)
+// ConnectTCP connects to a service endpoint over TCP.
+func ConnectTCP(address string) (*Client, error) {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		return nil, errors.New("tcp address is required")
+	}
+	return connectNetwork("tcp", address)
+}
+
+func connectNetwork(network, address string) (*Client, error) {
+	conn, err := net.Dial(network, address)
 	if err != nil {
 		return nil, err
 	}

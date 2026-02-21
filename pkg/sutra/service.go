@@ -24,6 +24,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -83,6 +84,28 @@ func NewService(name, socketPath string) (*Service, error) {
 	}
 	_ = os.Chmod(socketPath, 0777)
 
+	return newServiceWithListener(name, socketPath, listener), nil
+}
+
+// NewServiceTCP creates and starts a service endpoint on a TCP address.
+func NewServiceTCP(name, address string) (*Service, error) {
+	if name == "" {
+		return nil, errors.New("service name is required")
+	}
+	address = strings.TrimSpace(address)
+	if address == "" {
+		return nil, errors.New("tcp address is required")
+	}
+
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		return nil, err
+	}
+
+	return newServiceWithListener(name, "", listener), nil
+}
+
+func newServiceWithListener(name, socketPath string, listener net.Listener) *Service {
 	s := &Service{
 		Name:       name,
 		ID:         IDService,
@@ -96,7 +119,7 @@ func NewService(name, socketPath string) (*Service, error) {
 	s.nextClientID.Store(IDClient)
 
 	go s.acceptLoop()
-	return s, nil
+	return s
 }
 
 func (s *Service) isClosed() bool {

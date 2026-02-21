@@ -78,7 +78,7 @@ KERNEL_DEBUG_LDFLAGS = -ldflags="-E main._entry -T -2147479552 -compressdwarf=fa
 
 COMMANDS = distro copy delete driver filter find identity info init link list mkdir mount move net open power process read request service session shell showoff system tree uevent write
 APPS = appmenu background demo dock oobe terminal filemanager imageviewer taskmanager notepad power settingsmanager waylayer
-SERVICES = distro display login uevent
+SERVICES = distro display login uevent dbgd
 GO_TARGETS = $(addprefix cmd/,${COMMANDS}) $(addsuffix /exec,$(addprefix apps/,${APPS})) $(addprefix services/,${SERVICES})
 CONFIG_TARGETS = $(shell find config/ -type f)
 DATA_TARGETS = $(shell find data/ -type f)
