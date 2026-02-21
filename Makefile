@@ -6,6 +6,7 @@ DEBUG ?= 0
 KERNEL ?= linux
 
 CACHE_PATH ?= ${CURDIR}/_cache
+DOCGEN_OUT ?= ${CACHE_PATH}/docs
 
 -include config.inc
 
@@ -66,6 +67,7 @@ QEMU_DEBUG_ARGS ?= -d int,guest_errors,cpu_reset -D ${QEMU_DEBUG_LOG} \
 	-no-reboot -no-shutdown -s -S
 
 GENIMAGE_DEPS := ./tools/genimage/main.go ./tools/genimage/assets/btrfs-512m.img.gz
+DOCGEN_DEPS := ./tools/docgen/main.go
 RUN_EXTRA_ARGS = $(if $(filter 1,$(DEBUG)),$(QEMU_DEBUG_ARGS),)
 KERNEL_BUILD_FLAGS = $(if $(filter 1,$(DEBUG)),$(KERNEL_DEBUG_GCFLAGS) $(KERNEL_DEBUG_LDFLAGS),$(KERNEL_RELEASE_LDFLAGS))
 
@@ -90,7 +92,7 @@ endif
 
 all: ${DISK_IMAGE}
 
-.PHONY: clean update-certificates run compile_db
+.PHONY: clean update-certificates run compile_db docs
 
 clean:
 	rm -rf ${SYSTEM_PATH} ${INITRAMFS_PATH}
@@ -112,6 +114,9 @@ compile_db:
 	@for i in ${GO_TARGETS} ; do \
 		echo "${SYSTEM_PATH}/$$i: $$(find $$(go list ${GOFLAGS} -deps avyos.dev/$${i%/exec} | grep '^avyos.dev' | sed 's#^avyos.dev/#${CURDIR}/#g') -type f -name '*.go' | sort | tr '\n' ' ')" >> depends.${GOARCH}.inc; \
 	done
+
+docs: ${DOCGEN_DEPS}
+	${GO} run ./tools/docgen -out ${DOCGEN_OUT}
 
 ${DEVICE_CACHE_PATH}/variables: ${CURDIR}/external/${GOARCH}/variables
 	@mkdir -p $(dir $@)
