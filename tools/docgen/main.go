@@ -305,13 +305,13 @@ const docgenStyles = `
 }
 
 .doc-shell {
-  padding-block: clamp(2rem, 4vw, 3.2rem);
+  padding-block: clamp(1.35rem, 2.2vw, 2.1rem);
 }
 
 .doc-layout {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
-  gap: var(--space-4);
+  gap: clamp(0.82rem, 1.5vw, 1.15rem);
   align-items: start;
 }
 
@@ -320,7 +320,7 @@ const docgenStyles = `
   top: 92px;
   max-height: calc(100vh - 112px);
   overflow: auto;
-  padding: var(--space-3);
+  padding: 0.72rem 0.66rem;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(13, 99, 243, 0.42) transparent;
@@ -349,25 +349,25 @@ const docgenStyles = `
 }
 
 .doc-nav-group + .doc-nav-group {
-  margin-top: var(--space-3);
+  margin-top: 0.92rem;
 }
 
 .doc-nav-group h2 {
-  margin: 0 0 0.5rem;
-  padding: 0 0.25rem;
-  font-size: 0.82rem;
+  margin: 0 0 0.32rem;
+  padding: 0 0.18rem;
+  font-size: 0.76rem;
   font-family: var(--display);
-  letter-spacing: 0.07em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
 .doc-subtitle {
-  margin: 0.4rem 0 0.2rem;
-  padding: 0 0.25rem;
+  margin: 0.22rem 0 0.12rem;
+  padding: 0 0.18rem;
   font-family: var(--mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.02em;
+  font-size: 0.68rem;
+  letter-spacing: 0.015em;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -376,12 +376,12 @@ const docgenStyles = `
   display: block;
   text-decoration: none;
   color: var(--muted);
-  padding: 0.5rem 0.66rem;
+  padding: 0.36rem 0.52rem;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
-  font-size: 0.94rem;
-  line-height: 1.35;
+  font-size: 0.9rem;
+  line-height: 1.32;
 }
 
 .doc-link:hover {
@@ -417,18 +417,18 @@ const docgenStyles = `
 
 .doc-path {
   margin-top: 0;
-  margin-bottom: 0.7rem;
+  margin-bottom: 0.48rem;
   letter-spacing: 0.01em;
-  font-size: 0.9rem;
+  font-size: 0.86rem;
 }
 
 .doc-list {
-  margin: 0.35rem 0 0;
+  margin: 0.22rem 0 0;
   padding-left: 1.2rem;
 }
 
 .doc-list li + li {
-  margin-top: 0.4rem;
+  margin-top: 0.24rem;
 }
 
 .doc-list a {
@@ -451,47 +451,47 @@ const docgenStyles = `
   font-family: var(--display);
   letter-spacing: -0.02em;
   line-height: 1.14;
-  margin-top: 1.35rem;
-  margin-bottom: 0.62rem;
+  margin-top: 1.05rem;
+  margin-bottom: 0.46rem;
 }
 
 .doc-markdown h1,
 .doc-api h1 {
   margin-top: 0;
-  font-size: clamp(1.7rem, 2.5vw, 2.35rem);
+  font-size: clamp(1.58rem, 2.1vw, 2.05rem);
 }
 
 .doc-markdown h2,
 .doc-api h2 {
-  font-size: clamp(1.25rem, 1.9vw, 1.68rem);
-  padding-top: 0.3rem;
+  font-size: clamp(1.14rem, 1.6vw, 1.42rem);
+  padding-top: 0.18rem;
   border-top: 1px solid var(--border);
 }
 
 .doc-markdown p,
 .doc-api p {
-  margin: 0.72rem 0;
+  margin: 0.54rem 0;
   color: var(--text);
-  line-height: 1.62;
+  line-height: 1.56;
 }
 
 .doc-markdown ul,
 .doc-markdown ol,
 .doc-api ul,
 .doc-api ol {
-  margin: 0.72rem 0;
-  padding-left: 1.35rem;
+  margin: 0.52rem 0;
+  padding-left: 1.2rem;
 }
 
 .doc-markdown li + li,
 .doc-api li + li {
-  margin-top: 0.3rem;
+  margin-top: 0.2rem;
 }
 
 .doc-markdown blockquote,
 .doc-api blockquote {
-  margin: 0.95rem 0;
-  padding: 0.75rem 0.95rem;
+  margin: 0.68rem 0;
+  padding: 0.56rem 0.72rem;
   border-left: 4px solid rgba(13, 99, 243, 0.42);
   background: rgba(13, 99, 243, 0.09);
   border-radius: var(--radius-sm);
@@ -500,8 +500,8 @@ const docgenStyles = `
 .doc-markdown pre,
 .doc-api pre {
   overflow: auto;
-  margin: 0.95rem 0;
-  padding: 0.95rem 1.05rem;
+  margin: 0.72rem 0;
+  padding: 0.72rem 0.86rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: rgba(16, 26, 43, 0.08);
@@ -510,8 +510,8 @@ const docgenStyles = `
 
 .doc-markdown pre code,
 .doc-api pre code {
-  font-size: 0.9rem;
-  line-height: 1.5;
+  font-size: 0.86rem;
+  line-height: 1.45;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -581,15 +581,15 @@ const docgenStyles = `
 .doc-markdown li code,
 .doc-api p code,
 .doc-api li code {
-  padding: 0.1rem 0.3rem;
+  padding: 0.08rem 0.24rem;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 6px;
   background: rgba(13, 99, 243, 0.09);
 }
 
 .doc-markdown table {
   width: 100%;
-  margin: 0.9rem 0 1.3rem;
+  margin: 0.65rem 0 0.95rem;
   border-collapse: separate;
   border-spacing: 0;
   border: 1px solid var(--border);
@@ -602,7 +602,7 @@ const docgenStyles = `
   border-bottom: 1px solid var(--border);
   border-right: 1px solid var(--border);
   text-align: left;
-  padding: 0.56rem 0.66rem;
+  padding: 0.44rem 0.54rem;
   vertical-align: top;
 }
 
@@ -618,7 +618,7 @@ const docgenStyles = `
 .doc-markdown th {
   background: rgba(13, 99, 243, 0.08);
   font-family: var(--display);
-  font-size: 0.93rem;
+  font-size: 0.88rem;
 }
 
 .doc-markdown a {
@@ -631,7 +631,7 @@ const docgenStyles = `
 .doc-api hr {
   border: 0;
   border-top: 1px solid var(--border);
-  margin: 1.2rem 0;
+  margin: 0.9rem 0;
 }
 
 .doc-markdown img,
@@ -639,60 +639,60 @@ const docgenStyles = `
   max-width: 100%;
   height: auto;
   display: block;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid var(--border);
   box-shadow: var(--shadow-2);
-  margin: 0.9rem 0;
+  margin: 0.62rem 0;
 }
 
 .doc-ref-shell {
   display: grid;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .doc-ref-hero {
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 1rem 1.1rem;
+  border-radius: 10px;
+  padding: 0.74rem 0.84rem;
   background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
+  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.07);
 }
 
 .doc-ref-hero h1 {
   margin: 0;
   font-family: var(--display);
-  font-size: clamp(1.5rem, 2.2vw, 2rem);
+  font-size: clamp(1.32rem, 1.9vw, 1.7rem);
   line-height: 1.1;
 }
 
 .doc-ref-hero .doc-path {
-  margin-top: 0.3rem;
+  margin-top: 0.2rem;
   margin-bottom: 0;
 }
 
 .doc-ref-lead {
-  margin: 0.55rem 0 0;
+  margin: 0.38rem 0 0;
   color: var(--text);
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
 .doc-ref-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 0.95rem;
+  gap: 0.72rem;
 }
 
 .doc-ref-card {
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.9);
-  padding: 0.85rem 0.95rem;
-  box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
+  padding: 0.68rem 0.78rem;
+  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.07);
 }
 
 .doc-ref-card h2 {
-  margin: 0 0 0.62rem;
-  font-size: 1.05rem;
+  margin: 0 0 0.45rem;
+  font-size: 1rem;
   font-family: var(--display);
 }
 
@@ -700,12 +700,12 @@ const docgenStyles = `
   margin: 0;
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 0.45rem 0.7rem;
+  gap: 0.34rem 0.56rem;
 }
 
 .doc-ref-meta dt {
   margin: 0;
-  font-size: 0.83rem;
+  font-size: 0.78rem;
   font-family: var(--mono);
   color: var(--muted);
   text-transform: uppercase;
@@ -731,9 +731,9 @@ const docgenStyles = `
 }
 
 .doc-ref-preview figcaption {
-  margin-top: 0.45rem;
+  margin-top: 0.32rem;
   color: var(--muted);
-  font-size: 0.86rem;
+  font-size: 0.8rem;
 }
 
 .doc-ref-empty {
@@ -756,7 +756,7 @@ const docgenStyles = `
   text-align: left;
   border-bottom: 1px solid var(--border);
   border-right: 1px solid var(--border);
-  padding: 0.5rem 0.62rem;
+  padding: 0.44rem 0.54rem;
   vertical-align: top;
 }
 
@@ -771,25 +771,25 @@ const docgenStyles = `
 
 .doc-ref-table th {
   font-family: var(--display);
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   background: rgba(13, 99, 243, 0.1);
 }
 
 .doc-ref-list {
   margin: 0;
-  padding-left: 1.2rem;
+  padding-left: 1.05rem;
 }
 
 .doc-ref-list li + li {
-  margin-top: 0.35rem;
+  margin-top: 0.25rem;
 }
 
 .doc-ref-code {
   margin: 0;
   overflow: auto;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.7rem 0.8rem;
+  border-radius: 9px;
+  padding: 0.56rem 0.66rem;
   background: rgba(16, 26, 43, 0.08);
 }
 
@@ -797,56 +797,56 @@ const docgenStyles = `
   margin: 0;
   border: 1px solid var(--border);
   border-left: 4px solid rgba(13, 99, 243, 0.44);
-  border-radius: 10px;
-  padding: 0.68rem 0.78rem;
+  border-radius: 9px;
+  padding: 0.52rem 0.62rem;
   background: rgba(13, 99, 243, 0.08);
   color: var(--text);
 }
 
 .doc-card-stack {
   display: grid;
-  gap: 1rem;
+  gap: 0.72rem;
 }
 
 .doc-section-card {
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.9);
-  padding: 0.9rem 1rem;
-  box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
+  padding: 0.74rem 0.84rem;
+  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.07);
 }
 
 .doc-section-card > h2 {
-  margin: 0 0 0.55rem;
+  margin: 0 0 0.42rem;
   font-family: var(--display);
-  font-size: 1.15rem;
+  font-size: 1.06rem;
 }
 
 .api-card-list {
   display: grid;
-  gap: 0.9rem;
+  gap: 0.68rem;
 }
 
 .api-item-card {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 9px;
   background: rgba(255, 255, 255, 0.92);
-  padding: 0.75rem 0.8rem;
-  box-shadow: 0 6px 18px rgba(16, 24, 40, 0.07);
+  padding: 0.62rem 0.68rem;
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.06);
 }
 
 .api-item-card > h3,
 .api-item-head h3 {
   margin: 0;
   font-family: var(--display);
-  font-size: 1.02rem;
+  font-size: 0.96rem;
 }
 
 .api-item-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 0.6rem;
+  gap: 0.45rem;
 }
 
 .api-item-id {
@@ -856,30 +856,30 @@ const docgenStyles = `
 .api-io-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.75rem;
-  margin-top: 0.75rem;
+  gap: 0.58rem;
+  margin-top: 0.56rem;
 }
 
 .api-io-card {
   border: 1px solid var(--border);
   border-radius: 9px;
   background: rgba(255, 255, 255, 0.96);
-  padding: 0.65rem 0.72rem;
+  padding: 0.52rem 0.58rem;
 }
 
 .api-io-card h4 {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.24rem;
   font-family: var(--display);
-  font-size: 0.98rem;
+  font-size: 0.9rem;
 }
 
 .api-io-card p {
-  margin: 0.4rem 0;
+  margin: 0.28rem 0;
 }
 
 @media (max-width: 1080px) {
   .doc-shell .container {
-    width: calc(100% - 30px);
+    width: calc(100% - 24px);
   }
 
   .doc-sidebar {
