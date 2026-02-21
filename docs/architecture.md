@@ -1,108 +1,270 @@
 # AvyOS Architecture
 
-This document describes how AvyOS is organized in source code and how major runtime components fit together.
+Technical architecture specification for AvyOS\
+A Go-native operating system layer built above the Linux kernel.
 
-## Architecture Goals
+--
 
-AvyOS is built as a pure Go userspace stack with these constraints:
+## 1. Overview
 
-- no CGO dependencies in core userspace binaries
-- no POSIX-compatibility target as a design requirement
-- service-first architecture for system capabilities
-- small, readable codebase that is easy to iterate on
+AvyOS is a Go-native system architecture built on top of the Linux
+kernel.
 
-## Repository Layout
+It replaces the traditional GNU/POSIX userspace with a fully static,
+capability-oriented, Go-based runtime. The Linux kernel is treated
+strictly as:
 
-```text
-avyos/
-|- api/        IPC contracts (`api.json`) and generated client bindings
-|- apps/       User-facing applications
-|- cmd/        Command-line tools and core user commands
-|- services/   Long-running daemons (display, login, settings, etc.)
-|- pkg/        Shared libraries used by apps/commands/services
-|- docs/       Project and user documentation
-|- tools/      Build and code generation tools
-|- config/     Default runtime config and service definitions
-|- data/       Static runtime assets (icons, wallpapers, themes)
-|- kernel/     Kernel integration/config artifacts
-`- _cache/     Build outputs and generated docs
-```
+-   Hardware abstraction
+-   Syscall interface
+-   Isolation primitive provider
 
-## Runtime Layers
+AvyOS does not depend on:
 
-### 1. Boot and Init
+-   GNU userland
+-   glibc
+-   systemd
+-   dbus
+-   POSIX compatibility requirements
 
-- boot artifacts are built into an image
-- `cmd/init` runs as PID 1
-- init mounts and prepares runtime state, then starts configured services
+All core components are built with:
 
-### 2. Core Services
+    CGO_ENABLED=0
 
-Services expose system functionality through IPC APIs:
+--
 
-- `services/display` - compositor/windowing backend
-- `services/login` - authentication and session startup
-- `services/settings` - key/value settings storage and watch events
-- `services/service` - service control and lifecycle operations
-- `services/uevent` - device event forwarding
-- `services/distro` - distro/container-style runtime operations
+## 2. Architectural Layers
 
-### 3. APIs and IPC Contracts
+    Applications (Native + distro containers)
+            ↓
+    Runtime Services (Graphics, Input, Network)
+            ↓
+    Platform Core (init, IPC, Identity)
+            ↓
+    Linux Kernel
+            ↓
+    Hardware
 
-`api/<name>/api.json` defines wire-level contracts:
+--
 
-- service metadata (name, id, package)
-- data types (request/response/event payloads)
-- request and event IDs
-- human-readable descriptions for docs generation
+## 3. Kernel Base
 
-`tools/apigen` turns these contracts into generated client/server glue.
+The Linux kernel provides:
 
-### 4. Applications and Commands
+-   Scheduling
+-   Virtual memory
+-   Filesystems
+-   Networking
+-   Namespaces
+-   cgroups
+-   DRM/KMS
+-   evdev
 
-- `apps/` contains desktop applications
-- `cmd/` contains shell commands and system tools
-- both layers use `pkg/` libraries plus IPC clients from `api/`
+AvyOS does not rely on any traditional Linux userspace stack.
 
-### 5. Shared Libraries (`pkg/`)
+--
 
-`pkg/` is the reusable core used everywhere:
+## 4. Platform Core Layer
 
-- rendering/input/UI support (`pkg/graphics/...`)
-- IPC transport (`pkg/sutra`)
-- filesystem and identity helpers (`pkg/fs`, `pkg/identity`)
-- logging/formatting/utilities (`pkg/logger`, `pkg/format`, etc.)
+### 4.1 init (PID 1)
 
-## API and Process Model
+The `init` process:
 
-At a high level:
+-   Runs as PID 1
+-   Performs deterministic system bootstrap
+-   Mounts and prepares filesystem layout
+-   Starts core services
+-   Supervises runtime services
+-   Maintains lifecycle state
 
-1. apps/commands connect to a service client in `api/<name>`.
-2. client sends typed payloads over Sutra IPC.
-3. service receives request and executes privileged/system logic.
-4. response/event payloads return through typed API bindings.
+There is no systemd or SysV layer.
 
-This keeps application logic isolated from low-level service internals.
+--
 
-## Documentation Model
+## 5. IPC Architecture
 
-`tools/docgen` generates the docs site with grouped sections:
+AvyOS IPC is implemented using:
 
-- `docs/` markdown guides
-- `apps/` reference pages (doc comments)
-- `cmd/` reference pages (structured from `flag.Usage` output)
-- `services/` reference pages (doc comments)
-- `api/` reference pages (from `api.json` metadata)
-- `pkg/` API reference (godoc-style exports)
+-   Unix domain sockets
+-   Shared memory segments
+-   Sutra protocol
 
-## Build Artifacts
+### Transport
 
-A typical build produces:
+-   Control plane: Unix domain sockets
+-   Data plane: Shared memory
+-   Message format: Sutra protocol
 
-- system binaries and assets in `_cache/`
-- bootable disk image(s)
-- generated docs in `_cache/docs/`
+Properties:
 
-## Current Scope
+-   Peer-to-peer
+-   No central message broker
+-   Capability-gated endpoints
+-   Structured message schema
+-   Namespaced services
 
-AvyOS is still experimental. Interfaces, service boundaries, and UX details are actively changing as the platform evolves.
+--
+
+## 6. Filesystem Model
+
+### Immutable Base
+
+    /avyos/
+    ├── apps
+    ├── cmd
+    ├── config
+    ├── services
+    ├── data
+
+The entire `/avyos` tree is immutable.
+
+--
+
+### Mutable Areas
+
+    /config
+    /cache
+        ├── kernel/
+        │   ├── process
+        │   ├── sysfs
+        │   ├── devices
+        │   └── shared
+        └── runtime
+    /users
+    /apps
+
+-   `/config` -- System configuration (modifiable)
+-   `/cache/kernel` -- Kernel dynamic structures
+-   `/cache/runtime` -- Ephemeral runtime state
+-   `/users` -- User data
+-   `/apps` -- User-installed applications
+
+--
+
+## 7. Graphics Stack
+
+-   DRM + KMS primary path
+-   fbdev fallback
+-   Custom display protocol
+-   Wayland compatibility via `waylayer`
+
+Stack:
+
+    Application
+       ↓
+    AvyOS Display Protocol
+       ↓
+    Compositor
+       ↓
+    DRM/KMS (or fbdev)
+       ↓
+    Linux Kernel
+
+--
+
+## 8. Compatibility Layer
+
+Container-based Linux compatibility runtime named `distro`.
+
+Characteristics:
+
+-   Custom container implementation
+-   Namespace-based isolation
+-   Restricted filesystem access
+-   No direct access to `/avyos`
+-   Optional component
+
+--
+
+## 9. Identity & Capability Model
+
+Capability-first design:
+
+-   Required capabilities declared explicitly
+-   Scoped privilege per service
+-   No ambient authority
+
+Examples:
+
+-   display
+-   network
+-   ipc:compositor
+-   lifecycle
+
+--
+
+## 10. Boot Process
+
+1.  Firmware (UEFI)
+2.  Bootloader
+3.  Linux kernel
+4.  init (PID 1)
+5.  Core service activation
+6.  Runtime services
+7.  Session start
+
+--
+
+## 11. Package & Upgrade Model (Current State)
+
+Currently:
+
+-   No package manager
+-   No generation switching
+-   No atomic upgrade mechanism
+
+System images are built as full artifacts.
+
+--
+
+## 12. Security Model
+
+Security properties:
+
+-   Immutable system base
+-   Capability-scoped IPC
+-   Namespace isolation
+-   Minimal default service surface
+-   No legacy userland
+
+--
+
+## 13. Design Constraints
+
+-   Pure Go userspace
+-   CGO disabled
+-   No glibc
+-   No GNU stack
+-   No POSIX requirement
+
+--
+
+## 14. Non-Goals
+
+-   Full POSIX compliance
+-   GNU compatibility
+-   systemd integration
+-   Traditional FHS layout
+
+--
+
+## 15. Current Scope
+
+Validated targets:
+
+-   QEMU amd64
+-   QEMU arm64
+
+--
+
+## 16. Future Directions
+
+-   Formal capability enforcement
+-   Deterministic upgrade mechanism
+-   Transactional switching
+-   Extended container runtime
+-   Hardware enablement expansion
+
+--
+
+AvyOS is a Go-native operating system architecture built on Linux kernel
+primitives with an immutable core and explicit capability boundaries.
