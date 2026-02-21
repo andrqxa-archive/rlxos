@@ -1,0 +1,9 @@
+{{ define "project_index" -}}
+<h1>Project Documentation</h1>
+<p class="muted">Index of project guides and design documents.</p>
+<ul class="doc-list">
+  {{- range .Docs }}
+  <li><a href="{{ .HTMLFile }}">{{ .Title }}</a></li>
+  {{- end }}
+</ul>
+{{- end }}

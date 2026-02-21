@@ -1,0 +1,5 @@
+{{ define "section_markdown" -}}
+<h1>{{ .Title }}</h1>
+<p class="muted mono doc-path">{{ .RelPath }}</p>
+<section class="doc-markdown">{{ markdown .Markdown }}</section>
+{{- end }}

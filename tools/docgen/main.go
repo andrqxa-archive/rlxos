@@ -20,6 +20,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"embed"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -185,6 +186,70 @@ type markdownSection struct {
 	Content string
 }
 
+type markdownCardsTemplateData struct {
+	Sections []markdownSection
+}
+
+type sectionMarkdownTemplateData struct {
+	Title    string
+	RelPath  string
+	Markdown string
+}
+
+type commandReferenceTemplateData struct {
+	Title           string
+	RelPath         string
+	Lead            string
+	UsagePrimary    string
+	CommandName     string
+	HelpSource      string
+	DocSource       string
+	OverviewHTML    template.HTML
+	Usage           []string
+	Subcommands     []commandHelpRow
+	Flags           []commandHelpFlag
+	ExitCodes       []commandHelpRow
+	CaptureErr      string
+	NoFlagsAndNoDoc bool
+	ShowRawHelp     bool
+	RawHelp         string
+}
+
+type appReferenceTemplateData struct {
+	Title        string
+	RelPath      string
+	Lead         string
+	DocSource    string
+	PreviewPath  string
+	Description  template.HTML
+	Flags        []commandHelpFlag
+	Subcommands  []commandHelpRow
+	FlagsMessage string
+	CaptureErr   string
+}
+
+type apiSchemaTemplateData struct {
+	Title   string
+	RelPath string
+	Lead    string
+	Spec    apiSchema
+}
+
+type projectPageTemplateData struct {
+	Title     string
+	RelPath   string
+	CardsHTML template.HTML
+}
+
+type projectIndexTemplateData struct {
+	Docs []markdownDoc
+}
+
+type readmeIndexTemplateData struct {
+	RelPath   string
+	CardsHTML template.HTML
+}
+
 var (
 	titleTagPattern       = regexp.MustCompile(`(?is)<title>.*?</title>`)
 	descriptionMetaTag    = regexp.MustCompile(`(?is)<meta[^>]*name=["']description["'][^>]*>`)
@@ -209,45 +274,20 @@ var (
 	commandFlagLineRegex  = regexp.MustCompile(`^\s*-(\S+)(?:\s+(.+))?$`)
 )
 
-var pageTemplate = template.Must(template.New("docs-page").Parse(`<!doctype html>
-<html lang="en">
-{{ .Head }}
-<body>
-  <header class="site-header">
-    <div class="container nav">
-      <a class="brand" href="index.html" aria-label="AvyOS docs home">
-        <span>AvyOS Docs</span>
-      </a>
-      <div class="nav-actions">
-        <a class="btn btn-release" href="index.html">Documentation Home</a>
-      </div>
-    </div>
-  </header>
+//go:embed templates/*.tmpl
+var docTemplateFS embed.FS
 
-  <main class="doc-shell">
-    <div class="container doc-layout">
-      <aside class="doc-sidebar card" aria-label="Documentation navigation">
-        {{ range .Sidebar }}
-        <section class="doc-nav-group">
-          <h2>{{ .Title }}</h2>
-          {{ range .Groups }}
-          {{ if .Title }}<p class="doc-subtitle">{{ .Title }}</p>{{ end }}
-          {{ range .Entries }}
-          <a class="doc-link{{ if .Active }} active{{ end }}" href="{{ .Href }}">{{ .Title }}</a>
-          {{ end }}
-          {{ end }}
-        </section>
-        {{ end }}
-      </aside>
-
-      <article class="doc-content card">
-        {{ .BodyHTML }}
-      </article>
-    </div>
-  </main>
-</body>
-</html>
-`))
+var docTemplates = template.Must(template.New("docgen").Funcs(template.FuncMap{
+	"markdown":            renderMarkdown,
+	"trim":                strings.TrimSpace,
+	"join":                strings.Join,
+	"defaultText":         defaultText,
+	"methodPayloadType":   methodPayloadType,
+	"responseType":        responseType,
+	"requestDescription":  requestDescription,
+	"responseDescription": responseDescription,
+	"payloadDescription":  payloadDescription,
+}).ParseFS(docTemplateFS, "templates/*.tmpl"))
 
 const fallbackHead = `<head>
   <meta charset="utf-8" />
@@ -1813,6 +1853,22 @@ func parseCommandFlags(lines []string) []commandHelpFlag {
 	return out
 }
 
+func executeDocTemplate(name string, data any) (template.HTML, error) {
+	var buf bytes.Buffer
+	if err := docTemplates.ExecuteTemplate(&buf, name, data); err != nil {
+		return "", err
+	}
+	return template.HTML(buf.String()), nil
+}
+
+func renderDocTemplate(name string, data any) template.HTML {
+	out, err := executeDocTemplate(name, data)
+	if err != nil {
+		return template.HTML(`<p class="doc-ref-callout">Template render error: ` + template.HTMLEscapeString(err.Error()) + `</p>`)
+	}
+	return out
+}
+
 func renderProgramReferenceBody(section, title, relPath, docText, sourceFile string) template.HTML {
 	var md strings.Builder
 	kind := "Program"
@@ -1848,7 +1904,6 @@ func renderProgramReferenceBody(section, title, relPath, docText, sourceFile str
 }
 
 func renderCommandReferenceBody(title, relPath, docText, sourceFile string, help commandHelpDoc, usesFlags bool, captureErr string) template.HTML {
-	var b strings.Builder
 	docText = strings.TrimSpace(docText)
 	commandName := strings.TrimSpace(help.Command)
 	if commandName == "" {
@@ -1881,145 +1936,38 @@ func renderCommandReferenceBody(title, relPath, docText, sourceFile string, help
 		helpSource = "flag.Usage via -h"
 	}
 
-	b.WriteString(`<section class="doc-ref-shell">`)
-	b.WriteString(`<header class="doc-ref-hero">`)
-	b.WriteString(`<h1>` + template.HTMLEscapeString(title) + `</h1>`)
-	b.WriteString(`<p class="muted mono doc-path">` + template.HTMLEscapeString(relPath) + `</p>`)
-	b.WriteString(`<p class="doc-ref-lead">` + template.HTMLEscapeString(lead) + `</p>`)
-	b.WriteString(`</header>`)
+	usageLines := filterUsageLines(help.Usage)
+	subcommands := filterCommandRows(help.Subcommands)
+	flags := normalizeCommandFlags(help.Flags)
+	exitCodes := filterExitCodeRows(help.ExitCodes)
 
-	b.WriteString(`<section class="doc-ref-grid">`)
-	b.WriteString(`<section class="doc-ref-card">`)
-	b.WriteString(`<h2>Quick Start</h2>`)
-	b.WriteString(`<pre class="doc-ref-code"><code>` + template.HTMLEscapeString(usagePrimary) + `</code></pre>`)
-	b.WriteString(`</section>`)
-
-	b.WriteString(`<section class="doc-ref-card">`)
-	b.WriteString(`<h2>At A Glance</h2>`)
-	b.WriteString(`<dl class="doc-ref-meta">`)
-	b.WriteString(`<dt>Name</dt><dd><code>` + template.HTMLEscapeString(commandName) + `</code></dd>`)
-	b.WriteString(`<dt>Help Source</dt><dd>` + template.HTMLEscapeString(helpSource) + `</dd>`)
-	b.WriteString(`<dt>Doc Source</dt><dd>` + template.HTMLEscapeString(docSource) + `</dd>`)
-	b.WriteString(`<dt>Flags</dt><dd>` + fmt.Sprintf("%d", len(help.Flags)) + `</dd>`)
-	b.WriteString(`<dt>Subcommands</dt><dd>` + fmt.Sprintf("%d", countCommandRows(help.Subcommands)) + `</dd>`)
-	b.WriteString(`</dl>`)
-	b.WriteString(`</section>`)
-	b.WriteString(`</section>`)
-
+	overview := template.HTML("")
 	if docText != "" {
-		b.WriteString(`<section class="doc-ref-card">`)
-		b.WriteString(`<h2>Overview</h2>`)
-		b.WriteString(`<div class="doc-markdown">`)
-		b.WriteString(string(renderMarkdown(docText)))
-		b.WriteString(`</div>`)
-		b.WriteString(`</section>`)
+		overview = renderMarkdown(docText)
 	}
 
-	b.WriteString(`<section class="doc-ref-card">`)
-	b.WriteString(`<h2>Usage</h2>`)
-	if len(help.Usage) > 0 {
-		b.WriteString(`<ul class="doc-ref-list">`)
-		for _, usage := range help.Usage {
-			usage = strings.TrimSpace(usage)
-			if usage == "" {
-				continue
-			}
-			b.WriteString(`<li><code>` + template.HTMLEscapeString(usage) + `</code></li>`)
-		}
-		b.WriteString(`</ul>`)
-	} else {
-		b.WriteString(`<p class="doc-ref-empty">Usage information is not available.</p>`)
+	data := commandReferenceTemplateData{
+		Title:           title,
+		RelPath:         relPath,
+		Lead:            lead,
+		UsagePrimary:    usagePrimary,
+		CommandName:     commandName,
+		HelpSource:      helpSource,
+		DocSource:       docSource,
+		OverviewHTML:    overview,
+		Usage:           usageLines,
+		Subcommands:     subcommands,
+		Flags:           flags,
+		ExitCodes:       exitCodes,
+		CaptureErr:      strings.TrimSpace(captureErr),
+		NoFlagsAndNoDoc: !usesFlags && docText == "",
+		ShowRawHelp:     len(usageLines) == 0 && len(subcommands) == 0 && len(flags) == 0 && strings.TrimSpace(help.Raw) != "",
+		RawHelp:         strings.TrimSpace(help.Raw),
 	}
-	b.WriteString(`</section>`)
-
-	b.WriteString(`<section class="doc-ref-card">`)
-	b.WriteString(`<h2>Subcommands</h2>`)
-	if countCommandRows(help.Subcommands) > 0 {
-		b.WriteString(`<table class="doc-ref-table">`)
-		b.WriteString(`<thead><tr><th>Name</th><th>Description</th></tr></thead><tbody>`)
-		for _, row := range help.Subcommands {
-			if strings.TrimSpace(row.Name) == "" || row.Name == "(none)" {
-				continue
-			}
-			description := strings.TrimSpace(row.Description)
-			if description == "" {
-				description = "-"
-			}
-			b.WriteString(`<tr><td><code>` + template.HTMLEscapeString(row.Name) + `</code></td><td>` + template.HTMLEscapeString(description) + `</td></tr>`)
-		}
-		b.WriteString(`</tbody></table>`)
-	} else {
-		b.WriteString(`<p class="doc-ref-empty">No subcommands.</p>`)
-	}
-	b.WriteString(`</section>`)
-
-	b.WriteString(`<section class="doc-ref-card">`)
-	b.WriteString(`<h2>Flags</h2>`)
-	if len(help.Flags) > 0 {
-		b.WriteString(`<table class="doc-ref-table">`)
-		b.WriteString(`<thead><tr><th>Flag</th><th>Type</th><th>Description</th></tr></thead><tbody>`)
-		for _, option := range help.Flags {
-			flagName := strings.TrimSpace(option.Name)
-			if flagName == "" {
-				continue
-			}
-			flagType := strings.TrimSpace(option.Type)
-			if flagType == "" {
-				flagType = "-"
-			}
-			description := strings.TrimSpace(option.Description)
-			if description == "" {
-				description = "-"
-			}
-			b.WriteString(`<tr><td><code>` + template.HTMLEscapeString(flagName) + `</code></td><td><code>` + template.HTMLEscapeString(flagType) + `</code></td><td>` + template.HTMLEscapeString(description) + `</td></tr>`)
-		}
-		b.WriteString(`</tbody></table>`)
-	} else {
-		b.WriteString(`<p class="doc-ref-empty">No flags documented.</p>`)
-	}
-	b.WriteString(`</section>`)
-
-	b.WriteString(`<section class="doc-ref-card">`)
-	b.WriteString(`<h2>Exit Codes</h2>`)
-	if len(help.ExitCodes) > 0 {
-		b.WriteString(`<table class="doc-ref-table">`)
-		b.WriteString(`<thead><tr><th>Code</th><th>Meaning</th></tr></thead><tbody>`)
-		for _, row := range help.ExitCodes {
-			code := strings.TrimSpace(row.Name)
-			if code == "" {
-				continue
-			}
-			meaning := strings.TrimSpace(row.Description)
-			if meaning == "" {
-				meaning = "-"
-			}
-			b.WriteString(`<tr><td><code>` + template.HTMLEscapeString(code) + `</code></td><td>` + template.HTMLEscapeString(meaning) + `</td></tr>`)
-		}
-		b.WriteString(`</tbody></table>`)
-	} else {
-		b.WriteString(`<p class="doc-ref-empty">No exit code table provided.</p>`)
-	}
-	b.WriteString(`</section>`)
-
-	if captureErr != "" {
-		b.WriteString(`<p class="doc-ref-callout">Help capture warning: ` + template.HTMLEscapeString(captureErr) + `</p>`)
-	}
-	if !usesFlags && docText == "" {
-		b.WriteString(`<p class="doc-ref-callout">This command has no flag usage output and no package-level documentation yet.</p>`)
-	}
-	if len(help.Usage) == 0 && len(help.Subcommands) == 0 && len(help.Flags) == 0 && strings.TrimSpace(help.Raw) != "" {
-		b.WriteString(`<section class="doc-ref-card">`)
-		b.WriteString(`<h2>Raw Help Output</h2>`)
-		b.WriteString(`<pre class="doc-ref-code"><code>` + template.HTMLEscapeString(help.Raw) + `</code></pre>`)
-		b.WriteString(`</section>`)
-	}
-
-	b.WriteString(`</section>`)
-	return template.HTML(b.String())
+	return renderDocTemplate("command_reference", data)
 }
 
 func renderAppReferenceBody(title, relPath, docText, sourceFile, previewPath string, help commandHelpDoc, usesFlags bool, captureErr string) template.HTML {
-	var b strings.Builder
 	docText = strings.TrimSpace(docText)
 	if docText == "" {
 		docText = "Documentation not available yet. Add package comments in `doc.go` or `docs.go`."
@@ -2034,106 +1982,26 @@ func renderAppReferenceBody(title, relPath, docText, sourceFile, previewPath str
 		lead = "Application reference"
 	}
 
-	b.WriteString(`<section class="doc-ref-shell">`)
-	b.WriteString(`<header class="doc-ref-hero">`)
-	b.WriteString(`<h1>` + template.HTMLEscapeString(title) + `</h1>`)
-	b.WriteString(`<p class="muted mono doc-path">` + template.HTMLEscapeString(relPath) + `</p>`)
-	b.WriteString(`<p class="doc-ref-lead">` + template.HTMLEscapeString(lead) + `</p>`)
-	b.WriteString(`</header>`)
-
-	b.WriteString(`<section class="doc-ref-grid">`)
-	b.WriteString(`<section class="doc-ref-card">`)
-	b.WriteString(`<h2>At A Glance</h2>`)
-	b.WriteString(`<dl class="doc-ref-meta">`)
-	b.WriteString(`<dt>Type</dt><dd>Application</dd>`)
-	b.WriteString(`<dt>Path</dt><dd><code>` + template.HTMLEscapeString(relPath) + `</code></dd>`)
-	b.WriteString(`<dt>Doc Source</dt><dd>` + template.HTMLEscapeString(docSource) + `</dd>`)
-	if previewPath != "" {
-		b.WriteString(`<dt>Preview</dt><dd>Available</dd>`)
-	} else {
-		b.WriteString(`<dt>Preview</dt><dd>Not provided</dd>`)
-	}
-	b.WriteString(`</dl>`)
-	b.WriteString(`</section>`)
-
-	b.WriteString(`<section class="doc-ref-card">`)
-	if previewPath != "" {
-		b.WriteString(`<h2>Preview</h2>`)
-		b.WriteString(`<figure class="doc-ref-preview">`)
-		b.WriteString(`<img src="` + template.HTMLEscapeString(previewPath) + `" alt="` + template.HTMLEscapeString(title) + ` preview" />`)
-		b.WriteString(`<figcaption>` + template.HTMLEscapeString(title) + ` preview image</figcaption>`)
-		b.WriteString(`</figure>`)
-	} else {
-		b.WriteString(`<h2>Preview</h2>`)
-		b.WriteString(`<p class="doc-ref-empty">Add <code>` + template.HTMLEscapeString(relPath) + `/preview.png</code> to show an app screenshot here.</p>`)
-	}
-	b.WriteString(`</section>`)
-	b.WriteString(`</section>`)
-
-	b.WriteString(`<section class="doc-ref-card">`)
-	b.WriteString(`<h2>Description</h2>`)
-	b.WriteString(`<div class="doc-markdown">`)
-	b.WriteString(string(renderMarkdown(docText)))
-	b.WriteString(`</div>`)
-	b.WriteString(`</section>`)
-
-	b.WriteString(`<section class="doc-ref-card">`)
-	b.WriteString(`<h2>Flags</h2>`)
-	if len(help.Flags) > 0 {
-		b.WriteString(`<table class="doc-ref-table">`)
-		b.WriteString(`<thead><tr><th>Flag</th><th>Type</th><th>Description</th></tr></thead><tbody>`)
-		for _, option := range help.Flags {
-			flagName := strings.TrimSpace(option.Name)
-			if flagName == "" {
-				continue
-			}
-			flagType := strings.TrimSpace(option.Type)
-			if flagType == "" {
-				flagType = "-"
-			}
-			desc := strings.TrimSpace(option.Description)
-			if desc == "" {
-				desc = "-"
-			}
-			b.WriteString(`<tr><td><code>` + template.HTMLEscapeString(flagName) + `</code></td><td><code>` + template.HTMLEscapeString(flagType) + `</code></td><td>` + template.HTMLEscapeString(desc) + `</td></tr>`)
-		}
-		b.WriteString(`</tbody></table>`)
-	} else {
-		msg := "This app does not expose `flag.Usage` output."
-		if usesFlags {
-			msg = "No flags documented by app help output."
-		}
-		b.WriteString(`<p class="doc-ref-empty">` + template.HTMLEscapeString(msg) + `</p>`)
-	}
-	b.WriteString(`</section>`)
-
-	b.WriteString(`<section class="doc-ref-card">`)
-	b.WriteString(`<h2>Subcommands</h2>`)
-	if countCommandRows(help.Subcommands) > 0 {
-		b.WriteString(`<table class="doc-ref-table">`)
-		b.WriteString(`<thead><tr><th>Name</th><th>Description</th></tr></thead><tbody>`)
-		for _, row := range help.Subcommands {
-			if strings.TrimSpace(row.Name) == "" || row.Name == "(none)" {
-				continue
-			}
-			desc := strings.TrimSpace(row.Description)
-			if desc == "" {
-				desc = "-"
-			}
-			b.WriteString(`<tr><td><code>` + template.HTMLEscapeString(row.Name) + `</code></td><td>` + template.HTMLEscapeString(desc) + `</td></tr>`)
-		}
-		b.WriteString(`</tbody></table>`)
-	} else {
-		b.WriteString(`<p class="doc-ref-empty">No subcommands.</p>`)
-	}
-	b.WriteString(`</section>`)
-
-	if captureErr != "" {
-		b.WriteString(`<p class="doc-ref-callout">Help capture warning: ` + template.HTMLEscapeString(captureErr) + `</p>`)
+	flags := normalizeCommandFlags(help.Flags)
+	subcommands := filterCommandRows(help.Subcommands)
+	flagsMessage := "This app does not expose `flag.Usage` output."
+	if usesFlags {
+		flagsMessage = "No flags documented by app help output."
 	}
 
-	b.WriteString(`</section>`)
-	return template.HTML(b.String())
+	data := appReferenceTemplateData{
+		Title:        title,
+		RelPath:      relPath,
+		Lead:         lead,
+		DocSource:    docSource,
+		PreviewPath:  strings.TrimSpace(previewPath),
+		Description:  renderMarkdown(docText),
+		Flags:        flags,
+		Subcommands:  subcommands,
+		FlagsMessage: flagsMessage,
+		CaptureErr:   strings.TrimSpace(captureErr),
+	}
+	return renderDocTemplate("app_reference", data)
 }
 
 func firstLine(value string) string {
@@ -2162,26 +2030,75 @@ func countCommandRows(rows []commandHelpRow) int {
 	return count
 }
 
-func renderMarkdownCards(source string) template.HTML {
-	sections := splitMarkdownSections(source)
-	if len(sections) == 0 {
-		return template.HTML(`<section class="doc-card-stack"><section class="doc-section-card"><div class="doc-markdown"><p>No content.</p></div></section></section>`)
-	}
-
-	var b strings.Builder
-	b.WriteString(`<section class="doc-card-stack">`)
-	for _, section := range sections {
-		b.WriteString(`<section class="doc-section-card">`)
-		if strings.TrimSpace(section.Title) != "" {
-			b.WriteString(`<h2>` + template.HTMLEscapeString(section.Title) + `</h2>`)
+func filterUsageLines(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
 		}
-		b.WriteString(`<div class="doc-markdown">`)
-		b.WriteString(string(renderMarkdown(section.Content)))
-		b.WriteString(`</div>`)
-		b.WriteString(`</section>`)
+		out = append(out, line)
 	}
-	b.WriteString(`</section>`)
-	return template.HTML(b.String())
+	return out
+}
+
+func filterCommandRows(rows []commandHelpRow) []commandHelpRow {
+	out := make([]commandHelpRow, 0, len(rows))
+	for _, row := range rows {
+		name := strings.TrimSpace(row.Name)
+		if name == "" || name == "(none)" {
+			continue
+		}
+		description := strings.TrimSpace(row.Description)
+		if description == "" {
+			description = "-"
+		}
+		out = append(out, commandHelpRow{
+			Name:        name,
+			Description: description,
+		})
+	}
+	return out
+}
+
+func normalizeCommandFlags(flags []commandHelpFlag) []commandHelpFlag {
+	out := make([]commandHelpFlag, 0, len(flags))
+	for _, flag := range flags {
+		name := strings.TrimSpace(flag.Name)
+		if name == "" {
+			continue
+		}
+		flagType := defaultText(flag.Type, "-")
+		description := defaultText(flag.Description, "-")
+		out = append(out, commandHelpFlag{
+			Name:        name,
+			Type:        flagType,
+			Description: description,
+		})
+	}
+	return out
+}
+
+func filterExitCodeRows(rows []commandHelpRow) []commandHelpRow {
+	out := make([]commandHelpRow, 0, len(rows))
+	for _, row := range rows {
+		code := strings.TrimSpace(row.Name)
+		if code == "" {
+			continue
+		}
+		meaning := defaultText(row.Description, "-")
+		out = append(out, commandHelpRow{
+			Name:        code,
+			Description: meaning,
+		})
+	}
+	return out
+}
+
+func renderMarkdownCards(source string) template.HTML {
+	return renderDocTemplate("markdown_cards", markdownCardsTemplateData{
+		Sections: splitMarkdownSections(source),
+	})
 }
 
 func splitMarkdownSections(source string) []markdownSection {
@@ -2243,13 +2160,11 @@ func splitMarkdownSections(source string) []markdownSection {
 }
 
 func renderSectionMarkdownBody(title, relPath, markdown string) template.HTML {
-	var b strings.Builder
-	b.WriteString("<h1>" + template.HTMLEscapeString(title) + "</h1>\n")
-	b.WriteString(`<p class="muted mono doc-path">` + template.HTMLEscapeString(relPath) + "</p>\n")
-	b.WriteString(`<section class="doc-markdown">`)
-	b.WriteString(string(renderMarkdown(markdown)))
-	b.WriteString("</section>")
-	return template.HTML(b.String())
+	return renderDocTemplate("section_markdown", sectionMarkdownTemplateData{
+		Title:    title,
+		RelPath:  relPath,
+		Markdown: markdown,
+	})
 }
 
 func renderAPIJSONBody(relPath string, spec apiSchema) template.HTML {
@@ -2258,149 +2173,18 @@ func renderAPIJSONBody(relPath string, spec apiSchema) template.HTML {
 		title = filepath.Base(filepath.Dir(relPath))
 	}
 
-	var b strings.Builder
 	serviceDescription := strings.TrimSpace(spec.Service.Description)
 	lead := serviceDescription
 	if lead == "" {
 		lead = "API reference for " + title
 	}
 
-	b.WriteString(`<section class="doc-ref-shell doc-api-shell">`)
-	b.WriteString(`<header class="doc-ref-hero">`)
-	b.WriteString(`<h1>` + template.HTMLEscapeString(title) + `</h1>`)
-	b.WriteString(`<p class="muted mono doc-path">` + template.HTMLEscapeString(relPath) + `</p>`)
-	b.WriteString(`<p class="doc-ref-lead">` + template.HTMLEscapeString(lead) + `</p>`)
-	b.WriteString(`</header>`)
-
-	b.WriteString(`<section class="doc-section-card">`)
-	b.WriteString(`<h2>Service</h2>`)
-	b.WriteString(`<table class="doc-ref-table">`)
-	b.WriteString(`<thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>`)
-	b.WriteString(`<tr><td>Name</td><td><code>` + template.HTMLEscapeString(spec.Service.Name) + `</code></td></tr>`)
-	b.WriteString(`<tr><td>Package</td><td><code>` + template.HTMLEscapeString(spec.Service.Package) + `</code></td></tr>`)
-	b.WriteString(`<tr><td>Service ID</td><td><code>` + template.HTMLEscapeString(string(spec.Service.ID)) + `</code></td></tr>`)
-	if len(spec.Imports) > 0 {
-		b.WriteString(`<tr><td>Imports</td><td><code>` + template.HTMLEscapeString(strings.Join(spec.Imports, ", ")) + `</code></td></tr>`)
-	}
-	b.WriteString(`</tbody></table>`)
-	if serviceDescription != "" {
-		b.WriteString(`<div class="doc-markdown">`)
-		b.WriteString(string(renderMarkdown(serviceDescription)))
-		b.WriteString(`</div>`)
-	}
-	b.WriteString(`</section>`)
-
-	if len(spec.Types) > 0 {
-		b.WriteString(`<section class="doc-section-card">`)
-		b.WriteString(`<h2>Types</h2>`)
-		b.WriteString(`<div class="api-card-list">`)
-		for _, t := range spec.Types {
-			b.WriteString(`<article class="api-item-card">`)
-			b.WriteString(`<h3>` + template.HTMLEscapeString(t.Name) + `</h3>`)
-			if desc := strings.TrimSpace(t.Description); desc != "" {
-				b.WriteString(`<div class="doc-markdown">` + string(renderMarkdown(desc)) + `</div>`)
-			}
-			if len(t.Fields) == 0 {
-				b.WriteString(`<p class="doc-ref-empty">No fields.</p>`)
-			} else {
-				b.WriteString(`<table class="doc-ref-table">`)
-				b.WriteString(`<thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody>`)
-				for _, field := range t.Fields {
-					desc := strings.TrimSpace(field.Description)
-					if desc == "" {
-						desc = "-"
-					}
-					b.WriteString(`<tr><td><code>` + template.HTMLEscapeString(field.Name) + `</code></td><td><code>` + template.HTMLEscapeString(field.Type) + `</code></td><td>` + template.HTMLEscapeString(desc) + `</td></tr>`)
-				}
-				b.WriteString(`</tbody></table>`)
-			}
-			b.WriteString(`</article>`)
-		}
-		b.WriteString(`</div>`)
-		b.WriteString(`</section>`)
-	}
-
-	if len(spec.Requests) > 0 {
-		b.WriteString(`<section class="doc-section-card">`)
-		b.WriteString(`<h2>Requests</h2>`)
-		b.WriteString(`<div class="api-card-list">`)
-		for _, req := range spec.Requests {
-			b.WriteString(`<article class="api-item-card">`)
-			b.WriteString(`<header class="api-item-head">`)
-			b.WriteString(`<h3>` + template.HTMLEscapeString(req.Name) + `</h3>`)
-			b.WriteString(`<p class="api-item-id"><code>` + template.HTMLEscapeString(string(req.ID)) + `</code></p>`)
-			b.WriteString(`</header>`)
-			if desc := strings.TrimSpace(req.Description); desc != "" {
-				b.WriteString(`<div class="doc-markdown">` + string(renderMarkdown(desc)) + `</div>`)
-			}
-			b.WriteString(`<div class="api-io-grid">`)
-			b.WriteString(`<section class="api-io-card">`)
-			b.WriteString(`<h4>Input</h4>`)
-			b.WriteString(`<p><strong>Type:</strong> <code>` + template.HTMLEscapeString(methodPayloadType(req)) + `</code></p>`)
-			reqDesc := strings.TrimSpace(req.RequestDescription)
-			if reqDesc == "" {
-				reqDesc = "No input description."
-			}
-			b.WriteString(`<div class="doc-markdown">` + string(renderMarkdown(reqDesc)) + `</div>`)
-			b.WriteString(`</section>`)
-			b.WriteString(`<section class="api-io-card">`)
-			b.WriteString(`<h4>Output</h4>`)
-			respType := strings.TrimSpace(req.ResponseType)
-			if req.OneWay {
-				respType = "none (one-way)"
-			}
-			if respType == "" {
-				respType = "none"
-			}
-			b.WriteString(`<p><strong>Type:</strong> <code>` + template.HTMLEscapeString(respType) + `</code></p>`)
-			respDesc := strings.TrimSpace(req.ResponseDescription)
-			if req.OneWay && respDesc == "" {
-				respDesc = "No response payload for one-way request."
-			}
-			if !req.OneWay && respDesc == "" {
-				respDesc = "No output description."
-			}
-			b.WriteString(`<div class="doc-markdown">` + string(renderMarkdown(respDesc)) + `</div>`)
-			b.WriteString(`</section>`)
-			b.WriteString(`</div>`)
-			b.WriteString(`</article>`)
-		}
-		b.WriteString(`</div>`)
-		b.WriteString(`</section>`)
-	}
-
-	if len(spec.Events) > 0 {
-		b.WriteString(`<section class="doc-section-card">`)
-		b.WriteString(`<h2>Events</h2>`)
-		b.WriteString(`<div class="api-card-list">`)
-		for _, ev := range spec.Events {
-			b.WriteString(`<article class="api-item-card">`)
-			b.WriteString(`<header class="api-item-head">`)
-			b.WriteString(`<h3>` + template.HTMLEscapeString(ev.Name) + `</h3>`)
-			b.WriteString(`<p class="api-item-id"><code>` + template.HTMLEscapeString(string(ev.ID)) + `</code></p>`)
-			b.WriteString(`</header>`)
-			if desc := strings.TrimSpace(ev.Description); desc != "" {
-				b.WriteString(`<div class="doc-markdown">` + string(renderMarkdown(desc)) + `</div>`)
-			}
-			b.WriteString(`<div class="api-io-grid">`)
-			b.WriteString(`<section class="api-io-card">`)
-			b.WriteString(`<h4>Payload</h4>`)
-			b.WriteString(`<p><strong>Type:</strong> <code>` + template.HTMLEscapeString(methodPayloadType(ev)) + `</code></p>`)
-			payloadDesc := strings.TrimSpace(ev.RequestDescription)
-			if payloadDesc == "" {
-				payloadDesc = "No payload description."
-			}
-			b.WriteString(`<div class="doc-markdown">` + string(renderMarkdown(payloadDesc)) + `</div>`)
-			b.WriteString(`</section>`)
-			b.WriteString(`</div>`)
-			b.WriteString(`</article>`)
-		}
-		b.WriteString(`</div>`)
-		b.WriteString(`</section>`)
-	}
-
-	b.WriteString(`</section>`)
-	return template.HTML(b.String())
+	return renderDocTemplate("api_schema", apiSchemaTemplateData{
+		Title:   title,
+		RelPath: relPath,
+		Lead:    lead,
+		Spec:    spec,
+	})
 }
 
 func methodPayloadType(method apiSchemaMethod) string {
@@ -2408,6 +2192,44 @@ func methodPayloadType(method apiSchemaMethod) string {
 		return value
 	}
 	return strings.TrimSpace(method.PayloadType)
+}
+
+func responseType(method apiSchemaMethod) string {
+	if method.OneWay {
+		return "none (one-way)"
+	}
+	value := strings.TrimSpace(method.ResponseType)
+	if value == "" {
+		return "none"
+	}
+	return value
+}
+
+func requestDescription(method apiSchemaMethod) string {
+	return defaultText(method.RequestDescription, "No input description.")
+}
+
+func responseDescription(method apiSchemaMethod) string {
+	value := strings.TrimSpace(method.ResponseDescription)
+	if value != "" {
+		return value
+	}
+	if method.OneWay {
+		return "No response payload for one-way request."
+	}
+	return "No output description."
+}
+
+func payloadDescription(method apiSchemaMethod) string {
+	return defaultText(method.RequestDescription, "No payload description.")
+}
+
+func defaultText(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func markdownInlineCode(value string) string {
@@ -2430,11 +2252,11 @@ func markdownCell(value string) string {
 }
 
 func renderProjectBody(title, relPath, source string) template.HTML {
-	var b strings.Builder
-	b.WriteString("<h1>" + template.HTMLEscapeString(title) + "</h1>\n")
-	b.WriteString(`<p class="muted mono doc-path">` + template.HTMLEscapeString(relPath) + "</p>\n")
-	b.WriteString(string(renderMarkdownCards(source)))
-	return template.HTML(b.String())
+	return renderDocTemplate("project_page", projectPageTemplateData{
+		Title:     title,
+		RelPath:   relPath,
+		CardsHTML: renderMarkdownCards(source),
+	})
 }
 
 func renderAPIBody(d apiDoc) template.HTML {
@@ -2607,25 +2429,21 @@ func formattedDecl(fset *token.FileSet, node any) string {
 }
 
 func renderProjectIndexBody(projectDocs []markdownDoc) template.HTML {
-	var b strings.Builder
-	b.WriteString("<h1>Project Documentation</h1>\n")
-	b.WriteString(`<p class="muted">Index of project guides and design documents.</p>`)
-	b.WriteString(`<ul class="doc-list">`)
+	docs := make([]markdownDoc, 0, len(projectDocs))
 	for _, d := range projectDocs {
 		if d.RelPath == "README.md" {
 			continue
 		}
-		b.WriteString(`<li><a href="` + template.HTMLEscapeString(d.HTMLFile) + `">` + template.HTMLEscapeString(d.Title) + "</a></li>")
+		docs = append(docs, d)
 	}
-	b.WriteString("</ul>")
-	return template.HTML(b.String())
+	return renderDocTemplate("project_index", projectIndexTemplateData{Docs: docs})
 }
 
 func renderReadmeIndexBody(relPath, source string) template.HTML {
-	var b strings.Builder
-	b.WriteString(`<p class="muted mono doc-path">` + template.HTMLEscapeString(relPath) + "</p>\n")
-	b.WriteString(string(renderMarkdownCards(source)))
-	return template.HTML(b.String())
+	return renderDocTemplate("readme_index", readmeIndexTemplateData{
+		RelPath:   relPath,
+		CardsHTML: renderMarkdownCards(source),
+	})
 }
 
 func renderMarkdown(source string) template.HTML {
@@ -3364,11 +3182,11 @@ func resolveMarkdownRelPath(currentRel, target string) (string, bool) {
 }
 
 func renderPage(path string, data pageData) error {
-	var buf bytes.Buffer
-	if err := pageTemplate.Execute(&buf, data); err != nil {
+	body, err := executeDocTemplate("page", data)
+	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, buf.Bytes(), 0644)
+	return os.WriteFile(path, []byte(body), 0644)
 }
 
 func uniqueHTMLName(base string, used map[string]int) string {
