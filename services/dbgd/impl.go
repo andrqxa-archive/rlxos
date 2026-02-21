@@ -257,7 +257,7 @@ func (h *Handler) execute(sess *authSession, req dbgdapi.ExecRequest, useShell b
 
 	dir, err := resolveWorkDir(sess.Identity, req.Cwd)
 	if err != nil {
-		return dbgdapi.ExecResult{}, err
+		return dbgdapi.ExecResult{}, fmt.Errorf("failed to resolve workdir %v", err)
 	}
 
 	timeout := normalizeTimeout(req.TimeoutSec)
@@ -297,6 +297,9 @@ func (h *Handler) execute(sess *authSession, req dbgdapi.ExecRequest, useShell b
 	if cmd.Stderr == nil {
 		cmd.Stderr = stderrBuf
 	}
+	if cmd.Stdin == nil {
+		cmd.Stdin, _ = os.OpenFile(fs.Resolve("device", "null"), os.O_RDWR, 0)
+	}
 
 	runErr := cmd.Run()
 	exitCode := 0
@@ -325,7 +328,7 @@ func (h *Handler) execute(sess *authSession, req dbgdapi.ExecRequest, useShell b
 }
 
 func (h *Handler) runHelper(sess *authSession, mode, path string, offset uint64, size uint32, truncate bool, perm uint32, input []byte) ([]byte, error) {
-	exe, err := os.Executable()
+	exe, err := os.Readlink(fs.Resolve("process", "self/exe"))
 	if err != nil {
 		return nil, err
 	}
@@ -350,8 +353,10 @@ func (h *Handler) runHelper(sess *authSession, mode, path string, offset uint64,
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+	var stdin bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	cmd.Stdin = &stdin
 
 	if err := cmd.Run(); err != nil {
 		detail := strings.TrimSpace(stderr.String())
@@ -376,7 +381,7 @@ func normalizeTimeout(v int32) time.Duration {
 
 func resolveWorkDir(id *identity.Identity, requested string) (string, error) {
 	home := strings.TrimSpace(id.Home)
-	if home == "" {
+	if home == "" || !fs.Exists(home) {
 		home = "/"
 	}
 
@@ -407,7 +412,7 @@ func buildUserEnv(id *identity.Identity) []string {
 	if shell == "" {
 		shell = fs.Resolve("cmd", "shell")
 	}
-	path := "/cmd:/avyos/cmd:/bin:/usr/bin"
+	path := "/cmd:/avyos/cmd"
 
 	out := make([]string, 0, 8)
 	seen := map[string]struct{}{}
@@ -459,7 +464,7 @@ func buildCredential(id *identity.Identity) *syscall.Credential {
 func makeShellCommand(ctx context.Context, id *identity.Identity, line string) (*exec.Cmd, error) {
 	shell := strings.TrimSpace(id.Shell)
 	if shell == "" {
-		shell = "/bin/sh"
+		shell = "/avyos/cmd/shell"
 	}
 
 	if path, err := resolveExecutable(shell); err == nil {
@@ -498,7 +503,7 @@ func resolveExecutable(name string) (string, error) {
 		return "", fmt.Errorf("command not executable: %s", name)
 	}
 
-	for _, dir := range []string{"/cmd", "/avyos/cmd", "/bin", "/usr/bin"} {
+	for _, dir := range []string{"/cmd", "/avyos/cmd"} {
 		candidate := filepath.Join(dir, name)
 		if isExecutableFile(candidate) {
 			return candidate, nil
