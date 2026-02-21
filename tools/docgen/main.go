@@ -42,7 +42,6 @@ type config struct {
 	root       string
 	outDir     string
 	modulePath string
-	themeIndex string
 	themeStyle string
 }
 
@@ -481,8 +480,7 @@ func main() {
 	var cfg config
 	flag.StringVar(&cfg.outDir, "out", "_cache/docs", "Output directory for generated docs")
 	flag.StringVar(&cfg.modulePath, "module", "", "Go module path (auto-detected from go.mod if empty)")
-	flag.StringVar(&cfg.themeIndex, "theme-index", "index.html", "Theme source index.html")
-	flag.StringVar(&cfg.themeStyle, "theme-style", "styles.css", "Theme source styles.css")
+	flag.StringVar(&cfg.themeStyle, "theme-style", "docs/styles.css", "Theme source styles.css")
 	flag.Parse()
 
 	root, err := os.Getwd()
@@ -513,11 +511,6 @@ func run(cfg config) error {
 	}
 	_ = os.Remove(filepath.Join(outDir, "project-index.html"))
 	_ = os.Remove(filepath.Join(outDir, "project-readme.html"))
-
-	themeHead, err := loadThemeHead(resolvePath(cfg.root, cfg.themeIndex))
-	if err != nil {
-		return err
-	}
 
 	projectDocs, err := collectProjectDocs(cfg.root)
 	if err != nil {
@@ -563,7 +556,7 @@ func run(cfg config) error {
 		}
 		rewritten := rewriteDocLinks(d.Source, d.RelPath, markdownMap)
 		body := renderProjectBody(d.Title, d.RelPath, rewritten)
-		head := buildHead(themeHead, d.Title+" | AvyOS Docs", "Project documentation for "+d.Title)
+		head := buildHead(d.Title+" | AvyOS Docs", "Project documentation for "+d.Title)
 		page := pageData{
 			Head:        head,
 			CurrentPath: d.HTMLFile,
@@ -578,7 +571,7 @@ func run(cfg config) error {
 
 	for _, d := range apiDocs {
 		body := renderAPIBody(d)
-		head := buildHead(themeHead, d.ImportPath+" | AvyOS API", "API documentation for "+d.ImportPath)
+		head := buildHead(d.ImportPath+" | AvyOS API", "API documentation for "+d.ImportPath)
 		page := pageData{
 			Head:        head,
 			CurrentPath: d.HTMLFile,
@@ -603,7 +596,7 @@ func run(cfg config) error {
 		homeBody = renderProjectIndexBody(projectDocs)
 	}
 	home := pageData{
-		Head:        buildHead(themeHead, homeTitle, homeDesc),
+		Head:        buildHead(homeTitle, homeDesc),
 		CurrentPath: "index.html",
 		ProjectDocs: navForProject(projectDocs, "index.html"),
 		APIDocs:     navForAPI(apiDocs, ""),
@@ -1412,31 +1405,8 @@ func rewriteLinkTarget(target, currentRel string, markdownMap map[string]string)
 	return out
 }
 
-func loadThemeHead(path string) (string, error) {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	source := string(content)
-	lower := strings.ToLower(source)
-
-	start := strings.Index(lower, "<head")
-	if start < 0 {
-		return fallbackHead, nil
-	}
-	end := strings.Index(lower, "</head>")
-	if end < 0 || end < start {
-		return fallbackHead, nil
-	}
-	end += len("</head>")
-	return source[start:end], nil
-}
-
-func buildHead(baseHead, title, description string) template.HTML {
-	head := baseHead
-	if strings.TrimSpace(head) == "" {
-		head = fallbackHead
-	}
+func buildHead(title, description string) template.HTML {
+	head := fallbackHead
 
 	head = scriptTagPattern.ReplaceAllString(head, "")
 	head = stylesheetLinkPattern.ReplaceAllString(head, "")
