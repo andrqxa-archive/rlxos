@@ -22,8 +22,12 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
+
+	"avyos.dev/pkg/fs"
 )
 
 // clientConn wraps a Unix domain socket for one connected Wayland client.
@@ -181,12 +185,15 @@ func (c *clientConn) recvWithFDs(buf []byte) (int, []int, error) {
 func listen() (*net.UnixListener, string, error) {
 	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
 	if runtimeDir == "" {
-		return nil, "", fmt.Errorf("XDG_RUNTIME_DIR not set")
+		runtimeDir = fs.Resolve("cache", filepath.Join("runtime", strconv.Itoa(os.Getuid())))
+	}
+	if err := os.MkdirAll(runtimeDir, 0700); err != nil {
+		return nil, "", fmt.Errorf("ensure XDG_RUNTIME_DIR %q: %w", runtimeDir, err)
 	}
 
 	display := os.Getenv("WAYLAND_DISPLAY")
 	if display == "" {
-		display = "wayland-0"
+		display = "waylayer"
 	}
 	socketPath := runtimeDir + "/" + display
 

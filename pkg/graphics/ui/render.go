@@ -42,6 +42,19 @@ func drawElement(e *Element, buf *graphics.Buffer) {
 		}
 	}
 
+	restoreSelfClip := false
+	selfPrevClip := graphics.Rect{}
+	selfPrevClipOn := false
+	if e.overflowClipped() {
+		selfPrevClip, selfPrevClipOn = buf.Clip()
+		clipRect := bounds
+		if selfPrevClipOn {
+			clipRect = clipRect.Intersection(selfPrevClip)
+		}
+		buf.SetClip(clipRect)
+		restoreSelfClip = true
+	}
+
 	// 4. Widget-specific rendering based on attributes
 	if isImageElement(e) {
 		drawImage(e, buf)
@@ -73,17 +86,17 @@ func drawElement(e *Element, buf *graphics.Buffer) {
 	}
 
 	// 6. Children
-	restoreClip := false
-	prevClip := graphics.Rect{}
-	prevClipOn := false
+	restoreChildrenClip := false
+	childrenPrevClip := graphics.Rect{}
+	childrenPrevClipOn := false
 	if e.overflowClipped() && len(e.children) > 0 {
-		prevClip, prevClipOn = buf.Clip()
+		childrenPrevClip, childrenPrevClipOn = buf.Clip()
 		clipRect := e.contentArea()
-		if prevClipOn {
-			clipRect = clipRect.Intersection(prevClip)
+		if childrenPrevClipOn {
+			clipRect = clipRect.Intersection(childrenPrevClip)
 		}
 		buf.SetClip(clipRect)
-		restoreClip = true
+		restoreChildrenClip = true
 	}
 
 	for _, child := range e.children {
@@ -95,9 +108,17 @@ func drawElement(e *Element, buf *graphics.Buffer) {
 
 	drawOverflowScrollbar(e, buf)
 
-	if restoreClip {
-		if prevClipOn {
-			buf.SetClip(prevClip)
+	if restoreChildrenClip {
+		if childrenPrevClipOn {
+			buf.SetClip(childrenPrevClip)
+		} else {
+			buf.ClearClip()
+		}
+	}
+
+	if restoreSelfClip {
+		if selfPrevClipOn {
+			buf.SetClip(selfPrevClip)
 		} else {
 			buf.ClearClip()
 		}

@@ -83,6 +83,7 @@ type Event struct {
 	X, Y       int
 	Button     int
 	Key        graphics.Key
+	Rune       rune
 	Modifiers  graphics.Modifiers
 	Char       rune
 	Pressed    bool
@@ -186,6 +187,7 @@ func (cl *DisplayClient) hookEvents() {
 			WindowID:   ev.WindowID,
 			Scope:      ev.Scope,
 			Key:        ev.Key,
+			Rune:       ev.Rune,
 			Modifiers:  graphics.Modifiers(ev.Modifiers),
 		})
 	})
@@ -390,11 +392,16 @@ func (cl *DisplayClient) SetWindowState(windowID, action uint32) error {
 }
 
 func (cl *DisplayClient) RegisterShortcut(shortcutID, windowID, scope uint32, key graphics.Key, modifiers graphics.Modifiers) error {
+	return cl.RegisterShortcutEx(shortcutID, windowID, scope, key, 0, modifiers)
+}
+
+func (cl *DisplayClient) RegisterShortcutEx(shortcutID, windowID, scope uint32, key graphics.Key, ch rune, modifiers graphics.Modifiers) error {
 	_, err := cl.rpc.RegisterShortcut(RegisterShortcutRequest{
 		ShortcutID: shortcutID,
 		WindowID:   windowID,
 		Scope:      scope,
 		Key:        key,
+		Rune:       ch,
 		Modifiers:  uint8(modifiers & (graphics.ModShift | graphics.ModCtrl | graphics.ModAlt)),
 	})
 	return err

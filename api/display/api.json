@@ -204,6 +204,7 @@
         { "name": "WindowID", "type": "uint32" },
         { "name": "Scope", "type": "uint32" },
         { "name": "Key", "type": "graphics.Key" },
+        { "name": "Rune", "type": "rune" },
         { "name": "Modifiers", "type": "uint8" }
       ]
     },
@@ -220,6 +221,7 @@
         { "name": "WindowID", "type": "uint32" },
         { "name": "Scope", "type": "uint32" },
         { "name": "Key", "type": "graphics.Key" },
+        { "name": "Rune", "type": "rune" },
         { "name": "Modifiers", "type": "uint8" }
       ]
     }

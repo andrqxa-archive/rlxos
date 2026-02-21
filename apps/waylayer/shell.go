@@ -25,6 +25,7 @@ type xdgSurfaceState struct {
 	surface    *surfaceState
 	session    *clientSession
 	toplevel   *xdgToplevelState
+	popup      *xdgPopupState
 	configured bool
 }
 
@@ -36,11 +37,45 @@ type xdgToplevelState struct {
 	appID   string
 }
 
+// xdgPositionerState tracks xdg_positioner parameters for popup placement.
+type xdgPositionerState struct {
+	id uint32
+
+	width  int
+	height int
+
+	anchorRectX int
+	anchorRectY int
+	offsetX     int
+	offsetY     int
+}
+
+// xdgPopupState represents an xdg_popup.
+type xdgPopupState struct {
+	id       uint32
+	xdgSurf  *xdgSurfaceState
+	parent   *xdgSurfaceState
+	position *xdgPositionerState
+
+	x      int
+	y      int
+	width  int
+	height int
+}
+
 // handleXdgWmBaseRequest processes xdg_wm_base requests.
 func (s *clientSession) handleXdgWmBaseRequest(id uint32, opcode uint16, payload []byte, fds []int) {
 	closeFDs(fds)
 
 	switch opcode {
+	case xdgWmBaseCreatePosOp:
+		if len(payload) >= 4 {
+			positionerID := getUint32(payload, 0)
+			pos := &xdgPositionerState{id: positionerID}
+			s.positioners[positionerID] = pos
+			s.setHandler(positionerID, s.handleXdgPositionerRequest)
+		}
+
 	case xdgWmBaseGetXdgSurfaceOp:
 		if len(payload) >= 8 {
 			xdgSurfID := getUint32(payload, 0)
@@ -65,6 +100,39 @@ func (s *clientSession) handleXdgWmBaseRequest(id uint32, opcode uint16, payload
 
 	case xdgWmBaseDestroyOp:
 		// Don't remove the handler since other objects may still reference it
+	}
+}
+
+func (s *clientSession) handleXdgPositionerRequest(id uint32, opcode uint16, payload []byte, fds []int) {
+	closeFDs(fds)
+
+	pos, ok := s.positioners[id]
+	if !ok {
+		return
+	}
+
+	switch opcode {
+	case xdgPositionerSetSizeOp:
+		if len(payload) >= 8 {
+			pos.width = int(getInt32(payload, 0))
+			pos.height = int(getInt32(payload, 4))
+		}
+
+	case xdgPositionerSetAnchorRectOp:
+		if len(payload) >= 16 {
+			pos.anchorRectX = int(getInt32(payload, 0))
+			pos.anchorRectY = int(getInt32(payload, 4))
+		}
+
+	case xdgPositionerSetOffsetOp:
+		if len(payload) >= 8 {
+			pos.offsetX = int(getInt32(payload, 0))
+			pos.offsetY = int(getInt32(payload, 4))
+		}
+
+	case xdgPositionerDestroyOp:
+		s.removeHandler(id)
+		delete(s.positioners, id)
 	}
 }
 
@@ -103,8 +171,53 @@ func (s *clientSession) handleXdgSurfaceRequest(id uint32, opcode uint16, payloa
 			if tw != nil && tw.win != nil {
 				s.sendToplevelConfigure(toplevel, tw.win.Width, tw.win.Height)
 			} else {
-				s.sendToplevelConfigure(toplevel, 800, 600)
+				s.sendToplevelConfigure(toplevel, defaultToplevelWidth, defaultToplevelHeight)
 			}
+		}
+
+	case xdgSurfaceGetPopupOp:
+		if len(payload) >= 12 {
+			popupID := getUint32(payload, 0)
+			parentXDGID := getUint32(payload, 4)
+			positionerID := getUint32(payload, 8)
+
+			parent, ok := s.xdgSurfaces[parentXDGID]
+			if !ok {
+				return
+			}
+
+			popup := &xdgPopupState{
+				id:      popupID,
+				xdgSurf: xdgSurf,
+				parent:  parent,
+			}
+			if pos, ok := s.positioners[positionerID]; ok {
+				popup.position = pos
+				popup.applyPositioner(pos)
+			}
+			w, h, clamped := clampSurfaceSize(
+				popup.width,
+				popup.height,
+				defaultPopupWidth,
+				defaultPopupHeight,
+			)
+			if clamped {
+				log.Printf("clamped popup size from %dx%d to %dx%d", popup.width, popup.height, w, h)
+			}
+			popup.width = w
+			popup.height = h
+
+			xdgSurf.popup = popup
+			s.xdgPopups[popupID] = popup
+			s.setHandler(popupID, s.handleXdgPopupRequest)
+
+			if err := s.server.registerPopup(s, xdgSurf.surface, popup); err != nil {
+				log.Printf("failed to create popup window: %v", err)
+				s.conn.sendMsg(popupID, xdgPopupPopupDoneEvent, nil)
+				return
+			}
+
+			s.sendPopupConfigure(popup, popup.x, popup.y, popup.width, popup.height)
 		}
 
 	case xdgSurfaceAckConfigureOp:
@@ -115,8 +228,14 @@ func (s *clientSession) handleXdgSurfaceRequest(id uint32, opcode uint16, payloa
 
 	case xdgSurfaceDestroyOp:
 		if xdgSurf.toplevel != nil {
+			s.server.removeToplevel(xdgSurf.toplevel)
 			s.removeHandler(xdgSurf.toplevel.id)
 			delete(s.xdgToplevels, xdgSurf.toplevel.id)
+		}
+		if xdgSurf.popup != nil {
+			s.server.removePopup(xdgSurf.popup)
+			s.removeHandler(xdgSurf.popup.id)
+			delete(s.xdgPopups, xdgSurf.popup.id)
 		}
 		s.removeHandler(id)
 		delete(s.xdgSurfaces, id)
@@ -157,6 +276,9 @@ func (s *clientSession) handleXdgToplevelRequest(id uint32, opcode uint16, paylo
 
 	case xdgToplevelDestroyOp:
 		s.server.removeToplevel(toplevel)
+		if toplevel.xdgSurf != nil {
+			toplevel.xdgSurf.toplevel = nil
+		}
 		s.removeHandler(id)
 		delete(s.xdgToplevels, id)
 
@@ -171,10 +293,82 @@ func (s *clientSession) handleXdgToplevelRequest(id uint32, opcode uint16, paylo
 	}
 }
 
+func (s *clientSession) handleXdgPopupRequest(id uint32, opcode uint16, payload []byte, fds []int) {
+	closeFDs(fds)
+
+	popup, ok := s.xdgPopups[id]
+	if !ok {
+		return
+	}
+
+	switch opcode {
+	case xdgPopupDestroyOp:
+		s.server.removePopup(popup)
+		s.removeHandler(id)
+		delete(s.xdgPopups, id)
+		if popup.xdgSurf != nil {
+			popup.xdgSurf.popup = nil
+		}
+
+	case xdgPopupGrabOp:
+		// The display service controls focus/activation.
+
+	case xdgPopupRepositionOp:
+		if len(payload) < 8 {
+			return
+		}
+		positionerID := getUint32(payload, 0)
+		token := getUint32(payload, 4)
+		if pos, ok := s.positioners[positionerID]; ok {
+			popup.position = pos
+			popup.applyPositioner(pos)
+		}
+
+		w, h, clamped := clampSurfaceSize(
+			popup.width,
+			popup.height,
+			defaultPopupWidth,
+			defaultPopupHeight,
+		)
+		if clamped {
+			log.Printf("clamped popup reposition size from %dx%d to %dx%d", popup.width, popup.height, w, h)
+		}
+		popup.width = w
+		popup.height = h
+
+		if popup.xdgSurf != nil && popup.xdgSurf.surface != nil {
+			tw := popup.xdgSurf.surface.displayWindow
+			if tw != nil && tw.win != nil {
+				if popup.width != tw.win.Width || popup.height != tw.win.Height {
+					if err := tw.win.Resize(popup.width, popup.height); err != nil {
+						log.Printf("popup resize failed: %v", err)
+					}
+				}
+			}
+		}
+
+		s.sendPopupConfigure(popup, popup.x, popup.y, popup.width, popup.height)
+		if token != 0 {
+			p := make([]byte, 4)
+			putUint32(p, 0, token)
+			s.conn.sendMsg(id, xdgPopupRepositionedEvent, p)
+		}
+	}
+}
+
+func (p *xdgPopupState) applyPositioner(pos *xdgPositionerState) {
+	if p == nil || pos == nil {
+		return
+	}
+	p.x = pos.anchorRectX + pos.offsetX
+	p.y = pos.anchorRectY + pos.offsetY
+	p.width = pos.width
+	p.height = pos.height
+}
+
 // sendToplevelConfigure sends the xdg_toplevel.configure + xdg_surface.configure sequence.
 func (s *clientSession) sendToplevelConfigure(toplevel *xdgToplevelState, width, height int) {
-	serial := s.nextSerial
-	s.nextSerial++
+	width, height, _ = clampSurfaceSize(width, height, defaultToplevelWidth, defaultToplevelHeight)
 
 	// xdg_toplevel.configure(width, height, states)
 	var statesPayload []byte
@@ -192,8 +386,30 @@ func (s *clientSession) sendToplevelConfigure(toplevel *xdgToplevelState, width,
 	}
 	s.conn.sendMsg(toplevel.id, xdgToplevelConfigureEvent, statesPayload)
 
-	// xdg_surface.configure(serial)
+	s.sendSurfaceConfigure(toplevel.xdgSurf)
+}
+
+func (s *clientSession) sendPopupConfigure(popup *xdgPopupState, x, y, width, height int) {
+	if popup == nil {
+		return
+	}
+	width, height, _ = clampSurfaceSize(width, height, defaultPopupWidth, defaultPopupHeight)
+	payload := make([]byte, 16)
+	putInt32(payload, 0, int32(x))
+	putInt32(payload, 4, int32(y))
+	putInt32(payload, 8, int32(width))
+	putInt32(payload, 12, int32(height))
+	s.conn.sendMsg(popup.id, xdgPopupConfigureEvent, payload)
+	s.sendSurfaceConfigure(popup.xdgSurf)
+}
+
+func (s *clientSession) sendSurfaceConfigure(xdgSurf *xdgSurfaceState) {
+	if xdgSurf == nil {
+		return
+	}
+	serial := s.nextSerial
+	s.nextSerial++
 	p := make([]byte, 4)
 	putUint32(p, 0, serial)
-	s.conn.sendMsg(toplevel.xdgSurf.id, xdgSurfaceConfigureEvent, p)
+	s.conn.sendMsg(xdgSurf.id, xdgSurfaceConfigureEvent, p)
 }

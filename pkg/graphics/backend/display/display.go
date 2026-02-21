@@ -183,13 +183,19 @@ func (b *Backend) SetWindowState(windowID, action uint32) error {
 // Use ShortcutScopeGlobal for compositor-wide shortcuts and ShortcutScopeClient
 // for shortcuts scoped to this client (optionally a specific window ID).
 func (b *Backend) RegisterShortcut(shortcutID, windowID, scope uint32, key graphics.Key, modifiers graphics.Modifiers) error {
+	return b.RegisterShortcutEx(shortcutID, windowID, scope, key, 0, modifiers)
+}
+
+// RegisterShortcutEx registers a shortcut keyed either by graphics.Key,
+// or by a printable rune when key is graphics.KeyNone.
+func (b *Backend) RegisterShortcutEx(shortcutID, windowID, scope uint32, key graphics.Key, ch rune, modifiers graphics.Modifiers) error {
 	b.mu.Lock()
 	cl := b.client
 	b.mu.Unlock()
 	if cl == nil {
 		return fmt.Errorf("display backend not open")
 	}
-	return cl.RegisterShortcut(shortcutID, windowID, scope, key, modifiers)
+	return cl.RegisterShortcutEx(shortcutID, windowID, scope, key, ch, modifiers)
 }
 
 // UnregisterShortcut removes a previously registered shortcut.
@@ -673,6 +679,17 @@ func (b *Backend) translateEvent(ev *display.Event) {
 			Key:       ev.Key,
 			Rune:      ev.Char,
 			Modifiers: mods,
+		})
+
+	case display.ClientEventShortcut:
+		b.emit(graphics.Event{
+			Type:       graphics.EventShortcut,
+			ShortcutID: ev.ShortcutID,
+			WindowID:   ev.WindowID,
+			Scope:      ev.Scope,
+			Key:        ev.Key,
+			Rune:       ev.Rune,
+			Modifiers:  ev.Modifiers,
 		})
 
 	case display.ClientEventFocus:

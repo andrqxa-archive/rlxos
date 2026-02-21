@@ -20,7 +20,10 @@ package main
 import (
 	"log"
 	"net"
+	"os"
+	"strconv"
 	"sync"
+	"syscall"
 )
 
 // objectHandler is a function that handles requests for a specific object.
@@ -41,6 +44,8 @@ type clientSession struct {
 	buffers      map[uint32]*bufferState
 	xdgSurfaces  map[uint32]*xdgSurfaceState
 	xdgToplevels map[uint32]*xdgToplevelState
+	xdgPopups    map[uint32]*xdgPopupState
+	positioners  map[uint32]*xdgPositionerState
 	subsurfaces  map[uint32]*subsurfaceState
 	subMu        sync.RWMutex
 
@@ -57,6 +62,7 @@ type clientSession struct {
 	outputVer    uint32
 	shmID        uint32
 	seatID       uint32
+	seatVer      uint32
 	xdgWmBaseID  uint32
 
 	nextSerial uint32
@@ -73,6 +79,8 @@ func newClientSession(uc *net.UnixConn, server *Server) *clientSession {
 		buffers:      make(map[uint32]*bufferState),
 		xdgSurfaces:  make(map[uint32]*xdgSurfaceState),
 		xdgToplevels: make(map[uint32]*xdgToplevelState),
+		xdgPopups:    make(map[uint32]*xdgPopupState),
+		positioners:  make(map[uint32]*xdgPositionerState),
 		subsurfaces:  make(map[uint32]*subsurfaceState),
 		nextSerial:   1,
 	}
@@ -131,6 +139,9 @@ func (s *clientSession) cleanup() {
 	// Remove all toplevels (destroys display windows)
 	for _, tl := range s.xdgToplevels {
 		s.server.removeToplevel(tl)
+	}
+	for _, popup := range s.xdgPopups {
+		s.server.removePopup(popup)
 	}
 
 	s.subMu.Lock()
@@ -243,6 +254,11 @@ func (s *clientSession) handleRegistryRequest(_ uint32, opcode uint16, payload [
 		s.outputVer = reqVersion
 		s.setHandler(newID, s.handleOutputRequest)
 		s.sendOutputInfo(newID, reqVersion)
+		for _, surf := range s.surfaces {
+			if surf != nil && surf.displayWindow != nil {
+				s.sendSurfaceEnter(surf.id)
+			}
+		}
 
 	case 5: // wl_shm
 		s.shmID = newID
@@ -254,10 +270,19 @@ func (s *clientSession) handleRegistryRequest(_ uint32, opcode uint16, payload [
 		s.setHandler(newID, s.handleXdgWmBaseRequest)
 
 	case 7: // wl_seat
+		if reqVersion > versionWlSeat {
+			reqVersion = versionWlSeat
+		}
+		if reqVersion == 0 {
+			reqVersion = 1
+		}
 		s.seatID = newID
+		s.seatVer = reqVersion
 		s.setHandler(newID, s.handleSeatRequest)
 		s.sendSeatCapabilities(newID)
-		s.sendSeatName(newID)
+		if s.seatVer >= 2 {
+			s.sendSeatName(newID)
+		}
 
 	default:
 		log.Printf("client tried to bind unknown global %d (%s)", name, ifaceStr)
@@ -321,19 +346,50 @@ func (s *clientSession) handleSeatRequest(id uint32, opcode uint16, payload []by
 	case seatGetPointerOp:
 		if len(payload) >= 4 {
 			s.pointerID = getUint32(payload, 0)
-			s.setHandler(s.pointerID, func(_ uint32, _ uint16, _ []byte, fds []int) {
-				closeFDs(fds)
-			})
+			s.setHandler(s.pointerID, s.handlePointerRequest)
 		}
 
 	case seatGetKeyboardOp:
 		if len(payload) >= 4 {
 			s.keyboardID = getUint32(payload, 0)
-			s.setHandler(s.keyboardID, func(_ uint32, _ uint16, _ []byte, fds []int) {
-				closeFDs(fds)
-			})
+			s.setHandler(s.keyboardID, s.handleKeyboardRequest)
 			s.sendKeymap()
+			s.sendKeyboardRepeatInfo()
 		}
+
+	case seatReleaseOp:
+		if id == s.seatID {
+			s.seatID = 0
+			s.seatVer = 0
+		}
+		s.removeHandler(id)
+	}
+}
+
+func (s *clientSession) handlePointerRequest(id uint32, opcode uint16, payload []byte, fds []int) {
+	closeFDs(fds)
+	_ = payload
+
+	switch opcode {
+	case pointerSetCursorOp:
+		// Cursor images are compositor-driven in display service.
+	case pointerReleaseOp:
+		if id == s.pointerID {
+			s.pointerID = 0
+		}
+		s.removeHandler(id)
+	}
+}
+
+func (s *clientSession) handleKeyboardRequest(id uint32, opcode uint16, payload []byte, fds []int) {
+	closeFDs(fds)
+	_ = payload
+
+	if opcode == keyboardReleaseOp {
+		if id == s.keyboardID {
+			s.keyboardID = 0
+		}
+		s.removeHandler(id)
 	}
 }
 
@@ -352,7 +408,20 @@ func (s *clientSession) sendKeymap() {
 	p := make([]byte, 8)
 	putUint32(p, 0, keyboardKeymapFormatXKBv1)
 	putUint32(p, 4, uint32(size))
-	s.conn.sendMsg(s.keyboardID, keyboardKeymapEvent, p, fd)
+	if err := s.conn.sendMsg(s.keyboardID, keyboardKeymapEvent, p, fd); err != nil {
+		log.Printf("failed to send keymap: %v", err)
+	}
+	_ = syscall.Close(fd)
+}
+
+func (s *clientSession) sendKeyboardRepeatInfo() {
+	if s.keyboardID == 0 || s.seatVer < 4 {
+		return
+	}
+	p := make([]byte, 8)
+	putInt32(p, 0, 25)  // 25 keys/second
+	putInt32(p, 4, 600) // 600 ms delay
+	s.conn.sendMsg(s.keyboardID, keyboardRepeatInfoEvent, p)
 }
 
 func (s *clientSession) subsurfacesForParent(parent *surfaceState) []*subsurfaceState {
@@ -426,9 +495,13 @@ func (s *clientSession) sendOutputInfo(outputID uint32, boundVersion uint32) {
 		boundVersion = 1
 	}
 
-	// Use reasonable defaults for output size
-	width := 1920
-	height := 1080
+	// Use reasonable defaults; allow runtime override for integration testing.
+	width := envInt("WAYLAYER_OUTPUT_WIDTH", 1920)
+	height := envInt("WAYLAYER_OUTPUT_HEIGHT", 1080)
+	if w, h, clamped := clampSurfaceSize(width, height, 1920, 1080); clamped {
+		log.Printf("clamped output mode from %dx%d to %dx%d", width, height, w, h)
+		width, height = w, h
+	}
 
 	makeStr := encodeString("AvyOS")
 	modelStr := encodeString("Virtual-1")
@@ -459,8 +532,47 @@ func (s *clientSession) sendOutputInfo(outputID uint32, boundVersion uint32) {
 		scale := make([]byte, 4)
 		putInt32(scale, 0, 1)
 		s.conn.sendMsg(outputID, outputScaleEvent, scale)
+	}
+
+	if boundVersion >= 4 {
+		name := encodeString("Virtual-1")
+		desc := encodeString("Waylayer display translator")
+		s.conn.sendMsg(outputID, outputNameEvent, name)
+		s.conn.sendMsg(outputID, outputDescEvent, desc)
+	}
+	if boundVersion >= 2 {
 		s.conn.sendMsg(outputID, outputDoneEvent, nil)
 	}
+}
+
+func (s *clientSession) sendSurfaceEnter(surfaceID uint32) {
+	if surfaceID == 0 || s.outputID == 0 {
+		return
+	}
+	p := make([]byte, 4)
+	putUint32(p, 0, s.outputID)
+	s.conn.sendMsg(surfaceID, surfaceEnterEvent, p)
+}
+
+func (s *clientSession) sendSurfaceLeave(surfaceID uint32) {
+	if surfaceID == 0 || s.outputID == 0 {
+		return
+	}
+	p := make([]byte, 4)
+	putUint32(p, 0, s.outputID)
+	s.conn.sendMsg(surfaceID, surfaceLeaveEvent, p)
+}
+
+func envInt(name string, fallback int) int {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
 }
 
 // serial returns the next event serial and increments.

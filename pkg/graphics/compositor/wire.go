@@ -22,8 +22,12 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
+
+	"avyos.dev/pkg/fs"
 )
 
 // clientConn wraps a Unix domain socket for one connected Wayland client.
@@ -181,31 +185,32 @@ func (c *clientConn) recvWithFDs(buf []byte) (int, []int, error) {
 func listen() (*net.UnixListener, string, error) {
 	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
 	if runtimeDir == "" {
-		return nil, "", fmt.Errorf("XDG_RUNTIME_DIR not set")
+		runtimeDir = fs.Resolve("cache", filepath.Join("runtime", strconv.Itoa(os.Getuid())))
+	}
+	if err := os.MkdirAll(runtimeDir, 0700); err != nil {
+		return nil, "", fmt.Errorf("ensure XDG_RUNTIME_DIR %q: %w", runtimeDir, err)
 	}
 
-	// Try wayland-0, wayland-1, etc.
-	for i := 0; i < 32; i++ {
-		name := fmt.Sprintf("wayland-%d", i)
-		sockPath := runtimeDir + "/" + name
+	name := os.Getenv("WAYLAND_DISPLAY")
+	if name == "" {
+		name = "waylayer"
+	}
+	sockPath := runtimeDir + "/" + name
 
-		// Remove stale socket
-		os.Remove(sockPath)
+	// Remove stale socket.
+	_ = os.Remove(sockPath)
 
-		addr, err := net.ResolveUnixAddr("unix", sockPath)
-		if err != nil {
-			continue
-		}
-
-		ln, err := net.ListenUnix("unix", addr)
-		if err != nil {
-			continue
-		}
-
-		return ln, name, nil
+	addr, err := net.ResolveUnixAddr("unix", sockPath)
+	if err != nil {
+		return nil, "", err
 	}
 
-	return nil, "", fmt.Errorf("could not create wayland socket")
+	ln, err := net.ListenUnix("unix", addr)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return ln, name, nil
 }
 
 // --- Payload encoding helpers ---

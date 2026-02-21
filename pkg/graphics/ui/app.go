@@ -5,6 +5,7 @@ import (
 
 	"avyos.dev/pkg/graphics"
 	gapp "avyos.dev/pkg/graphics/app"
+	displaybackend "avyos.dev/pkg/graphics/backend/display"
 )
 
 // App is the base struct for UI applications. Embed this in your app struct
@@ -27,6 +28,7 @@ type App struct {
 	engine      *Engine
 	rootElement *Element
 	app         *gapp.App
+	menuPopup   *displaybackend.Popup
 	opts        gapp.Options
 	configure   []func(*gapp.App)
 	focusables  []graphics.Widget

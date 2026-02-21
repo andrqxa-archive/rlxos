@@ -1,7 +1,7 @@
 {
     "id": "waylayer",
     "name": "Waylayer",
-    "description": "Run wayland apps in compositor",
+    "description": "Wayland translation layer to display service",
     "icon": "wayland",
     "hidden": true
 }

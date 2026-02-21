@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/signal"
 	"reflect"
+	"strings"
 	"syscall"
 	"time"
 
@@ -35,6 +36,16 @@ const cursorSize = 12
 type debugFlash struct {
 	region    graphics.Rect
 	remaining int // frames left to display
+}
+
+type shortcutBinding struct {
+	shortcutID uint32
+	windowID   uint32
+	scope      uint32
+	key        graphics.Key
+	ch         rune
+	modifiers  graphics.Modifiers
+	handler    func(graphics.Event)
 }
 
 // App represents the main application with a single root widget
@@ -51,6 +62,9 @@ type App struct {
 	fps        int
 	OnQuit     func()
 	OnEscape   func() // If set, called on Escape instead of quitting.
+	OnEvent    func(ev graphics.Event) bool
+
+	shortcuts map[uint32]shortcutBinding
 
 	// Damage tracking
 	prevBounds  map[graphics.Widget]graphics.Rect
@@ -85,6 +99,11 @@ type titleSetter interface {
 
 type rectBatchFlusher interface {
 	FlushRects([]graphics.Rect) error
+}
+
+type shortcutRegistrar interface {
+	RegisterShortcutEx(shortcutID, windowID, scope uint32, key graphics.Key, ch rune, modifiers graphics.Modifiers) error
+	UnregisterShortcut(shortcutID uint32) error
 }
 
 // Options configures a new application.
@@ -175,6 +194,74 @@ func (a *App) SetRoot(widget graphics.Widget) {
 // Root returns the current root widget.
 func (a *App) Root() graphics.Widget {
 	return a.root
+}
+
+// RegisterShortcut registers a compositor shortcut callback.
+// If key is graphics.KeyNone, ch must be a printable rune.
+func (a *App) RegisterShortcut(shortcutID, windowID, scope uint32, key graphics.Key, ch rune, modifiers graphics.Modifiers, handler func(graphics.Event)) error {
+	if shortcutID == 0 {
+		return fmt.Errorf("shortcut id must be non-zero")
+	}
+	if key == graphics.KeyNone && ch == 0 {
+		return fmt.Errorf("shortcut must specify key or rune")
+	}
+	if a.shortcuts == nil {
+		a.shortcuts = make(map[uint32]shortcutBinding)
+	}
+
+	binding := shortcutBinding{
+		shortcutID: shortcutID,
+		windowID:   windowID,
+		scope:      scope,
+		key:        key,
+		ch:         ch,
+		modifiers:  modifiers,
+		handler:    handler,
+	}
+	a.shortcuts[shortcutID] = binding
+
+	// When already running, apply immediately.
+	if a.running {
+		return a.registerShortcutWithBackend(binding)
+	}
+	return nil
+}
+
+// UnregisterShortcut removes a previously registered shortcut callback.
+func (a *App) UnregisterShortcut(shortcutID uint32) error {
+	if shortcutID == 0 {
+		return fmt.Errorf("shortcut id must be non-zero")
+	}
+	delete(a.shortcuts, shortcutID)
+	if !a.running {
+		return nil
+	}
+	sr, ok := a.backend.(shortcutRegistrar)
+	if !ok {
+		return fmt.Errorf("backend does not support shortcuts")
+	}
+	return sr.UnregisterShortcut(shortcutID)
+}
+
+func (a *App) registerShortcutWithBackend(binding shortcutBinding) error {
+	sr, ok := a.backend.(shortcutRegistrar)
+	if !ok {
+		return fmt.Errorf("backend does not support shortcuts")
+	}
+	return sr.RegisterShortcutEx(binding.shortcutID, binding.windowID, binding.scope, binding.key, binding.ch, binding.modifiers)
+}
+
+func (a *App) registerPendingShortcuts() error {
+	var failures []string
+	for _, binding := range a.shortcuts {
+		if err := a.registerShortcutWithBackend(binding); err != nil {
+			failures = append(failures, fmt.Sprintf("%d: %v", binding.shortcutID, err))
+		}
+	}
+	if len(failures) > 0 {
+		return fmt.Errorf(strings.Join(failures, "; "))
+	}
+	return nil
 }
 
 // AddFocusable registers a widget for keyboard focus (tab navigation).
@@ -287,6 +374,12 @@ func (a *App) Run() error {
 	}
 	defer a.backend.Close()
 
+	if len(a.shortcuts) > 0 {
+		if err := a.registerPendingShortcuts(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to register one or more shortcuts: %v\n", err)
+		}
+	}
+
 	// Size root widget to full screen
 	w, h := a.backend.Size()
 	a.root.SetBounds(graphics.Rect{W: w, H: h})
@@ -300,7 +393,18 @@ func (a *App) Run() error {
 	}
 
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	sessionMode := isSessionMode()
+	if sessionMode {
+		// Session-launched desktop apps should survive controlling-shell signals.
+		signal.Ignore(syscall.SIGINT, syscall.SIGHUP, syscall.SIGQUIT)
+		defer signal.Reset(syscall.SIGINT, syscall.SIGHUP, syscall.SIGQUIT)
+	}
+	sigSet := []os.Signal{syscall.SIGTERM}
+	if !sessionMode {
+		sigSet = append(sigSet, syscall.SIGINT)
+	}
+	signal.Notify(sigChan, sigSet...)
+	defer signal.Stop(sigChan)
 
 	a.running = true
 	frameTime := time.Second / time.Duration(a.fps)
@@ -368,6 +472,13 @@ func (a *App) Run() error {
 	return nil
 }
 
+func isSessionMode() bool {
+	if os.Getenv("AVYOS_SESSION_MODE") == "1" {
+		return true
+	}
+	return os.Getenv("AVYOS_SESSION_ID") != ""
+}
+
 // Quit stops the application.
 func (a *App) Quit() {
 	a.running = false
@@ -398,6 +509,17 @@ func (a *App) handleEvent(ev graphics.Event) {
 			a.root.SetBounds(graphics.Rect{W: w, H: h})
 			a.fullRedraw = true
 		}
+		return
+	}
+
+	if ev.Type == graphics.EventShortcut {
+		if binding, ok := a.shortcuts[ev.ShortcutID]; ok && binding.handler != nil {
+			binding.handler(ev)
+			return
+		}
+	}
+
+	if a.OnEvent != nil && a.OnEvent(ev) {
 		return
 	}
 

@@ -31,6 +31,7 @@ const (
 	EventFocusOut
 	EventQuit
 	EventResize
+	EventShortcut
 )
 
 // MouseButton represents a mouse button.
@@ -112,4 +113,9 @@ type Event struct {
 	Key       Key
 	Rune      rune
 	Modifiers Modifiers
+
+	// Shortcut events
+	ShortcutID uint32
+	WindowID   uint32
+	Scope      uint32
 }

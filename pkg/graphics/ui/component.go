@@ -53,26 +53,37 @@ func (r *ComponentRegistry) Instantiate(name string, node *Node, handler interfa
 			e.attrs[prop.Name] = prop.Value.Str
 		}
 	}
+	if vis, ok := e.attrs["visible"]; ok && vis != "" {
+		e.visible = toBool(vis)
+	}
 
 	// Apply instance overrides from the node
 	for _, prop := range node.Properties {
 		key := prop.Name
+		val := prop.Value.Str
+
+		if applyBuiltinProperty(e, name, key, val, handler) {
+			continue
+		}
 
 		// Handle signal connections: onXxx -> connect to handler method
 		if len(key) > 2 && key[:2] == "on" && handler != nil {
 			sigName := lcFirst(key[2:])
-			methodName := prop.Value.Str
+			methodName := val
 			connectSignal(e, sigName, handler, methodName)
 			continue
 		}
 
 		// Handle id
 		if key == "id" {
-			e.id = prop.Value.Str
+			e.id = val
 			continue
 		}
 
-		e.attrs[key] = prop.Value.Str
+		e.attrs[key] = val
+	}
+	if name == "MenuItem" && e.attrs["text"] == "" && e.attrs["name"] != "" {
+		e.attrs["text"] = e.attrs["name"]
 	}
 
 	// Build child elements from the node
@@ -108,20 +119,28 @@ func (r *ComponentRegistry) BuildElement(node *Node, handler interface{}) (*Elem
 
 	for _, prop := range node.Properties {
 		key := prop.Name
+		val := prop.Value.Str
+
+		if applyBuiltinProperty(e, node.TypeName, key, val, handler) {
+			continue
+		}
 
 		if len(key) > 2 && key[:2] == "on" && handler != nil {
 			sigName := lcFirst(key[2:])
-			methodName := prop.Value.Str
+			methodName := val
 			connectSignal(e, sigName, handler, methodName)
 			continue
 		}
 
 		if key == "id" {
-			e.id = prop.Value.Str
+			e.id = val
 			continue
 		}
 
-		e.attrs[key] = prop.Value.Str
+		e.attrs[key] = val
+	}
+	if node.TypeName == "MenuItem" && e.attrs["text"] == "" && e.attrs["name"] != "" {
+		e.attrs["text"] = e.attrs["name"]
 	}
 
 	for _, childNode := range node.Children {
@@ -145,6 +164,29 @@ func connectSignal(e *Element, sigName string, handler interface{}, methodName s
 	if method.IsValid() {
 		e.signals[sigName] = method
 	}
+}
+
+func applyBuiltinProperty(e *Element, typeName, key, value string, handler interface{}) bool {
+	switch key {
+	case "visible":
+		e.attrs[key] = value
+		e.visible = toBool(value)
+		return true
+	case "name":
+		if typeName == "MenuItem" {
+			e.attrs[key] = value
+			e.attrs["text"] = value
+			return true
+		}
+	case "action":
+		if typeName == "MenuItem" {
+			if handler != nil && value != "" {
+				connectSignal(e, "clicked", handler, value)
+			}
+			return true
+		}
+	}
+	return false
 }
 
 // lcFirst lowercases the first character of a string.

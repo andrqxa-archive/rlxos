@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -22,9 +23,25 @@ var backgroundUI string
 
 var log = logger.New("background")
 
+const (
+	shortcutDesktopMenu uint32 = 1
+	shortcutLaunchpad   uint32 = 2
+	shortcutTerminal    uint32 = 3
+
+	defaultWallpaperPath = "/avyos/data/backgrounds/default.png"
+
+	keyBackgroundSource = "/dev/rlxos/background/source"
+	keyBackgroundScale  = "/dev/rlxos/background/scale"
+	keyBackgroundColor  = "/dev/rlxos/background/color"
+
+	legacyWallpaperKey = "background.wallpaper"
+	legacyColorKey     = "background.color"
+)
+
 type options struct {
 	mode      string
 	imagePath string
+	scaleMode string
 	color     graphics.Color
 }
 
@@ -57,6 +74,8 @@ func init() {
 
 type BackgroundApp struct {
 	ui.App
+	mouseX int
+	mouseY int
 }
 
 func main() {
@@ -83,8 +102,28 @@ func run() error {
 	}
 
 	app := &BackgroundApp{}
+	app.mouseX = -1
+	app.mouseY = -1
 	app.SetOptions(gapp.Options{Title: "Background", Backend: backend, Input: backend, Background: opts.color})
 	if err := app.LoadString(backgroundUI, app); err != nil {
+		return err
+	}
+	app.Configure(func(core *gapp.App) {
+		core.OnEvent = app.handleCoreEvent
+	})
+	if err := app.RegisterClientShortcut(shortcutDesktopMenu, 0, graphics.KeyF10, 0, graphics.ModShift, func(graphics.Event) {
+		app.openDesktopMenuAtPointer()
+	}); err != nil {
+		return err
+	}
+	if err := app.RegisterGlobalShortcut(shortcutLaunchpad, graphics.KeySpace, 0, graphics.ModCtrl, func(graphics.Event) {
+		app.OpenLaunchpad()
+	}); err != nil {
+		return err
+	}
+	if err := app.RegisterGlobalShortcut(shortcutTerminal, graphics.KeyNone, 't', graphics.ModCtrl|graphics.ModAlt, func(graphics.Event) {
+		app.OpenTerminal()
+	}); err != nil {
 		return err
 	}
 	if root := app.FindElement("Root"); root != nil {
@@ -92,7 +131,7 @@ func run() error {
 	}
 	if wallpaper := app.FindElement("Wallpaper"); wallpaper != nil {
 		wallpaper.SetAttribute("src", opts.imagePath)
-		wallpaper.SetAttribute("scaleMode", "cover")
+		wallpaper.SetAttribute("scaleMode", opts.scaleMode)
 	}
 
 	go watchSettings(app)
@@ -102,6 +141,73 @@ func run() error {
 		os.Exit(1)
 	}
 	return nil
+}
+
+func (a *BackgroundApp) handleCoreEvent(ev graphics.Event) bool {
+	switch ev.Type {
+	case graphics.EventMouseMove:
+		a.mouseX = ev.X
+		a.mouseY = ev.Y
+	case graphics.EventMouseButtonRelease:
+		if ev.MouseButton == graphics.MouseButtonRight {
+			a.mouseX = ev.X
+			a.mouseY = ev.Y
+			return a.OpenMenu("DesktopMenu", ev.X, ev.Y)
+		}
+	case graphics.EventMouseButtonPress:
+		// Dismiss open desktop menu quickly when user clicks the wallpaper.
+		if ev.MouseButton == graphics.MouseButtonLeft {
+			a.CloseMenu()
+		}
+	}
+	return false
+}
+
+func (a *BackgroundApp) openDesktopMenuAtPointer() {
+	x, y := a.mouseX, a.mouseY
+	if x < 0 || y < 0 {
+		if root := a.FindElement("Root"); root != nil {
+			b := root.Bounds()
+			x = b.W / 2
+			y = b.H / 2
+		} else {
+			x, y = 20, 20
+		}
+	}
+	_ = a.OpenMenu("DesktopMenu", x, y)
+}
+
+func (a *BackgroundApp) OpenLaunchpad() {
+	a.CloseMenu()
+	if err := runCommand("appmenu"); err != nil {
+		log.Warn("failed to launch app menu: %v", err)
+	}
+}
+
+func (a *BackgroundApp) OpenTerminal() {
+	a.CloseMenu()
+	if err := runCommand("terminal"); err != nil {
+		log.Warn("failed to launch terminal: %v", err)
+	}
+}
+
+func (a *BackgroundApp) OpenFileManager() {
+	a.CloseMenu()
+	if err := runCommand("filemanager"); err != nil {
+		log.Warn("failed to launch file manager: %v", err)
+	}
+}
+
+func (a *BackgroundApp) OpenTaskManager() {
+	a.CloseMenu()
+	if err := runCommand("taskmanager"); err != nil {
+		log.Warn("failed to launch task manager: %v", err)
+	}
+}
+
+func (a *BackgroundApp) RefreshDesktop() {
+	a.CloseMenu()
+	a.RequestFrame()
 }
 
 func watchSettings(app *BackgroundApp) {
@@ -122,11 +228,15 @@ func watchSettings(app *BackgroundApp) {
 
 		client.OnChanged(func(ev settingsapi.ChangedEvent) {
 			switch ev.Key {
-			case "background.wallpaper":
+			case keyBackgroundSource, legacyWallpaperKey:
 				if wallpaper := app.FindElement("Wallpaper"); wallpaper != nil {
 					wallpaper.SetAttribute("src", strings.TrimSpace(ev.Value))
 				}
-			case "background.color":
+			case keyBackgroundScale:
+				if wallpaper := app.FindElement("Wallpaper"); wallpaper != nil {
+					wallpaper.SetAttribute("scaleMode", normalizeBackgroundScale(ev.Value))
+				}
+			case keyBackgroundColor, legacyColorKey:
 				value := strings.TrimSpace(ev.Value)
 				if value == "" {
 					setAppBackground(app, graphics.DefaultTheme.Background)
@@ -164,6 +274,7 @@ func parseOptions() (options, error) {
 	opts := options{
 		mode:      strings.ToLower(strings.TrimSpace(flagMode)),
 		imagePath: strings.TrimSpace(flagImage),
+		scaleMode: "cover",
 		color:     graphics.DefaultTheme.Background,
 	}
 
@@ -178,18 +289,24 @@ func parseOptions() (options, error) {
 	}
 
 	if !flagProvided("image") {
-		if configured := loadSetting("background.wallpaper"); configured != "" {
+		if configured, ok := loadSettingCompat(keyBackgroundSource, legacyWallpaperKey); ok {
 			opts.imagePath = configured
 		}
 	}
 	if opts.imagePath == "" {
-		opts.imagePath = "/avyos/data/backgrounds/default.png"
+		opts.imagePath = defaultWallpaperPath
+	}
+
+	if configured, ok := loadSettingCompat(keyBackgroundScale); ok {
+		opts.scaleMode = normalizeBackgroundScale(configured)
 	}
 
 	colorText := strings.TrimSpace(flagColor)
 	colorFromFlag := flagProvided("color")
 	if !colorFromFlag {
-		colorText = loadSetting("background.color")
+		if configured, ok := loadSettingCompat(keyBackgroundColor, legacyColorKey); ok {
+			colorText = configured
+		}
 	}
 	if colorText != "" {
 		color, err := parseHexColor(colorText)
@@ -205,20 +322,53 @@ func parseOptions() (options, error) {
 	return opts, nil
 }
 
-func loadSetting(key string) string {
+func loadSettingCompat(primary string, fallback ...string) (string, bool) {
 	for range 6 {
 		client, err := settingsapi.Connect()
 		if err == nil {
-			value, err := client.Get(key)
-			_ = client.Close()
-			if err == nil {
-				return strings.TrimSpace(value)
+			if value, ok := getSetting(client, primary); ok {
+				_ = client.Close()
+				return strings.TrimSpace(value), true
 			}
-			return ""
+			for _, key := range fallback {
+				if value, ok := getSetting(client, key); ok {
+					_ = client.Close()
+					return strings.TrimSpace(value), true
+				}
+			}
+			_ = client.Close()
+			return "", false
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	return ""
+	return "", false
+}
+
+func getSetting(client *settingsapi.Client, key string) (string, bool) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", false
+	}
+	value, err := client.Get(key)
+	if err != nil {
+		return "", false
+	}
+	return value, true
+}
+
+func normalizeBackgroundScale(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "contain":
+		return "contain"
+	case "cover":
+		return "cover"
+	case "stretch":
+		return "stretch"
+	case "none":
+		return "none"
+	default:
+		return "cover"
+	}
 }
 
 func flagProvided(name string) bool {
@@ -259,4 +409,11 @@ func parseHexColor(value string) (graphics.Color, error) {
 
 func colorToHex(c graphics.Color) string {
 	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
+}
+
+func runCommand(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Start()
 }

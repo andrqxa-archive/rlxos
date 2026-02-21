@@ -9,4 +9,31 @@ VBox {
         scaleMode: "cover"
         expand: true
     }
+
+    Menu {
+        id: DesktopMenu
+        visible: false
+        menuWidth: 220
+
+        MenuItem {
+            name: "Open App Menu"
+            action: OpenLaunchpad
+        }
+        MenuItem {
+            name: "Open Terminal"
+            action: OpenTerminal
+        }
+        MenuItem {
+            name: "Open File Manager"
+            action: OpenFileManager
+        }
+        MenuItem {
+            name: "Open Task Manager"
+            action: OpenTaskManager
+        }
+        MenuItem {
+            name: "Refresh Desktop"
+            action: RefreshDesktop
+        }
+    }
 }

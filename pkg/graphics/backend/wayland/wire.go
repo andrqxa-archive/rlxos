@@ -45,7 +45,7 @@ func dial() (*conn, error) {
 
 	display := os.Getenv("WAYLAND_DISPLAY")
 	if display == "" {
-		display = "wayland-0"
+		display = "waylayer"
 	}
 
 	sockPath := runtimeDir + "/" + display

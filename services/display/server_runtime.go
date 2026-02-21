@@ -28,6 +28,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode"
 
 	displayapi "avyos.dev/api/display"
 	"avyos.dev/pkg/graphics"
@@ -175,6 +176,7 @@ type shortcutBinding struct {
 	WindowID   uint32
 	Scope      uint32
 	Key        graphics.Key
+	Rune       rune
 	Modifiers  graphics.Modifiers
 }
 
@@ -717,13 +719,37 @@ func normalizeShortcutModifiers(mod graphics.Modifiers) graphics.Modifiers {
 	return mod & (graphics.ModShift | graphics.ModCtrl | graphics.ModAlt)
 }
 
+func normalizeShortcutRune(r rune) rune {
+	if r == 0 {
+		return 0
+	}
+	return unicode.ToLower(r)
+}
+
+func shortcutBindingMatches(binding shortcutBinding, key graphics.Key, r rune, mods graphics.Modifiers) bool {
+	if normalizeShortcutModifiers(binding.Modifiers) != mods {
+		return false
+	}
+	if binding.Key != graphics.KeyNone {
+		return binding.Key == key
+	}
+	if binding.Rune == 0 {
+		return false
+	}
+	return key == graphics.KeyNone && binding.Rune == r
+}
+
 func (s *Server) RegisterShortcut(sender uint32, req displayapi.RegisterShortcutRequest) (displayapi.Empty, error) {
 	sess := s.ensureSession(sender)
 	if req.ShortcutID == 0 {
 		return displayapi.Empty{}, fmt.Errorf("invalid shortcut id")
 	}
-	if req.Key == graphics.KeyNone {
+	shortcutRune := normalizeShortcutRune(req.Rune)
+	if req.Key == graphics.KeyNone && shortcutRune == 0 {
 		return displayapi.Empty{}, fmt.Errorf("invalid shortcut key")
+	}
+	if req.Key != graphics.KeyNone {
+		shortcutRune = 0
 	}
 	if req.Scope != displayapi.ShortcutScopeGlobal && req.Scope != displayapi.ShortcutScopeClient {
 		return displayapi.Empty{}, fmt.Errorf("invalid shortcut scope %d", req.Scope)
@@ -757,7 +783,10 @@ func (s *Server) RegisterShortcut(sender uint32, req displayapi.RegisterShortcut
 			if owner == sender && sid == req.ShortcutID {
 				continue
 			}
-			if existing.Scope != req.Scope || existing.Key != req.Key || normalizeShortcutModifiers(existing.Modifiers) != mods {
+			if existing.Scope != req.Scope {
+				continue
+			}
+			if !shortcutBindingMatches(existing, req.Key, shortcutRune, mods) {
 				continue
 			}
 			if req.Scope == displayapi.ShortcutScopeGlobal {
@@ -774,6 +803,7 @@ func (s *Server) RegisterShortcut(sender uint32, req displayapi.RegisterShortcut
 		WindowID:   req.WindowID,
 		Scope:      req.Scope,
 		Key:        req.Key,
+		Rune:       shortcutRune,
 		Modifiers:  mods,
 	}
 	return displayapi.Empty{}, nil
@@ -809,6 +839,7 @@ func (s *Server) resolveKeyTargetLocked() *window {
 
 func (s *Server) matchShortcutLocked(target *window, ev *graphics.Event) (uint32, displayapi.ShortcutEvent, bool) {
 	mods := normalizeShortcutModifiers(ev.Modifiers)
+	keyRune := normalizeShortcutRune(ev.Rune)
 
 	// Client-scoped shortcuts for the key target have priority.
 	if target != nil && target.sess != nil {
@@ -820,7 +851,7 @@ func (s *Server) matchShortcutLocked(target *window, ev *graphics.Event) (uint32
 				if binding.Scope != displayapi.ShortcutScopeClient {
 					continue
 				}
-				if binding.Key != ev.Key || normalizeShortcutModifiers(binding.Modifiers) != mods {
+				if !shortcutBindingMatches(binding, ev.Key, keyRune, mods) {
 					continue
 				}
 				if binding.WindowID == target.id {
@@ -829,6 +860,7 @@ func (s *Server) matchShortcutLocked(target *window, ev *graphics.Event) (uint32
 						WindowID:   target.id,
 						Scope:      binding.Scope,
 						Key:        ev.Key,
+						Rune:       binding.Rune,
 						Modifiers:  uint8(mods),
 					}, true
 				}
@@ -843,6 +875,7 @@ func (s *Server) matchShortcutLocked(target *window, ev *graphics.Event) (uint32
 					WindowID:   target.id,
 					Scope:      anyWindow.Scope,
 					Key:        ev.Key,
+					Rune:       anyWindow.Rune,
 					Modifiers:  uint8(mods),
 				}, true
 			}
@@ -859,7 +892,7 @@ func (s *Server) matchShortcutLocked(target *window, ev *graphics.Event) (uint32
 			if binding.Scope != displayapi.ShortcutScopeGlobal {
 				continue
 			}
-			if binding.Key != ev.Key || normalizeShortcutModifiers(binding.Modifiers) != mods {
+			if !shortcutBindingMatches(binding, ev.Key, keyRune, mods) {
 				continue
 			}
 			return owner, displayapi.ShortcutEvent{
@@ -867,6 +900,7 @@ func (s *Server) matchShortcutLocked(target *window, ev *graphics.Event) (uint32
 				WindowID:   windowID,
 				Scope:      binding.Scope,
 				Key:        ev.Key,
+				Rune:       binding.Rune,
 				Modifiers:  uint8(mods),
 			}, true
 		}

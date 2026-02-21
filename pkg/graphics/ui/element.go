@@ -203,7 +203,7 @@ func (e *Element) overflowMode() string {
 		if e.hasAttr("scrollable") && e.AttrBool("scrollable", false) {
 			return "auto"
 		}
-		return "visible"
+		return "hidden"
 	}
 	mode := strings.ToLower(strings.TrimSpace(e.Attr("overflow", "")))
 	switch mode {
@@ -216,7 +216,7 @@ func (e *Element) overflowMode() string {
 	case "auto":
 		return "auto"
 	default:
-		return "visible"
+		return "hidden"
 	}
 }
 
@@ -679,12 +679,19 @@ func (e *Element) padding() (top, right, bottom, left int) {
 
 func (e *Element) contentArea() graphics.Rect {
 	pt, pr, pb, pl := e.padding()
-	return graphics.Rect{
+	content := graphics.Rect{
 		X: e.bounds.X + pl,
 		Y: e.bounds.Y + pt,
 		W: e.bounds.W - pl - pr,
 		H: e.bounds.H - pt - pb,
 	}
+	if content.W < 0 {
+		content.W = 0
+	}
+	if content.H < 0 {
+		content.H = 0
+	}
+	return content
 }
 
 func (e *Element) isRow() bool {

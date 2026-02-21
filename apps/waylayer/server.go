@@ -28,11 +28,12 @@ import (
 	"avyos.dev/pkg/graphics"
 )
 
-// toplevelWindow maps a Wayland xdg_toplevel to an AvyOS display window.
+// toplevelWindow maps a Wayland xdg surface role to a display window.
 type toplevelWindow struct {
 	win      *displayapi.ClientWindow
 	surface  *surfaceState
 	toplevel *xdgToplevelState
+	popup    *xdgPopupState
 	session  *clientSession
 
 	// Per-window pointer state
@@ -48,15 +49,15 @@ type toplevelWindow struct {
 	pressedKeys []uint32
 }
 
-// Server is the Wayland-to-AvyOS display bridge.
-// It listens for Wayland clients and creates native AvyOS windows for each toplevel.
+// Server is the Wayland-to-display translation layer.
+// It listens for Wayland clients and forwards surfaces/events to display windows.
 type Server struct {
 	display  *displayapi.DisplayClient
 	listener *net.UnixListener
 	name     string
 
 	sessions []*clientSession
-	windows  map[uint32]*toplevelWindow // display windowID → toplevel
+	windows  map[uint32]*toplevelWindow // display windowID -> mapped surface role
 
 	mu      sync.Mutex
 	quit    chan struct{}
@@ -344,26 +345,46 @@ func (s *Server) handleFocus(tw *toplevelWindow, focused bool) {
 
 // handleConfigure forwards display configure to xdg_toplevel.configure.
 func (s *Server) handleConfigure(tw *toplevelWindow, width, height int) {
-	if tw.toplevel == nil {
-		return
+	reqW, reqH := width, height
+	fallbackW, fallbackH := defaultToplevelWidth, defaultToplevelHeight
+	if tw != nil && tw.win != nil {
+		fallbackW = tw.win.Width
+		fallbackH = tw.win.Height
 	}
+	width, height, clamped := clampSurfaceSize(width, height, fallbackW, fallbackH)
+	if clamped {
+		log.Printf("clamped configure size from %dx%d to %dx%d", reqW, reqH, width, height)
+	}
+
 	if tw.win != nil {
 		tw.win.Width = width
 		tw.win.Height = height
 	}
-	tw.session.sendToplevelConfigure(tw.toplevel, width, height)
+	if tw.toplevel != nil {
+		tw.session.sendToplevelConfigure(tw.toplevel, width, height)
+		return
+	}
+	if tw.popup != nil {
+		tw.popup.width = width
+		tw.popup.height = height
+		tw.session.sendPopupConfigure(tw.popup, tw.popup.x, tw.popup.y, width, height)
+	}
 }
 
-// handleClose sends xdg_toplevel.close to the client.
+// handleClose forwards display close requests to the matching Wayland role object.
 func (s *Server) handleClose(tw *toplevelWindow) {
 	if tw.toplevel != nil {
 		tw.session.conn.sendMsg(tw.toplevel.id, xdgToplevelCloseEvent, nil)
+		return
+	}
+	if tw.popup != nil {
+		tw.session.conn.sendMsg(tw.popup.id, xdgPopupPopupDoneEvent, nil)
 	}
 }
 
 // registerToplevel creates an AvyOS display window for a new xdg_toplevel.
 func (s *Server) registerToplevel(session *clientSession, surface *surfaceState, toplevel *xdgToplevelState) error {
-	win, err := s.display.CreateWindow(800, 600)
+	win, err := s.display.CreateWindow(defaultToplevelWidth, defaultToplevelHeight)
 	if err != nil {
 		return fmt.Errorf("create display window: %w", err)
 	}
@@ -381,20 +402,68 @@ func (s *Server) registerToplevel(session *clientSession, surface *surfaceState,
 
 	// Store reverse mapping on the surface
 	surface.displayWindow = tw
+	session.sendSurfaceEnter(surface.id)
 
 	log.Printf("created display window %d for toplevel %q", win.ID, toplevel.title)
 
 	return nil
 }
 
+// registerPopup creates an AvyOS popup window for a new xdg_popup.
+func (s *Server) registerPopup(session *clientSession, surface *surfaceState, popup *xdgPopupState) error {
+	if popup == nil || popup.parent == nil || popup.parent.surface == nil {
+		return fmt.Errorf("popup parent surface missing")
+	}
+
+	parentTW := s.windowForSurface(popup.parent.surface)
+	if parentTW == nil || parentTW.win == nil {
+		return fmt.Errorf("popup parent window not mapped")
+	}
+
+	width := popup.width
+	height := popup.height
+	if w, h, clamped := clampSurfaceSize(width, height, defaultPopupWidth, defaultPopupHeight); clamped {
+		log.Printf("clamped popup create size from %dx%d to %dx%d", width, height, w, h)
+		width, height = w, h
+	} else {
+		width, height = w, h
+	}
+	popup.width = width
+	popup.height = height
+
+	win, err := s.display.CreatePopup(parentTW.win, popup.x, popup.y, width, height)
+	if err != nil {
+		return fmt.Errorf("create display popup: %w", err)
+	}
+
+	tw := &toplevelWindow{
+		win:     win,
+		surface: surface,
+		popup:   popup,
+		session: session,
+	}
+
+	s.mu.Lock()
+	s.windows[win.ID] = tw
+	s.mu.Unlock()
+
+	surface.displayWindow = tw
+	session.sendSurfaceEnter(surface.id)
+	log.Printf("created display popup %d", win.ID)
+	return nil
+}
+
 // removeToplevel destroys the display window for a toplevel.
 func (s *Server) removeToplevel(toplevel *xdgToplevelState) {
 	s.mu.Lock()
-	var winID uint32
+	var removed *toplevelWindow
 	for id, tw := range s.windows {
 		if tw.toplevel == toplevel {
-			winID = id
+			removed = tw
 			if tw.surface != nil {
+				if tw.session != nil {
+					tw.session.sendSurfaceLeave(tw.surface.id)
+				}
 				tw.surface.displayWindow = nil
 			}
 			delete(s.windows, id)
@@ -403,34 +472,73 @@ func (s *Server) removeToplevel(toplevel *xdgToplevelState) {
 	}
 	s.mu.Unlock()
 
-	if winID != 0 {
-		// Find the toplevelWindow to destroy
-		s.mu.Lock()
-		// Already deleted above, but we need the win reference
-		s.mu.Unlock()
+	if removed != nil && removed.win != nil {
+		removed.win.Destroy()
+	}
+}
+
+// removePopup destroys the display window for an xdg_popup.
+func (s *Server) removePopup(popup *xdgPopupState) {
+	s.mu.Lock()
+	var removed *toplevelWindow
+	for id, tw := range s.windows {
+		if tw.popup == popup {
+			removed = tw
+			if tw.surface != nil {
+				if tw.session != nil {
+					tw.session.sendSurfaceLeave(tw.surface.id)
+				}
+				tw.surface.displayWindow = nil
+			}
+			delete(s.windows, id)
+			break
+		}
+	}
+	s.mu.Unlock()
+
+	if removed != nil && removed.win != nil {
+		removed.win.Destroy()
 	}
 }
 
 // removeSurface removes any window associated with a surface.
 func (s *Server) removeSurface(surf *surfaceState) {
 	s.mu.Lock()
+	var removed *toplevelWindow
 	for id, tw := range s.windows {
 		if tw.surface == surf {
+			removed = tw
+			if tw.surface != nil {
+				if tw.session != nil {
+					tw.session.sendSurfaceLeave(tw.surface.id)
+				}
+				tw.surface.displayWindow = nil
+			}
 			delete(s.windows, id)
-			tw.win.Destroy()
 			break
 		}
 	}
 	s.mu.Unlock()
+
+	if removed != nil && removed.win != nil {
+		removed.win.Destroy()
+	}
 }
 
 // removeSession removes all windows for a disconnected client.
 func (s *Server) removeSession(session *clientSession) {
 	s.mu.Lock()
+	removed := make([]*toplevelWindow, 0)
 	// Destroy display windows
 	for id, tw := range s.windows {
 		if tw.session == session {
-			tw.win.Destroy()
+			if tw.surface != nil {
+				if tw.session != nil {
+					tw.session.sendSurfaceLeave(tw.surface.id)
+				}
+				tw.surface.displayWindow = nil
+			}
+			removed = append(removed, tw)
 			delete(s.windows, id)
 		}
 	}
@@ -443,6 +551,12 @@ func (s *Server) removeSession(session *clientSession) {
 		}
 	}
 	s.mu.Unlock()
+
+	for _, tw := range removed {
+		if tw != nil && tw.win != nil {
+			tw.win.Destroy()
+		}
+	}
 }
 
 // isFocusedToplevel checks if a toplevel's display window has focus.

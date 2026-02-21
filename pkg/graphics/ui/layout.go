@@ -124,6 +124,14 @@ func (e *Element) layoutFlex() {
 		}
 	}
 
+	if (isRow || !e.overflowScrollable()) && mainAvail > 0 {
+		contentMain := totalSpacing
+		for _, v := range mainSizes {
+			contentMain += v
+		}
+		e.shrinkFlexMainSizes(visible, mainSizes, isRow, contentMain-mainAvail)
+	}
+
 	contentMain := totalSpacing
 	for _, v := range mainSizes {
 		contentMain += v
@@ -429,4 +437,109 @@ func maxCrossSize(child *Element, isRow bool) int {
 		return child.AttrInt("maxHeight", 0)
 	}
 	return child.AttrInt("maxWidth", 0)
+}
+
+func (e *Element) shrinkFlexMainSizes(visible []*Element, mainSizes []int, isRow bool, overflow int) {
+	if overflow <= 0 {
+		return
+	}
+
+	shrinkFloors := make([]int, len(visible))
+	shrinkable := make([]int, 0, len(visible))
+	for i, child := range visible {
+		if !flexChildCanShrink(child, isRow) {
+			continue
+		}
+		floor := flexChildShrinkFloor(child, isRow)
+		if floor < 0 {
+			floor = 0
+		}
+		if floor > mainSizes[i] {
+			floor = mainSizes[i]
+		}
+		shrinkFloors[i] = floor
+		if mainSizes[i] > floor {
+			shrinkable = append(shrinkable, i)
+		}
+	}
+
+	for overflow > 0 && len(shrinkable) > 0 {
+		totalCapacity := 0
+		for _, idx := range shrinkable {
+			totalCapacity += mainSizes[idx] - shrinkFloors[idx]
+		}
+		if totalCapacity <= 0 {
+			return
+		}
+
+		used := 0
+		for _, idx := range shrinkable {
+			capacity := mainSizes[idx] - shrinkFloors[idx]
+			if capacity <= 0 {
+				continue
+			}
+			delta := overflow * capacity / totalCapacity
+			if delta < 1 {
+				delta = 1
+			}
+			if delta > capacity {
+				delta = capacity
+			}
+			mainSizes[idx] -= delta
+			used += delta
+			if used >= overflow {
+				break
+			}
+		}
+		if used <= 0 {
+			return
+		}
+		overflow -= used
+		if overflow < 0 {
+			overflow = 0
+		}
+
+		next := shrinkable[:0]
+		for _, idx := range shrinkable {
+			if mainSizes[idx] > shrinkFloors[idx] {
+				next = append(next, idx)
+			}
+		}
+		shrinkable = next
+	}
+}
+
+func flexChildCanShrink(child *Element, isRow bool) bool {
+	if child == nil {
+		return false
+	}
+	if child.hasAttr("shrink") {
+		return child.AttrBool("shrink", true)
+	}
+	if isRow && child.hasAttr("width") {
+		return false
+	}
+	if !isRow && child.hasAttr("height") {
+		return false
+	}
+	return true
+}
+
+func flexChildShrinkFloor(child *Element, isRow bool) int {
+	if child == nil {
+		return 0
+	}
+	if isRow {
+		if child.hasAttr("shrinkMinWidth") {
+			return child.AttrInt("shrinkMinWidth", 0)
+		}
+	} else {
+		if child.hasAttr("shrinkMinHeight") {
+			return child.AttrInt("shrinkMinHeight", 0)
+		}
+	}
+	if child.hasAttr("shrinkMin") {
+		return child.AttrInt("shrinkMin", 0)
+	}
+	return 0
 }

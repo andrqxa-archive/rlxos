@@ -804,6 +804,7 @@ type RegisterShortcutRequest struct {
 	WindowID   uint32
 	Scope      uint32
 	Key        graphics.Key
+	Rune       rune
 	Modifiers  uint8
 }
 
@@ -812,6 +813,7 @@ func (v RegisterShortcutRequest) encodeTo(enc *sutra.Encoder) {
 	enc.PutUint32(v.WindowID)
 	enc.PutUint32(v.Scope)
 	enc.PutInt(int(v.Key))
+	enc.PutRune(v.Rune)
 	enc.PutUint8(v.Modifiers)
 }
 
@@ -820,6 +822,7 @@ func (v *RegisterShortcutRequest) decodeFrom(dec *sutra.Decoder) {
 	v.WindowID = dec.Uint32()
 	v.Scope = dec.Uint32()
 	v.Key = graphics.Key(dec.Int())
+	v.Rune = dec.Rune()
 	v.Modifiers = dec.Uint8()
 }
 
@@ -864,6 +867,7 @@ type ShortcutEvent struct {
 	WindowID   uint32
 	Scope      uint32
 	Key        graphics.Key
+	Rune       rune
 	Modifiers  uint8
 }
 
@@ -872,6 +876,7 @@ func (v ShortcutEvent) encodeTo(enc *sutra.Encoder) {
 	enc.PutUint32(v.WindowID)
 	enc.PutUint32(v.Scope)
 	enc.PutInt(int(v.Key))
+	enc.PutRune(v.Rune)
 	enc.PutUint8(v.Modifiers)
 }
 
@@ -880,6 +885,7 @@ func (v *ShortcutEvent) decodeFrom(dec *sutra.Decoder) {
 	v.WindowID = dec.Uint32()
 	v.Scope = dec.Uint32()
 	v.Key = graphics.Key(dec.Int())
+	v.Rune = dec.Rune()
 	v.Modifiers = dec.Uint8()
 }
 

@@ -19,6 +19,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"syscall"
 
 	"avyos.dev/pkg/graphics"
@@ -47,6 +48,7 @@ type surfacePending struct {
 	bufferY   int32
 	damage    []graphics.Rect
 	hasBuffer bool
+	attached  bool
 }
 
 // shmPoolState represents a wl_shm_pool created by a client.
@@ -86,7 +88,8 @@ func (s *clientSession) handleSurfaceRequest(id uint32, opcode uint16, payload [
 			surf.pending.bufferID = bufID
 			surf.pending.bufferX = dx
 			surf.pending.bufferY = dy
-			surf.pending.hasBuffer = true
+			surf.pending.attached = true
+			surf.pending.hasBuffer = bufID != 0
 		}
 
 	case surfaceDamageOp, surfaceDamageBufferOp:
@@ -121,33 +124,87 @@ func (s *clientSession) handleSurfaceRequest(id uint32, opcode uint16, payload [
 
 // commitSurface applies pending state and copies pixels to the display window.
 func (s *clientSession) commitSurface(surf *surfaceState) {
-	surf.current = surf.pending
+	pending := surf.pending
 	surf.pending = surfacePending{}
+	releaseBufferID := uint32(0)
 
-	if surf.current.hasBuffer {
+	if pending.attached {
+		surf.current.bufferID = pending.bufferID
+		surf.current.bufferX = pending.bufferX
+		surf.current.bufferY = pending.bufferY
+		surf.current.hasBuffer = pending.hasBuffer
+		if pending.hasBuffer {
+			releaseBufferID = pending.bufferID
+		}
+	}
+	surf.current.damage = pending.damage
+
+	tw := surf.displayWindow
+	if !surf.current.hasBuffer {
+		if tw != nil && tw.win != nil {
+			dstBuf := tw.win.Buffer()
+			if dstBuf != nil {
+				dstBuf.Clear(graphics.ColorTransparent)
+				tw.win.DamageAll()
+			}
+		}
+	} else {
 		buf, ok := s.buffers[surf.current.bufferID]
 		if ok {
 			pool := buf.pool
-			if pool.data != nil && buf.offset+buf.stride*buf.height <= len(pool.data) {
-				tw := surf.displayWindow
+			if pool.data != nil && validBufferBounds(buf.offset, buf.width, buf.height, buf.stride, len(pool.data)) {
 				if tw != nil && tw.win != nil {
 					// Resize the display window if the buffer size changed
-					if buf.width != tw.win.Width || buf.height != tw.win.Height {
-						tw.win.Resize(buf.width, buf.height)
+					targetW, targetH, clamped := clampSurfaceSize(buf.width, buf.height, tw.win.Width, tw.win.Height)
+					if clamped {
+						log.Printf("clamped wl_buffer size from %dx%d to %dx%d", buf.width, buf.height, targetW, targetH)
+					}
+					if targetW != tw.win.Width || targetH != tw.win.Height {
+						if err := tw.win.Resize(targetW, targetH); err != nil {
+							log.Printf("display resize failed: %v", err)
+						}
 					}
 
 					// Copy pixel data directly to the display window's shared buffer
 					dstBuf := tw.win.Buffer()
 					if dstBuf != nil {
-						src := pool.data[buf.offset:]
-						for y := 0; y < buf.height && y < dstBuf.Height; y++ {
-							srcRow := src[y*buf.stride : y*buf.stride+buf.width*4]
-							dstOff := y * dstBuf.Stride
-							maxW := buf.width * 4
-							if maxW > dstBuf.Stride {
-								maxW = dstBuf.Stride
+						src := pool.data[buf.offset : buf.offset+buf.stride*buf.height]
+						copyHeight := buf.height
+						if copyHeight > dstBuf.Height {
+							copyHeight = dstBuf.Height
+						}
+
+						copyWidthPx := buf.width
+						if copyWidthPx > dstBuf.Width {
+							copyWidthPx = dstBuf.Width
+						}
+						if copyWidthPx > 0 && copyHeight > 0 {
+							rowBytes := copyWidthPx * 4
+							if rowBytes > buf.stride {
+								rowBytes = buf.stride
 							}
-							copy(dstBuf.Data[dstOff:dstOff+maxW], srcRow[:maxW])
+							if rowBytes > dstBuf.Stride {
+								rowBytes = dstBuf.Stride
+							}
+
+							if rowBytes > 0 {
+								for y := 0; y < copyHeight; y++ {
+									srcOff := y * buf.stride
+									dstOff := y * dstBuf.Stride
+									if srcOff+rowBytes > len(src) || dstOff+rowBytes > len(dstBuf.Data) {
+										continue
+									}
+
+									srcRow := src[srcOff : srcOff+rowBytes]
+									dstRow := dstBuf.Data[dstOff : dstOff+rowBytes]
+									copy(dstRow, srcRow)
+									if promoteOpaqueAlpha(buf.format, dstRow) {
+										// Some clients submit XRGB or ARGB with undefined alpha for opaque content.
+										// Promote alpha to keep content visible in display compositing.
+										forceOpaqueAlpha(dstRow)
+									}
+								}
+							}
 						}
 
 						// Composite subsurfaces onto the same buffer
@@ -161,11 +218,15 @@ func (s *clientSession) commitSurface(surf *surfaceState) {
 						tw.win.DamageAll()
 					}
 				}
+			} else if pool.data != nil {
+				log.Printf("ignoring invalid wl_buffer bounds (offset=%d width=%d height=%d stride=%d pool=%d)",
+					buf.offset, buf.width, buf.height, buf.stride, len(pool.data))
 			}
-
-			// Release the buffer back to the client
-			s.conn.sendMsg(surf.current.bufferID, bufferReleaseEvent, nil)
 		}
+	}
+	if releaseBufferID != 0 {
+		// Release exactly once per attach; commits without attach keep current buffer.
+		s.conn.sendMsg(releaseBufferID, bufferReleaseEvent, nil)
 	}
 
 	// Fire frame callbacks
@@ -195,7 +256,7 @@ func (s *clientSession) compositeSubsurface(dstBuf *graphics.Buffer, ss *subsurf
 		return
 	}
 	pool := subBuf.pool
-	if pool.data == nil || subBuf.offset+subBuf.stride*subBuf.height > len(pool.data) {
+	if pool.data == nil || !validBufferBounds(subBuf.offset, subBuf.width, subBuf.height, subBuf.stride, len(pool.data)) {
 		return
 	}
 
@@ -215,8 +276,48 @@ func (s *clientSession) compositeSubsurface(dstBuf *graphics.Buffer, ss *subsurf
 			srcOff := x * 4
 			dstOff := dy*dstBuf.Stride + dx*4
 			copy(dstBuf.Data[dstOff:dstOff+4], srcRow[srcOff:srcOff+4])
+			if subBuf.format == shmFormatXRGB8888 {
+				dstBuf.Data[dstOff+3] = 0xFF
+			} else if subBuf.format == shmFormatARGB8888 {
+				r := dstBuf.Data[dstOff+2]
+				g := dstBuf.Data[dstOff+1]
+				b := dstBuf.Data[dstOff+0]
+				a := dstBuf.Data[dstOff+3]
+				if a == 0 && (r != 0 || g != 0 || b != 0) {
+					dstBuf.Data[dstOff+3] = 0xFF
+				}
+			}
 		}
 	}
+}
+
+func forceOpaqueAlpha(row []byte) {
+	for i := 3; i < len(row); i += 4 {
+		row[i] = 0xFF
+	}
+}
+
+func promoteOpaqueAlpha(format uint32, row []byte) bool {
+	if format == shmFormatXRGB8888 {
+		return true
+	}
+	if format != shmFormatARGB8888 {
+		return false
+	}
+
+	// Promote only when ARGB row has non-zero color channels but zero alpha throughout.
+	alphaZero := true
+	hasColor := false
+	for i := 0; i+3 < len(row); i += 4 {
+		if row[i+3] != 0 {
+			alphaZero = false
+			break
+		}
+		if row[i] != 0 || row[i+1] != 0 || row[i+2] != 0 {
+			hasColor = true
+		}
+	}
+	return alphaZero && hasColor
 }
 
 // handleShmRequest processes wl_shm requests.
@@ -228,6 +329,11 @@ func (s *clientSession) handleShmRequest(id uint32, opcode uint16, payload []byt
 			size := int(getInt32(payload, 4))
 			fd := fds[0]
 			closeFDs(fds[1:])
+			if size <= 0 {
+				log.Printf("ignoring wl_shm_pool with invalid size %d", size)
+				syscall.Close(fd)
+				return
+			}
 
 			pool := &shmPoolState{
 				id:   poolID,
@@ -269,6 +375,22 @@ func (s *clientSession) handleShmPoolRequest(id uint32, opcode uint16, payload [
 			height := int(getInt32(payload, 12))
 			stride := int(getInt32(payload, 16))
 			format := getUint32(payload, 20)
+			if width <= 0 || height <= 0 || stride <= 0 || offset < 0 {
+				log.Printf("ignoring wl_buffer %d with invalid geometry offset=%d size=%dx%d stride=%d",
+					bufID, offset, width, height, stride)
+				return
+			}
+			w, h, clamped := clampSurfaceSize(width, height, width, height)
+			if clamped {
+				log.Printf("clamped wl_buffer %d size from %dx%d to %dx%d", bufID, width, height, w, h)
+			}
+			width = w
+			height = h
+			if !validBufferBounds(offset, width, height, stride, pool.size) {
+				log.Printf("ignoring wl_buffer %d with out-of-bounds payload (offset=%d size=%dx%d stride=%d pool=%d)",
+					bufID, offset, width, height, stride, pool.size)
+				return
+			}
 
 			buf := &bufferState{
 				id:     bufID,
@@ -286,6 +408,10 @@ func (s *clientSession) handleShmPoolRequest(id uint32, opcode uint16, payload [
 	case shmPoolResizeOp:
 		if len(payload) >= 4 {
 			newSize := int(getInt32(payload, 0))
+			if newSize <= 0 {
+				log.Printf("ignoring wl_shm_pool resize with invalid size %d", newSize)
+				return
+			}
 			if pool.data != nil {
 				syscall.Munmap(pool.data)
 			}

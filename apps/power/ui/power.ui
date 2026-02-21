@@ -2,7 +2,7 @@ Page {
     padding: "18"
     spacing: 0
     background: "#0A132680"
-    overflow: "visible"
+    overflow: "hidden"
 
     VBox {
         expand: true

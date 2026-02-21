@@ -17,8 +17,8 @@
 
 package main
 
-// Wayland protocol constants for the compositor (server) side.
-// Opcodes are requests (client → server), events are responses (server → client).
+// Wayland protocol constants for the translation-layer (server) side.
+// Opcodes are requests (client -> server), events are responses (server -> client).
 
 // --- wl_display (object ID 1) ---
 
@@ -94,6 +94,12 @@ const (
 	surfaceSetInputRegionOp  = 5
 	surfaceCommitOp          = 6
 	surfaceDamageBufferOp    = 9
+)
+
+// wl_surface events
+const (
+	surfaceEnterEvent = 0
+	surfaceLeaveEvent = 1
 )
 
 // --- wl_shm ---
@@ -180,6 +186,7 @@ const (
 	seatGetPointerOp  = 0
 	seatGetKeyboardOp = 1
 	seatGetTouchOp    = 2
+	seatReleaseOp     = 3
 )
 
 // wl_seat events
@@ -196,6 +203,12 @@ const (
 )
 
 // --- wl_pointer ---
+
+// wl_pointer requests
+const (
+	pointerSetCursorOp = 0
+	pointerReleaseOp   = 1
+)
 
 // wl_pointer events
 const (
@@ -220,11 +233,17 @@ const (
 
 // wl_keyboard events
 const (
-	keyboardKeymapEvent    = 0
-	keyboardEnterEvent     = 1
-	keyboardLeaveEvent     = 2
-	keyboardKeyEvent       = 3
-	keyboardModifiersEvent = 4
+	keyboardKeymapEvent     = 0
+	keyboardEnterEvent      = 1
+	keyboardLeaveEvent      = 2
+	keyboardKeyEvent        = 3
+	keyboardModifiersEvent  = 4
+	keyboardRepeatInfoEvent = 5
+)
+
+// wl_keyboard requests
+const (
+	keyboardReleaseOp = 0
 )
 
 // wl_keyboard keymap formats
@@ -270,6 +289,22 @@ const (
 	xdgSurfaceConfigureEvent = 0
 )
 
+// --- xdg_positioner ---
+
+// xdg_positioner requests
+const (
+	xdgPositionerDestroyOp                 = 0
+	xdgPositionerSetSizeOp                 = 1
+	xdgPositionerSetAnchorRectOp           = 2
+	xdgPositionerSetAnchorOp               = 3
+	xdgPositionerSetGravityOp              = 4
+	xdgPositionerSetConstraintAdjustmentOp = 5
+	xdgPositionerSetOffsetOp               = 6
+	xdgPositionerSetReactiveOp             = 7
+	xdgPositionerSetParentSizeOp           = 8
+	xdgPositionerSetParentConfigureOp      = 9
+)
+
 // --- xdg_toplevel ---
 
 // xdg_toplevel requests
@@ -302,6 +337,22 @@ const (
 	xdgToplevelStateFullscreen = 2
 	xdgToplevelStateResizing   = 3
 	xdgToplevelStateActivated  = 4
+)
+
+// --- xdg_popup ---
+
+// xdg_popup requests
+const (
+	xdgPopupDestroyOp    = 0
+	xdgPopupGrabOp       = 1
+	xdgPopupRepositionOp = 2
+)
+
+// xdg_popup events
+const (
+	xdgPopupConfigureEvent    = 0
+	xdgPopupPopupDoneEvent    = 1
+	xdgPopupRepositionedEvent = 2
 )
 
 // Global interface names

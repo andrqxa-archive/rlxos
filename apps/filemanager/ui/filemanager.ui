@@ -1,7 +1,7 @@
 Page {
     spacing: 8
     padding: "10"
-    overflow: "visible"
+    overflow: "hidden"
 
     VBox {
         spacing: 8

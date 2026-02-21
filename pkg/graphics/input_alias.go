@@ -23,6 +23,7 @@ const (
 	EventFocusOut           = gfxinput.EventFocusOut
 	EventQuit               = gfxinput.EventQuit
 	EventResize             = gfxinput.EventResize
+	EventShortcut           = gfxinput.EventShortcut
 )
 
 const (
