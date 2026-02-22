@@ -18,81 +18,56 @@
 package fs
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
-const (
-	AvyosPath     = "/avyos"
-	CommandsPath  = "/cmd"
-	ServicesPath  = "/services"
-	CachePath     = "/cache"
-	KernelPath    = "/cache/kernel"
-	DevicesPath   = "/cache/kernel/devices"
-	ProcessesPath = "/cache/kernel/processes"
-	SysfsPath     = "/cache/kernel/sysfs"
-	RuntimePath   = "/cache/runtime"
-	UserRunPath   = "/cache/runtime/user"
-	ConfigPath    = "/config"
-	UsersHomePath = "/users"
-)
-
-func Resolve(kind string, p ...string) string {
-	if len(p) == 0 {
-		if strings.HasPrefix(kind, "service:") {
-			name := strings.TrimPrefix(kind, "service:")
-			return filepath.Join(RuntimePath, name+".sock")
-		}
-		if strings.HasPrefix(kind, "user-service:") {
-			name := strings.TrimPrefix(kind, "user-service:")
-			return filepath.Join(UserRunPath, strconv.Itoa(os.Getuid()), name+".sock")
-		}
-		return kind
+func Resolve(format string, args ...any) string {
+	path := fmt.Sprintf(format, args...)
+	idx := strings.IndexByte(path, ':')
+	if idx == -1 {
+		return path
 	}
+	scheme := path[:idx]
+	path = path[idx+1:]
 
-	pathArg := p[0]
+	HOME := os.Getenv("HOME")
 
-	switch kind {
+	switch scheme {
+	case "app":
+		return resolvePath(path, filepath.Join(HOME, "/Applications"), "/apps", "/avyos/apps")
 	case "cmd":
-		path := filepath.Join(CommandsPath, pathArg)
-		if !Exists(path) {
-			path = filepath.Join(AvyosPath, CommandsPath, pathArg)
-		}
-		return path
-	case "service":
-		path := filepath.Join(ServicesPath, pathArg)
-		if !Exists(path) {
-			path = filepath.Join(AvyosPath, ServicesPath, pathArg)
-		}
-		return path
-	case "cache":
-		return filepath.Join(CachePath, pathArg)
-	case "kernel":
-		return filepath.Join(KernelPath, pathArg)
-	case "device":
-		return filepath.Join(DevicesPath, pathArg)
-	case "process":
-		return filepath.Join(ProcessesPath, pathArg)
-	case "sysfs":
-		return filepath.Join(SysfsPath, pathArg)
-	case "run":
-		return filepath.Join(RuntimePath, pathArg)
-	case "user-service":
-		name := pathArg
-		if filepath.Ext(name) == "" {
-			name += ".sock"
-		}
-		return filepath.Join(UserRunPath, strconv.Itoa(os.Getuid()), name)
+		return resolvePath(path, filepath.Join(HOME, "/cmd"), "/cmd", "/avyos/cmd")
 	case "config":
-		path := filepath.Join(ConfigPath, pathArg)
-		if !Exists(path) {
-			path = filepath.Join(AvyosPath, ConfigPath, pathArg)
-		}
-		return path
+		return resolvePath(path, filepath.Join(HOME, "/config"), "/config", "/avyos/config")
+	case "data":
+		return resolvePath(path, filepath.Join(HOME, "/data"), "/data", "/avyos/data")
+	case "cache":
+		return filepath.Join("/cache", path)
+	case "process":
+		return filepath.Join("/cache/kernel/processes", path)
+	case "device":
+		return filepath.Join("/cache/kernel/devices", path)
+	case "sysfs":
+		return filepath.Join("/cache/kernel/sysfs", path)
+	case "shared":
+		return filepath.Join("/cache/kernel/shared", path)
+	case "system":
+		return filepath.Join("/cache/runtime", path)
 	case "user":
-		return filepath.Join(UsersHomePath, pathArg)
+		return filepath.Join(fmt.Sprintf("/cache/runtime/user/%d", os.Getuid()), path)
 	}
-	return pathArg
+	return path
+}
+
+func resolvePath(file string, paths ...string) string {
+	for _, path := range paths {
+		path = filepath.Join(path, file)
+		if Exists(path) {
+			return path
+		}
+	}
+	return file
 }

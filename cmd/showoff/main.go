@@ -76,7 +76,7 @@ func getHostname() string {
 }
 
 func getUptime() string {
-	data, err := os.ReadFile(fs.Resolve("process", "uptime"))
+	data, err := os.ReadFile(fs.Resolve("process:uptime"))
 	if err != nil {
 		return "unknown"
 	}
@@ -85,7 +85,7 @@ func getUptime() string {
 }
 
 func getCPU() string {
-	file, err := os.Open(fs.Resolve("process", "cpuinfo"))
+	file, err := os.Open(fs.Resolve("process:cpuinfo"))
 	if err != nil {
 		return "unknown"
 	}
@@ -103,8 +103,8 @@ func getCPU() string {
 }
 
 func getMemory() string {
-	memTotal := readKeyValue(fs.Resolve("process", "meminfo"), "MemTotal")
-	memFree := readKeyValue(fs.Resolve("process", "meminfo"), "MemAvailable")
+	memTotal := readKeyValue(fs.Resolve("process:meminfo"), "MemTotal")
+	memFree := readKeyValue(fs.Resolve("process:meminfo"), "MemAvailable")
 
 	if memTotal == "" || memFree == "" {
 		return "unknown"

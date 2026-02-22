@@ -100,7 +100,7 @@ func mappedArch() string {
 }
 
 func loadDistroRegistry() (DistroRegistry, error) {
-	path := fs.Resolve("config", distroConfigName)
+	path := fs.Resolve("config:%s", distroConfigName)
 	if !fs.Exists(path) {
 		return resolveRegistry(defaultDistros, nil), nil
 	}
@@ -388,7 +388,7 @@ func runInit() error {
 }
 
 func execContainer(rootfs string, command []string, workdir, bind, envVar string, input []byte, extraEnv []string, waylandRuntimeHost string) (distroapi.RunResult, error) {
-	exePath, err := os.Readlink(fs.Resolve("process", "self/exe"))
+	exePath, err := os.Readlink(fs.Resolve("process:self/exe"))
 	if err != nil {
 		return distroapi.RunResult{}, fmt.Errorf("resolve executable path: %w", err)
 	}
@@ -502,7 +502,7 @@ func mountProcFS(rootfs string) error {
 		return fmt.Errorf("create /proc: %w", err)
 	}
 
-	procSource := fs.Resolve("process")
+	procSource := fs.Resolve("process:")
 	if _, err := os.Stat(procSource); err == nil {
 		if err := mountBind(procSource, procPath); err != nil {
 			return fmt.Errorf("bind %s to /proc: %w", procSource, err)
@@ -559,7 +559,7 @@ func mountDevFS(rootfs string) error {
 	}
 
 	for _, dev := range []string{"null", "zero", "random", "urandom", "tty"} {
-		src := fs.Resolve("device", dev)
+		src := fs.Resolve("device:%s", dev)
 		if _, err := os.Stat(src); err != nil {
 			continue
 		}
@@ -635,7 +635,7 @@ func applyDefaultGUIBindMounts(rootfs string) {
 			return
 		}
 
-		src := fs.Resolve("device", rel)
+		src := fs.Resolve("device%s", rel)
 		if _, err := os.Stat(src); err != nil {
 			return
 		}
@@ -656,12 +656,12 @@ func applyDefaultGUIBindMounts(rootfs string) {
 	}
 
 	for _, pattern := range []string{"dri/*", "card*", "renderD*"} {
-		matches, err := filepath.Glob(fs.Resolve("device", pattern))
+		matches, err := filepath.Glob(fs.Resolve("device:%s", pattern))
 		if err != nil {
 			continue
 		}
 		for _, match := range matches {
-			rel, err := filepath.Rel(fs.DevicesPath, match)
+			rel, err := filepath.Rel(fs.Resolve("device:"), match)
 			if err != nil || strings.HasPrefix(rel, "..") {
 				continue
 			}
@@ -960,7 +960,7 @@ func getDirSize(path string) int {
 // generateResolvConf writes /etc/resolv.conf inside the container rootfs
 // using DNS servers from /config/net.conf.
 func generateResolvConf(rootfs string) {
-	netConf := fs.Resolve("config", "net.conf")
+	netConf := fs.Resolve("config:net.conf")
 	cfg, err := ini.ParseFile(netConf)
 	if err != nil {
 		return

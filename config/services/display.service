@@ -1,5 +1,5 @@
 name = login
 command = /avyos/services/display
-tty = /cache/kernel/devices/tty1
+tty = device:tty1
 restart = always
 depends = firstboot

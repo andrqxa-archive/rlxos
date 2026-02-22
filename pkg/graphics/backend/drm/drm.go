@@ -263,7 +263,7 @@ func (b *Backend) Open() error {
 	var err error
 	var lastErr error
 	for i := 0; i < 8; i++ {
-		candidates := []string{fs.Resolve("device", fmt.Sprintf("dri/card%d", i))}
+		candidates := []string{fs.Resolve("device:dri/card%d", i)}
 		var selected bool
 		for _, path := range candidates {
 			if path == "" {
@@ -920,7 +920,7 @@ func fdSet(fd int, set *syscall.FdSet) {
 
 func (b *Backend) setGraphicsMode() {
 	// First try the already-attached controlling TTY via stdin (fd 0).
-	stdinPath := fs.Resolve("process", "self/fd/0")
+	stdinPath := fs.Resolve("process:self/fd/0")
 	activateVTBestEffort(stdinPath, 0)
 	mode := uintptr(kdGraphics)
 	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(0), uintptr(kdSetMode), mode)
@@ -932,8 +932,8 @@ func (b *Backend) setGraphicsMode() {
 
 	// Fall back to opening tty devices directly.
 	for _, path := range []string{
-		fs.Resolve("device", "tty"),
-		fs.Resolve("device", "tty0"),
+		fs.Resolve("device:tty"),
+		fs.Resolve("device:tty0"),
 	} {
 		f, err := os.OpenFile(path, os.O_RDWR, 0)
 		if err != nil {

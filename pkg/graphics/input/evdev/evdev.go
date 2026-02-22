@@ -120,7 +120,7 @@ func (h *Handler) SetScreenSize(width, height int) {
 
 // Open scans for and opens input devices.
 func (h *Handler) Open() error {
-	matches, err := filepath.Glob(fs.Resolve("device", "input") + "/event*")
+	matches, err := filepath.Glob(fs.Resolve("device:input/event*"))
 	if err != nil {
 		return fmt.Errorf("failed to scan input devices: %w", err)
 	}

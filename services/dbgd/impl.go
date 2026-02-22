@@ -298,7 +298,7 @@ func (h *Handler) execute(sess *authSession, req dbgdapi.ExecRequest, useShell b
 		cmd.Stderr = stderrBuf
 	}
 	if cmd.Stdin == nil {
-		cmd.Stdin, _ = os.OpenFile(fs.Resolve("device", "null"), os.O_RDWR, 0)
+		cmd.Stdin, _ = os.OpenFile(fs.Resolve("device:null"), os.O_RDWR, 0)
 	}
 
 	runErr := cmd.Run()
@@ -328,7 +328,7 @@ func (h *Handler) execute(sess *authSession, req dbgdapi.ExecRequest, useShell b
 }
 
 func (h *Handler) runHelper(sess *authSession, mode, path string, offset uint64, size uint32, truncate bool, perm uint32, input []byte) ([]byte, error) {
-	exe, err := os.Readlink(fs.Resolve("process", "self/exe"))
+	exe, err := os.Readlink(fs.Resolve("process:self/exe"))
 	if err != nil {
 		return nil, err
 	}
@@ -410,7 +410,7 @@ func buildUserEnv(id *identity.Identity) []string {
 	}
 	shell := strings.TrimSpace(id.Shell)
 	if shell == "" {
-		shell = fs.Resolve("cmd", "shell")
+		shell = fs.Resolve("cmd:shell")
 	}
 	path := "/cmd:/avyos/cmd"
 

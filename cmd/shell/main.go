@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"avyos.dev/pkg/format"
+	"avyos.dev/pkg/fs"
 	"avyos.dev/pkg/identity"
 	"avyos.dev/pkg/term"
 )
@@ -43,7 +44,7 @@ var (
 )
 
 func main() {
-	shellPath, _ = os.Executable()
+	shellPath, _ = os.Readlink(fs.Resolve("process:self/exe"))
 
 	fmt.Printf("Welcome to AvyOS Shell\n\n")
 	fmt.Println("Use `help` command to print help.")
@@ -276,7 +277,7 @@ func executeSingle(line string) int {
 	}
 
 	// Execute external command
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.Command(fs.Resolve(args[0]), args[1:]...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

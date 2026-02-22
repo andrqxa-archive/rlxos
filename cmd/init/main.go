@@ -20,7 +20,6 @@ package main
 import (
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
 	"avyos.dev/cmd/init/supervisor"
@@ -45,7 +44,7 @@ func main() {
 	if err := logger.SetupSystemLog(); err != nil {
 		log.Error("Failed to setup system log: %v", err)
 	} else {
-		log.Info("System logging enabled at %s", fs.Resolve("cache", filepath.Join("log", "services", "init.log")))
+		log.Info("System logging enabled at %s", fs.Resolve("cache:log/services/boot.log"))
 	}
 
 	// Do startup (which will setup signal handlers with supervisor's PID channel)

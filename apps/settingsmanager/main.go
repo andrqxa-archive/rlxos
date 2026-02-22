@@ -429,7 +429,7 @@ func legacyKeysForCanonical(key string) []string {
 func detectRuntimeDefaults() map[string]string {
 	out := make(map[string]string, 64)
 
-	if cfg, err := ini.ParseFile(fs.Resolve("config", "init.conf")); err == nil {
+	if cfg, err := ini.ParseFile(fs.Resolve("config:init.conf")); err == nil {
 		if hostname, ok := cfg.Get("", "hostname"); ok {
 			setIfNotEmpty(out, "/dev/rlxos/network/hostname", hostname)
 		}
@@ -534,8 +534,7 @@ func detectRuntimeDefaults() map[string]string {
 	}
 
 	if kernel := readFirstNonEmpty(
-		"/proc/sys/kernel/osrelease",
-		fs.Resolve("process", "sys/kernel/osrelease"),
+		fs.Resolve("process:sys/kernel/osrelease"),
 	); kernel != "" {
 		out["/dev/rlxos/system/about/kernel"] = kernel
 	}
@@ -588,8 +587,7 @@ func setServiceToggle(out map[string]string, active map[string]bool, key string,
 
 func detectDNSServers() string {
 	paths := []string{
-		"/etc/resolv.conf",
-		fs.Resolve("config", "resolv.conf"),
+		fs.Resolve("config:resolv.conf"),
 	}
 	seen := make(map[string]struct{}, 8)
 	servers := make([]string, 0, 4)
@@ -628,9 +626,8 @@ func detectDNSServers() string {
 
 func detectFramebufferResolution() string {
 	value := readFirstNonEmpty(
-		"/sys/class/graphics/fb0/virtual_size",
-		fs.Resolve("sysfs", "class/graphics/fb0/virtual_size"),
-		fs.Resolve("process", "sys/class/graphics/fb0/virtual_size"),
+		fs.Resolve("sysfs:class/graphics/fb0/virtual_size"),
+		fs.Resolve("process:sys/class/graphics/fb0/virtual_size"),
 	)
 	if value == "" {
 		return ""
@@ -655,9 +652,8 @@ func detectFramebufferResolution() string {
 
 func detectBacklightBrightnessPercent() string {
 	roots := []string{
-		"/sys/class/backlight",
-		fs.Resolve("sysfs", "class/backlight"),
-		fs.Resolve("process", "sys/class/backlight"),
+		fs.Resolve("sysfs:class/backlight"),
+		fs.Resolve("process:sys/class/backlight"),
 	}
 	for _, root := range roots {
 		entries, err := os.ReadDir(root)
@@ -689,9 +685,8 @@ func detectBacklightBrightnessPercent() string {
 
 func detectBattery() (bool, int) {
 	roots := []string{
-		"/sys/class/power_supply",
-		fs.Resolve("sysfs", "class/power_supply"),
-		fs.Resolve("process", "sys/class/power_supply"),
+		fs.Resolve("sysfs:class/power_supply"),
+		fs.Resolve("process:sys/class/power_supply"),
 	}
 	for _, root := range roots {
 		entries, err := os.ReadDir(root)
@@ -720,9 +715,7 @@ func detectBattery() (bool, int) {
 
 func readOSRelease() map[string]string {
 	paths := []string{
-		"/etc/os-release",
-		"/usr/lib/os-release",
-		fs.Resolve("config", "os-release"),
+		fs.Resolve("config:release.conf"),
 	}
 	for _, path := range paths {
 		f, err := os.Open(path)
@@ -3143,7 +3136,7 @@ func runDaemon() error {
 		return fmt.Errorf("load settings store: %w", err)
 	}
 
-	svc, err := sutra.NewService(settingsapi.ServiceName, fs.Resolve("user-service:"+settingsapi.ServiceName))
+	svc, err := sutra.NewService(settingsapi.ServiceName, fs.Resolve("user:%s", settingsapi.ServiceName))
 	if err != nil {
 		return fmt.Errorf("start settings service: %w", err)
 	}

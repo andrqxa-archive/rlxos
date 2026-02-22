@@ -82,9 +82,9 @@ type TaskManagerApp struct {
 	selectedPID int
 	contextPID  int
 
-	taskPIDWidth int
-	taskCPUWidth int
-	taskMemWidth int
+	taskPIDWidth  int
+	taskCPUWidth  int
+	taskMemWidth  int
 	taskNameWidth int
 }
 
@@ -103,7 +103,7 @@ func (a *TaskManagerApp) Refresh() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	root := processRoot()
+	root := fs.Resolve("process:")
 	procs := listProcesses(root)
 	totalTicks, idleTicks := readCPUTicks(root)
 	memUsed, memTotal, memPercent := readMemoryUsage(root)
@@ -661,19 +661,6 @@ func main() {
 	if err := app.Run(); err != nil {
 		log.Fatalf("Task manager error: %v", err)
 	}
-}
-
-func processRoot() string {
-	candidates := []string{
-		fs.Resolve("process", ""),
-		"/proc",
-	}
-	for _, candidate := range candidates {
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			return candidate
-		}
-	}
-	return fs.Resolve("process", "")
 }
 
 func listProcesses(root string) []procInfo {

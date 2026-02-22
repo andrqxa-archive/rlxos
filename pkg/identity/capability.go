@@ -90,7 +90,7 @@ func GetCapabilityMembers(capName string) ([]*Identity, error) {
 
 // loadCapabilityConfig reads and parses the capabilities config file
 func loadCapabilityConfig() (*CapabilityConfig, error) {
-	data, err := os.ReadFile(fs.Resolve("config", "security/capabilities.conf"))
+	data, err := os.ReadFile(fs.Resolve("config:security/capabilities.conf"))
 	if err != nil {
 		return nil, err
 	}

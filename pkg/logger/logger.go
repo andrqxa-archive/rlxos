@@ -77,7 +77,7 @@ func New(component string) *Logger {
 //
 // Root/system process path:
 //
-//	fs.Resolve("cache", "log/services/<name>.log")
+//	fs.Resolve("cache:log/services/<name>.log")
 //
 // User process path:
 //
@@ -120,7 +120,7 @@ func resolveServiceLogPath() (string, error) {
 	fileName := name + ".log"
 
 	if os.Geteuid() == 0 {
-		return fs.Resolve("cache", filepath.Join("log", "services", fileName)), nil
+		return fs.Resolve("cache:log/services/%s", fileName), nil
 	}
 
 	home := strings.TrimSpace(os.Getenv("HOME"))

@@ -25,7 +25,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -55,14 +54,14 @@ type waylandBridge struct {
 // newWaylandBridge creates a bridge that relays container Wayland clients
 // to the session waylayer socket at /cache/runtime/<uid>/waylayer.
 func newWaylandBridge(uid uint32) (*waylandBridge, error) {
-	upstreamSocket := fs.Resolve("cache", filepath.Join("runtime", strconv.FormatUint(uint64(uid), 10), distroWaylandDisplay))
+	upstreamSocket := fs.Resolve("user:dev.avyos.waylayer")
 	if _, err := os.Stat(upstreamSocket); err != nil {
 		return nil, fmt.Errorf("session waylayer socket not found at %s: %w", upstreamSocket, err)
 	}
 
-	runtimeRoot := fs.Resolve("run", filepath.Join("distro", "wayland"))
+	runtimeRoot := fs.Resolve("system:distro/wayland")
 	if err := os.MkdirAll(runtimeRoot, 0755); err != nil {
-		return nil, fmt.Errorf("create distro wayland runtime root: %w", err)
+		return nil, fmt.Errorf("create distro wayland system root: %w", err)
 	}
 
 	runtimeHost, err := os.MkdirTemp(runtimeRoot, "session-")

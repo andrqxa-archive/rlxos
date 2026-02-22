@@ -101,7 +101,7 @@ func (m *shellSessionManager) Open(owner, uid uint32, req distroapi.ShellOpenReq
 		return distroapi.ShellSession{}, fmt.Errorf("setup wayland bridge: %w", err)
 	}
 
-	exePath, err := os.Readlink(fs.Resolve("process", "self/exe"))
+	exePath, err := os.Readlink(fs.Resolve("process:self/exe"))
 	if err != nil {
 		if waylandBridge != nil {
 			waylandBridge.Close()

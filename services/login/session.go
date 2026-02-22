@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"sync"
 	"syscall"
@@ -86,9 +85,6 @@ func (s *session) run() {
 	if err := ensureUserRuntimeDir(uid, gid); err != nil {
 		serviceLog.Warn("failed to setup user runtime dir: %v", err)
 	}
-	if err := ensureWaylandRuntimeDir(uid, gid); err != nil {
-		serviceLog.Warn("failed to setup wayland runtime dir: %v", err)
-	}
 
 	// Build per-session environment (don't pollute global env)
 	env := s.sessionEnv()
@@ -150,8 +146,7 @@ func (s *session) stop(timeout time.Duration) error {
 
 // sessionEnv builds the environment for this user's session.
 func (s *session) sessionEnv() []string {
-	uid := uint32(s.id.ID)
-	runtimeDir := waylandRuntimeDir(uid)
+	runtimeDir := fs.Resolve("user:")
 
 	// Start from a clean base, preserving only essential system vars
 	env := []string{
@@ -191,8 +186,7 @@ func indexOf(s string, c byte) int {
 
 // startCmd spawns a cmd/ binary as the given user with the given environment.
 func (s *session) startCmd(name string, uid, gid uint32, env []string, args ...string) (*exec.Cmd, error) {
-	path := resolveCmd(name)
-	cmd := exec.Command(path, args...)
+	cmd := exec.Command(name, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -204,34 +198,15 @@ func (s *session) startCmd(name string, uid, gid uint32, env []string, args ...s
 	}
 
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("start %s (%s): %w", name, path, err)
+		return nil, fmt.Errorf("start %s: %w", name, err)
 	}
 
 	serviceLog.Info("started %s pid=%d uid=%d", name, cmd.Process.Pid, uid)
 	return cmd, nil
 }
 
-func resolveCmd(name string) string {
-	candidates := []string{
-		filepath.Join(fs.AvyosPath, "cmd", name),
-		filepath.Join("/cmd", name),
-		filepath.Join("cmd", name),
-	}
-	for _, p := range candidates {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return filepath.Join(fs.AvyosPath, "cmd", name)
-}
-
 func ensureUserRuntimeDir(uid, gid uint32) error {
-	base := filepath.Join(fs.RuntimePath, "user")
-	if err := os.MkdirAll(base, 0755); err != nil {
-		return err
-	}
-
-	userDir := filepath.Join(base, strconv.FormatUint(uint64(uid), 10))
+	userDir := fs.Resolve("system:user/%d", uid)
 	if err := os.MkdirAll(userDir, 0700); err != nil {
 		return err
 	}
@@ -239,24 +214,6 @@ func ensureUserRuntimeDir(uid, gid uint32) error {
 		return err
 	}
 	if err := os.Chmod(userDir, 0700); err != nil {
-		return err
-	}
-	return nil
-}
-
-func waylandRuntimeDir(uid uint32) string {
-	return fs.Resolve("cache", filepath.Join("runtime", strconv.FormatUint(uint64(uid), 10)))
-}
-
-func ensureWaylandRuntimeDir(uid, gid uint32) error {
-	runtimeDir := waylandRuntimeDir(uid)
-	if err := os.MkdirAll(runtimeDir, 0700); err != nil {
-		return err
-	}
-	if err := os.Chown(runtimeDir, int(uid), int(gid)); err != nil {
-		return err
-	}
-	if err := os.Chmod(runtimeDir, 0700); err != nil {
 		return err
 	}
 	return nil

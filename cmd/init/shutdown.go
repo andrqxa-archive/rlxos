@@ -92,7 +92,7 @@ func isShutdownRequested() bool {
 
 func unmountAll() {
 	// Read mounts in reverse order
-	file, err := os.Open(fs.Resolve("process", "mounts"))
+	file, err := os.Open(fs.Resolve("process:mounts"))
 	if err != nil {
 		return
 	}
@@ -109,12 +109,12 @@ func unmountAll() {
 
 	// Unmount in reverse order, skipping essential ones
 	essential := map[string]bool{
-		"/":                     true,
-		"/avyos":                true,
-		fs.ProcessesPath:        true,
-		fs.SysfsPath:            true,
-		fs.DevicesPath + "/pts": true,
-		fs.DevicesPath:          true,
+		"/":                      true,
+		"/avyos":                 true,
+		fs.Resolve("process:"):   true,
+		fs.Resolve("sysfs:"):     true,
+		fs.Resolve("device:pts"): true,
+		fs.Resolve("device:"):    true,
 	}
 
 	for i := len(mounts) - 1; i >= 0; i-- {

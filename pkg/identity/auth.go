@@ -217,7 +217,7 @@ func getAuthByName(name string) (*Auth, error) {
 
 // loadAuthConfig reads and parses the auth config file
 func loadAuthConfig() (*AuthConfig, error) {
-	data, err := os.ReadFile(fs.Resolve("config", "security/auth.conf"))
+	data, err := os.ReadFile(fs.Resolve("config:security/auth.conf"))
 	if err != nil {
 		return nil, err
 	}

@@ -117,7 +117,7 @@ func New() *Backend {
 
 // Open opens the framebuffer device.
 func (b *Backend) Open() error {
-	return b.OpenDevice(fs.Resolve("device", "fb0"))
+	return b.OpenDevice(fs.Resolve("device:fb0"))
 }
 
 // OpenDevice opens a specific framebuffer device.
@@ -372,7 +372,7 @@ func (b *Backend) Start() {}
 // setGraphicsMode switches the active TTY to KD_GRAPHICS mode.
 func (b *Backend) setGraphicsMode() {
 	// Try /dev/tty0 first (requires root), then /dev/tty
-	for _, path := range []string{fs.Resolve("device", "tty0"), fs.Resolve("device", "tty")} {
+	for _, path := range []string{fs.Resolve("device:tty0"), fs.Resolve("device:tty")} {
 		f, err := os.OpenFile(path, os.O_RDWR, 0)
 		if err != nil {
 			continue

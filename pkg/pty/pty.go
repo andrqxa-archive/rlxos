@@ -76,9 +76,8 @@ func Open() (*PTY, error) {
 
 func openMasterPTY() (*os.File, error) {
 	candidates := []string{
-		fs.Resolve("device", "ptmx"),
-		fs.Resolve("device", "pts/ptmx"),
-		"/dev/ptmx",
+		fs.Resolve("device:ptmx"),
+		fs.Resolve("device:pts/ptmx"),
 	}
 
 	var errs []string
@@ -249,13 +248,8 @@ func resolveShellExecutable() (string, error) {
 	seen := make(map[string]struct{}, 8)
 	candidates := []string{
 		strings.TrimSpace(os.Getenv("SHELL")),
-		fs.Resolve("cmd", "shell"),
-		"/cmd/shell",
+		fs.Resolve("cmd:shell"),
 		"/avyos/cmd/shell",
-		"shell",
-		"sh",
-		"/bin/sh",
-		"/bin/bash",
 	}
 
 	for _, candidate := range candidates {

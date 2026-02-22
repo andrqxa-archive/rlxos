@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -81,7 +80,7 @@ func applyBitmapFallbackFonts() {
 }
 
 func loadConfiguredFonts() (map[string]*graphics.Font, error) {
-	cfgPath := fs.Resolve("config", fontConfigFile)
+	cfgPath := fs.Resolve("config:%s", fontConfigFile)
 	cfg, err := ini.ParseFile(cfgPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -95,7 +94,7 @@ func loadConfiguredFonts() (map[string]*graphics.Font, error) {
 		return nil, nil
 	}
 
-	resolvedPath, err := resolveConfiguredFontPath(spec.Name, fontRoots())
+	resolvedPath, err := resolveConfiguredFontPath(spec.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -292,37 +291,19 @@ func normalizeFontToken(s string) string {
 	return repl.Replace(s)
 }
 
-func fontRoots() []string {
-	return []string{
-		filepath.Join(string(filepath.Separator), "data", "fonts"),
-		filepath.Join(fs.AvyosPath, "data", "fonts"),
-	}
-}
-
-func resolveConfiguredFontPath(name string, roots []string) (string, error) {
+func resolveConfiguredFontPath(name string) (string, error) {
 	name = normalizeFontToken(name)
 	if name == "" {
-		return "", fmt.Errorf("empty font name in %s", fs.Resolve("config", fontConfigFile))
+		return "", fmt.Errorf("empty font name in %s", fs.Resolve("config:%s", fontConfigFile))
 	}
 
-	candidates := make([]string, 0, len(roots))
-	for _, root := range roots {
-		root = strings.TrimSpace(root)
-		if root == "" {
-			continue
-		}
-		candidates = append(candidates, filepath.Clean(filepath.Join(root, name, name+".ttf")))
+	path := fs.Resolve("data:fonts/%s/%s.ttf", name, name)
+	if !fs.Exists(path) {
+		path = fs.Resolve("data:fonts/%s.ttf", name)
 	}
 
-	for _, candidate := range candidates {
-		if fs.IsFile(candidate) {
-			return candidate, nil
-		}
+	if !fs.Exists(path) {
+		return "", fmt.Errorf("font %v not found", name)
 	}
-
-	if len(candidates) == 0 {
-		return "", fmt.Errorf("no font roots configured for %q", name)
-	}
-
-	return "", fmt.Errorf("font %q not found; tried: %s", name, strings.Join(candidates, ", "))
+	return path, nil
 }

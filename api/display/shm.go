@@ -116,7 +116,7 @@ type ClientWindow struct {
 }
 
 func Dial() (*DisplayClient, error) {
-	return DialDisplay(fs.Resolve("service:" + ServiceName))
+	return DialDisplay(fs.Resolve("system:" + ServiceName))
 }
 
 func DialDisplay(socketPath string) (*DisplayClient, error) {
@@ -226,7 +226,7 @@ func allocShared(width, height int) (*sharedBuffer, error) {
 	stride := width * 4
 	size := stride * height
 
-	dir := fs.Resolve("cache", "runtime/display-shm")
+	dir := fs.Resolve("shared:display")
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, err
 	}

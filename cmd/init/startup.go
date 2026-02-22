@@ -20,7 +20,6 @@ package main
 import (
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -44,7 +43,7 @@ func startup() {
 	setupSignalHandlers(sv.ExitChannel())
 
 	var err error
-	config, err = ini.ParseFile(fs.Resolve("config", "init.conf"))
+	config, err = ini.ParseFile(fs.Resolve("config:init.conf"))
 	if err != nil {
 		config = defaultConfig()
 	}
@@ -74,7 +73,7 @@ func startup() {
 			Command:     "/avyos/cmd/shell",
 			Type:        "daemon",
 			Restart:     "always",
-			TTY:         fs.Resolve("device", tty),
+			TTY:         fs.Resolve("device:%s", tty),
 		})
 	}
 
@@ -92,7 +91,7 @@ func startup() {
 	if !ok {
 		hostname = "avyos"
 	}
-	if err := os.WriteFile(fs.Resolve("process", "sys/kernel/hostname"), []byte(hostname), 0); err != nil {
+	if err := os.WriteFile(fs.Resolve("process:sys/kernel/hostname"), []byte(hostname), 0); err != nil {
 		log.Error("Failed to set hostname: %v", err)
 	}
 
@@ -135,7 +134,7 @@ func startup() {
 }
 
 func run(bin string, args ...string) error {
-	null, err := os.Open(fs.Resolve("device", "null"))
+	null, err := os.Open(fs.Resolve("device:null"))
 	if err != nil {
 		return err
 	}
@@ -151,11 +150,11 @@ func run(bin string, args ...string) error {
 
 func defaultConfig() *ini.Config {
 	config = ini.NewConfig()
-	config.Set("", "shell", filepath.Join(fs.AvyosPath, fs.CommandsPath, "shell"))
+	config.Set("", "shell", "/avyos/cmd/shell")
 	config.Set("", "services", "shell")
 	config.Set("", "hostname", "avyos")
 	for key, value := range map[string]string{
-		"PATH": filepath.Join(fs.AvyosPath, "cmd"),
+		"PATH": "/cmd:/avyos/cmd",
 	} {
 		config.Set("environment", key, value)
 	}

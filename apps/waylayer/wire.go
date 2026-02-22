@@ -22,8 +22,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
-	"strconv"
 	"sync"
 	"syscall"
 
@@ -183,10 +181,7 @@ func (c *clientConn) recvWithFDs(buf []byte) (int, []int, error) {
 
 // listen creates a Wayland server socket.
 func listen() (*net.UnixListener, string, error) {
-	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
-	if runtimeDir == "" {
-		runtimeDir = fs.Resolve("cache", filepath.Join("runtime", strconv.Itoa(os.Getuid())))
-	}
+	runtimeDir := fs.Resolve("user:")
 	if err := os.MkdirAll(runtimeDir, 0700); err != nil {
 		return nil, "", fmt.Errorf("ensure XDG_RUNTIME_DIR %q: %w", runtimeDir, err)
 	}

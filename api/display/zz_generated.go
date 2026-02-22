@@ -908,7 +908,7 @@ type Client struct {
 
 func NewClient(socketPath string) (*Client, error) {
 	if socketPath == "" {
-		socketPath = fs.Resolve("service:" + ServiceName)
+		socketPath = fs.Resolve("system:%s", ServiceName)
 	}
 	c, err := sutra.Connect(socketPath)
 	if err != nil {

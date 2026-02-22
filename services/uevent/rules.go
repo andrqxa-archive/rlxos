@@ -55,24 +55,24 @@ import (
 //	subsystem = net
 //	service = network:link-up
 type Rule struct {
-	Name      string
-	Subsystem string // match: subsystem name or glob
-	DevName   string // match: device name or glob
-	DevType   string // match: device type
-	Driver    string // match: driver name
-	Action    string // match: action (add, remove, change)
-	Owner     int    // set: uid for device node (-1 = unset)
-	Group     int    // set: gid for device node (-1 = unset)
-	Mode      uint32 // set: permission mode for device node
-	Symlink   string // set: create symlink at this path
-	Run       string // set: execute command
-	Service   string // set: notify service (service-name:event)
-	LoadDriver bool  // set: auto-load matching driver
+	Name       string
+	Subsystem  string // match: subsystem name or glob
+	DevName    string // match: device name or glob
+	DevType    string // match: device type
+	Driver     string // match: driver name
+	Action     string // match: action (add, remove, change)
+	Owner      int    // set: uid for device node (-1 = unset)
+	Group      int    // set: gid for device node (-1 = unset)
+	Mode       uint32 // set: permission mode for device node
+	Symlink    string // set: create symlink at this path
+	Run        string // set: execute command
+	Service    string // set: notify service (service-name:event)
+	LoadDriver bool   // set: auto-load matching driver
 }
 
 // loadRules reads and parses rules from config:uevent.conf.
 func loadRules() ([]Rule, error) {
-	configPath := fs.Resolve("config", "uevent.conf")
+	configPath := fs.Resolve("config:uevent.conf")
 	cfg, err := ini.ParseFile(configPath)
 	if err != nil {
 		return nil, err
@@ -167,7 +167,7 @@ func applyAdd(rule *Rule, ev *UEvent) {
 		return
 	}
 
-	devPath := filepath.Join(fs.DevicesPath, ev.DevName)
+	devPath := fs.Resolve("device:%s", ev.DevName)
 
 	// Create parent directories
 	dir := filepath.Dir(devPath)
@@ -217,7 +217,7 @@ func applyAdd(rule *Rule, ev *UEvent) {
 	// Create symlink
 	if rule.Symlink != "" {
 		link := expandVars(rule.Symlink, ev)
-		linkPath := filepath.Join(fs.DevicesPath, link)
+		linkPath := fs.Resolve("device:%s", link)
 		_ = os.MkdirAll(filepath.Dir(linkPath), 0755)
 		_ = os.Symlink(devPath, linkPath)
 	}
@@ -243,13 +243,13 @@ func applyRemove(rule *Rule, ev *UEvent) {
 		return
 	}
 
-	devPath := filepath.Join(fs.DevicesPath, ev.DevName)
+	devPath := fs.Resolve("device:%s", ev.DevName)
 	_ = syscall.Unlink(devPath)
 
 	// Remove symlink
 	if rule.Symlink != "" {
 		link := expandVars(rule.Symlink, ev)
-		linkPath := filepath.Join(fs.DevicesPath, link)
+		linkPath := fs.Resolve("device:%s", link)
 		_ = syscall.Unlink(linkPath)
 	}
 
@@ -320,7 +320,7 @@ func notifyService(target string, ev *UEvent) {
 	serviceName := parts[0]
 	eventName := parts[1]
 
-	socketPath := fs.Resolve("service:" + serviceName)
+	socketPath := fs.Resolve("system:%s", serviceName)
 
 	go func() {
 		client, err := connectService(socketPath)

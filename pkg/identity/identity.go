@@ -20,6 +20,7 @@ package identity
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"avyos.dev/pkg/fs"
@@ -82,13 +83,13 @@ func ListIdentities() ([]*Identity, error) {
 func (i *Identity) setDefaults() {
 	if i.Home == "" {
 		if i.ID == 0 {
-			i.Home = fs.Resolve("user", "superuser")
+			i.Home = "/users/superuser"
 		} else {
-			i.Home = fs.Resolve("user", i.Name)
+			i.Home = filepath.Join("/users/", i.Name)
 		}
 	}
 	if i.Shell == "" {
-		i.Shell = fs.Resolve("cmd", "shell")
+		i.Shell = fs.Resolve("cmd:shell")
 	}
 }
 
@@ -136,7 +137,7 @@ func (i *Identity) GetGroupIDs() []uint {
 
 // LoadIdentityConfig reads and parses the identity config file
 func LoadIdentityConfig() (*IdentityConfig, error) {
-	data, err := os.ReadFile(fs.Resolve("config", "security/identity.conf"))
+	data, err := os.ReadFile(fs.Resolve("config:security/identity.conf"))
 	if err != nil {
 		return nil, err
 	}

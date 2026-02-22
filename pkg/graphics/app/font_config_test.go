@@ -1,8 +1,6 @@
 package app
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -104,24 +102,5 @@ title_size = 30
 	}
 	if got := spec.RoleSizes[graphics.UIFontTitle]; got != 30 {
 		t.Fatalf("title size = %v, want 30", got)
-	}
-}
-
-func TestResolveConfiguredFontPathFromName(t *testing.T) {
-	tmp := t.TempDir()
-	fontPath := filepath.Join(tmp, "inter", "inter.ttf")
-	if err := os.MkdirAll(filepath.Dir(fontPath), 0755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
-	if err := os.WriteFile(fontPath, []byte{0, 1, 2, 3}, 0644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	resolved, err := resolveConfiguredFontPath("inter", []string{tmp})
-	if err != nil {
-		t.Fatalf("resolveConfiguredFontPath() error = %v", err)
-	}
-	if resolved != fontPath {
-		t.Fatalf("resolved = %q, want %q", resolved, fontPath)
 	}
 }

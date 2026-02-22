@@ -492,7 +492,7 @@ func cmdConfig(args []string) error {
 	}
 	args = flagSet.Args()
 
-	sysctlBase := fs.Resolve("process", "sys")
+	sysctlBase := fs.Resolve("process:sys")
 
 	if *filter != "" {
 		return listSysctlParams(sysctlBase, "", *filter)
@@ -805,8 +805,7 @@ type deviceMountUsage struct {
 
 func parseMounts() ([]mountInfo, error) {
 	file, err := openFirstExisting(
-		fs.Resolve("process", "mounts"),
-		"/proc/mounts",
+		fs.Resolve("process:mounts"),
 	)
 	if err != nil {
 		return nil, err
@@ -832,8 +831,7 @@ func parseMounts() ([]mountInfo, error) {
 
 func parsePartitions() ([]partitionEntry, error) {
 	file, err := openFirstExisting(
-		fs.Resolve("process", "partitions"),
-		"/proc/partitions",
+		fs.Resolve("process:partitions"),
 	)
 	if err != nil {
 		return nil, err
@@ -943,8 +941,7 @@ func allDigits(value string) bool {
 
 func hasPartitionMarker(name string) bool {
 	paths := []string{
-		fs.Resolve("sysfs", filepath.Join("class/block", name, "partition")),
-		filepath.Join("/sys/class/block", name, "partition"),
+		fs.Resolve("sysfs:class/block/%s/partition", name),
 	}
 
 	for _, p := range paths {
@@ -1039,7 +1036,7 @@ func normalizeDeviceName(device string) string {
 		return ""
 	}
 
-	devRoot := strings.TrimSuffix(fs.Resolve("device", ""), "/")
+	devRoot := strings.TrimSuffix(fs.Resolve("device:"), "/")
 	if devRoot != "" && strings.HasPrefix(device, devRoot+"/") {
 		return filepath.Base(device)
 	}

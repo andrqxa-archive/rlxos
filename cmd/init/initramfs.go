@@ -21,7 +21,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -66,10 +65,10 @@ func ensureRealRootfs() {
 	}
 
 	for _, fs := range []string{
-		fs.ProcessesPath,
-		fs.SysfsPath,
-		fs.DevicesPath,
-		fs.RuntimePath,
+		fs.Resolve("process:"),
+		fs.Resolve("sysfs:"),
+		fs.Resolve("device:"),
+		fs.Resolve("system:"),
 	} {
 		os.MkdirAll("/rootfs/"+fs, 0755)
 		syscall.Mount("/"+fs, "/rootfs/"+fs, "", syscall.MS_MOVE, "")
@@ -78,13 +77,13 @@ func ensureRealRootfs() {
 	syscall.Chdir("/rootfs")
 	syscall.Chroot("/rootfs")
 
-	if err := syscall.Exec(filepath.Join(fs.AvyosPath, "cmd", "init"), []string{filepath.Join(fs.AvyosPath, "cmd", "init")}, []string{}); err != nil {
+	if err := syscall.Exec("/avyos/cmd/init", []string{}, []string{}); err != nil {
 		panic(err)
 	}
 }
 
 func parseKernelFlags() error {
-	data, err := os.ReadFile(fs.Resolve("process", "cmdline"))
+	data, err := os.ReadFile(fs.Resolve("process:cmdline"))
 	if err != nil {
 		return fmt.Errorf("failed to read kernel cmdline flags %v", err)
 	}
@@ -98,11 +97,11 @@ func parseKernelFlags() error {
 
 		switch k {
 		case "root":
-			rootfs = resolve(v)
+			rootfs = fs.Resolve(v)
 		case "rootfstype":
 			rootfsType = v
 		case "avyos":
-			avyosfs = resolve(v)
+			avyosfs = fs.Resolve(v)
 		case "avyosfstype":
 			avysofsType = v
 		case "live":
@@ -113,23 +112,9 @@ func parseKernelFlags() error {
 	return nil
 }
 
-func resolve(s string) string {
-	idx := strings.Index(s, ":")
-	if idx == -1 {
-		return s
-	}
-	kind := s[:idx]
-	s = s[idx+1:]
-	switch kind {
-	case "device":
-		return fs.Resolve(kind, s)
-	}
-	return s
-}
-
 func safeMount(source, target, fstype, options string, flags uintptr) {
 	if _, err := os.Stat(source); err != nil {
-		blocks, err := os.ReadDir(fs.Resolve("sysfs", "block"))
+		blocks, err := os.ReadDir(fs.Resolve("sysfs:block"))
 		if err != nil {
 			panic("failed to read sysfs:block " + err.Error())
 		}
@@ -144,7 +129,7 @@ func safeMount(source, target, fstype, options string, flags uintptr) {
 	}
 
 	if err := syscall.Mount(source, target, fstype, flags, options); err != nil {
-		panic(err)
+		panic(fmt.Errorf("failed to mount %s: %v", source, err))
 	}
 }
 
@@ -156,11 +141,11 @@ func mountEssentialFilesystems() {
 		flags  uintptr
 		data   string
 	}{
-		{"proc", fs.ProcessesPath, "proc", 0, ""},
-		{"sysfs", fs.SysfsPath, "sysfs", 0, ""},
-		{"devtmpfs", fs.DevicesPath, "devtmpfs", 0, ""},
-		{"devpts", fs.DevicesPath + "/pts", "devpts", 0, "ptmxmode=0666,mode=0620"},
-		{"tmpfs", fs.RuntimePath, "tmpfs", 0, ""},
+		{"proc", fs.Resolve("process:"), "proc", 0, ""},
+		{"sysfs", fs.Resolve("sysfs:"), "sysfs", 0, ""},
+		{"devtmpfs", fs.Resolve("device:"), "devtmpfs", 0, ""},
+		{"devpts", fs.Resolve("device:pts"), "devpts", 0, "ptmxmode=0666,mode=0620"},
+		{"tmpfs", fs.Resolve("system:"), "tmpfs", 0, ""},
 	}
 
 	for _, m := range mounts {
@@ -178,7 +163,7 @@ func mountEssentialFilesystems() {
 }
 
 func isMounted(path string) bool {
-	file, err := os.Open(fs.Resolve("process", "mounts"))
+	file, err := os.Open(fs.Resolve("process:mounts"))
 	if err != nil {
 		return false
 	}

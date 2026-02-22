@@ -145,7 +145,7 @@ type Client struct {
 }
 
 func Connect() (*Client, error) {
-	c, err := sutra.Connect(fs.Resolve("service:" + ServiceName))
+	c, err := sutra.Connect(fs.Resolve("system:" + ServiceName))
 	if err != nil {
 		return nil, err
 	}

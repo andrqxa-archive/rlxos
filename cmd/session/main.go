@@ -18,13 +18,10 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -58,14 +55,7 @@ func main() {
 	}
 
 	// Set deterministic Wayland runtime/socket defaults for the session.
-	uid := os.Getuid()
-	runtimeDir := fs.Resolve("cache", filepath.Join("runtime", strconv.Itoa(uid)))
-	if err := os.MkdirAll(runtimeDir, 0700); err != nil {
-		log.Printf("warning: failed to create runtime dir %s: %v", runtimeDir, err)
-	}
-	if err := os.Chmod(runtimeDir, 0700); err != nil {
-		log.Printf("warning: failed to chmod runtime dir %s: %v", runtimeDir, err)
-	}
+	runtimeDir := fs.Resolve("user:")
 	_ = os.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	_ = os.Setenv("WAYLAND_DISPLAY", "waylayer")
 	_ = os.Setenv("AVYOS_SESSION_MODE", "1")
@@ -74,7 +64,7 @@ func main() {
 	var critical []*child
 
 	for _, comp := range components {
-		path := resolveApp(comp.name)
+		path := fs.Resolve("app:%s/exec", comp.name)
 		cmd := exec.Command(path, comp.args...)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
@@ -143,23 +133,6 @@ func main() {
 			return
 		}
 	}
-}
-
-func resolveApp(name string) string {
-	candidates := []string{
-		filepath.Join("/apps", name, "exec"),
-		filepath.Join(fs.AvyosPath, "apps", name, "exec"),
-		filepath.Join("apps", name, "exec"),
-		filepath.Join("/apps", name),
-		filepath.Join(fs.AvyosPath, "apps", name),
-		filepath.Join("apps", name),
-	}
-	for _, p := range candidates {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return fmt.Sprintf("/avyos/apps/%s/exec", name)
 }
 
 func stopAll(children []*child) {

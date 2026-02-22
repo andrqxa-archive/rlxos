@@ -36,7 +36,7 @@ func (s *Service) Start() error {
 	var logFile *os.File
 	if s.TTY != "" {
 		var err error
-		ttyFile, err = os.OpenFile(s.TTY, os.O_RDWR, 0)
+		ttyFile, err = os.OpenFile(fs.Resolve(s.TTY), os.O_RDWR, 0)
 		if err != nil {
 			return fmt.Errorf("failed to open tty %s: %w", s.TTY, err)
 		}
@@ -61,7 +61,7 @@ func (s *Service) Start() error {
 			s.Environment["TERM"] = "linux"
 		}
 	} else {
-		logPath := fs.Resolve("cache", filepath.Join("log", "services", serviceLogFileName(s)+".log"))
+		logPath := fs.Resolve("cache:log/services/%s.log", serviceLogFileName(s))
 		logDir := filepath.Dir(logPath)
 		if err := os.MkdirAll(logDir, 0755); err != nil {
 			return fmt.Errorf("failed to create %s: %w", logDir, err)

@@ -70,7 +70,7 @@ func NewService(name, socketPath string) (*Service, error) {
 		return nil, errors.New("service name is required")
 	}
 	if socketPath == "" {
-		socketPath = fs.Resolve("service:" + name)
+		socketPath = fs.Resolve("system:%s", name)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(socketPath), 0755); err != nil {

@@ -170,7 +170,7 @@ func cmdSwitch(args []string) error {
 
 	shell := id.Shell
 	if shell == "" {
-		shell = fs.Resolve("cmd", "shell")
+		shell = fs.Resolve("cmd:shell")
 	}
 
 	format.Success("Switched to user %s", username)
