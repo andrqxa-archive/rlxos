@@ -9,19 +9,36 @@
         <span>Handbook</span>
       </a>
       <div class="nav-actions">
+        <button class="doc-theme-toggle" type="button" data-theme-toggle aria-label="Toggle theme">
+          <span class="doc-theme-icon" aria-hidden="true"></span>
+          <span class="doc-theme-label" data-theme-label>Light</span>
+        </button>
         <a class="btn btn-primary" href="https://avyos.dev">Home</a>
         <a class="btn btn-release" href="https://github.com/itsmanjeet/avyos">Source Code</a>
+        <button class="doc-menu-toggle" type="button" data-doc-nav-toggle aria-controls="doc-sidebar" aria-expanded="false">
+          Menu
+        </button>
       </div>
     </div>
   </header>
 
   <main class="doc-shell">
     <div class="container doc-layout">
-      <aside class="doc-sidebar card" aria-label="Documentation navigation">
+      <button class="doc-sidebar-backdrop" type="button" data-doc-sidebar-backdrop hidden tabindex="-1" aria-hidden="true"></button>
+      <aside id="doc-sidebar" class="doc-sidebar card" aria-label="Documentation navigation">
+        <div class="doc-sidebar-head">
+          <p class="doc-sidebar-title">Navigation</p>
+          <button class="doc-sidebar-close" type="button" data-doc-nav-close aria-label="Close documentation navigation">
+            Close
+          </button>
+        </div>
         {{ range .Sidebar }}
         <section class="doc-nav-group">
           <h2>{{ .Title }}</h2>
           {{ range .Groups }}
+          {{ if .Title }}
+          <p class="doc-subtitle">{{ .Title }}</p>
+          {{ end }}
           {{ range .Entries }}
           <a class="doc-link{{ if .Active }} active{{ end }}" href="{{ .Href }}">{{ .Title }}</a>
           {{ end }}
@@ -35,6 +52,143 @@
       </article>
     </div>
   </main>
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var storageKey = "docgen-theme";
+      var themeToggle = document.querySelector("[data-theme-toggle]");
+      var themeLabel = document.querySelector("[data-theme-label]");
+      var navToggle = document.querySelector("[data-doc-nav-toggle]");
+      var navClose = document.querySelector("[data-doc-nav-close]");
+      var sidebar = document.getElementById("doc-sidebar");
+      var backdrop = document.querySelector("[data-doc-sidebar-backdrop]");
+
+      var prefersDark = function () {
+        return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      };
+
+      var applyStoredTheme = function () {
+        try {
+          var stored = localStorage.getItem(storageKey);
+          if (stored === "light" || stored === "dark") {
+            root.setAttribute("data-theme", stored);
+          }
+        } catch (_err) {
+        }
+      };
+
+      var setTheme = function (theme) {
+        if (theme !== "light" && theme !== "dark") {
+          root.removeAttribute("data-theme");
+          try {
+            localStorage.removeItem(storageKey);
+          } catch (_err) {
+          }
+        } else {
+          root.setAttribute("data-theme", theme);
+          try {
+            localStorage.setItem(storageKey, theme);
+          } catch (_err) {
+          }
+        }
+        updateThemeToggle();
+      };
+
+      var updateThemeToggle = function () {
+        var explicitTheme = root.getAttribute("data-theme");
+        var activeTheme = explicitTheme === "light" || explicitTheme === "dark"
+          ? explicitTheme
+          : (prefersDark() ? "dark" : "light");
+        if (themeLabel) {
+          themeLabel.textContent = activeTheme === "dark" ? "Dark" : "Light";
+        }
+        if (themeToggle) {
+          themeToggle.setAttribute(
+            "aria-label",
+            "Switch to " + (activeTheme === "dark" ? "light" : "dark") + " theme"
+          );
+        }
+      };
+
+      var setSidebarOpen = function (open) {
+        if (!sidebar || !backdrop) {
+          return;
+        }
+        if (open) {
+          sidebar.classList.add("open");
+          backdrop.classList.add("open");
+          backdrop.removeAttribute("hidden");
+          document.body.classList.add("doc-nav-open");
+        } else {
+          sidebar.classList.remove("open");
+          backdrop.classList.remove("open");
+          backdrop.setAttribute("hidden", "");
+          document.body.classList.remove("doc-nav-open");
+        }
+        if (navToggle) {
+          navToggle.setAttribute("aria-expanded", open ? "true" : "false");
+        }
+      };
+
+      applyStoredTheme();
+
+      if (themeToggle) {
+        themeToggle.addEventListener("click", function () {
+          var explicitTheme = root.getAttribute("data-theme");
+          var isDark = explicitTheme === "dark" || (explicitTheme != "light" && prefersDark());
+          setTheme(isDark ? "light" : "dark");
+        });
+      }
+
+      if (window.matchMedia) {
+        var themeMedia = window.matchMedia("(prefers-color-scheme: dark)");
+        if (themeMedia.addEventListener) {
+          themeMedia.addEventListener("change", function () {
+            if (!root.getAttribute("data-theme")) {
+              updateThemeToggle();
+            }
+          });
+        }
+      }
+
+      if (navToggle) {
+        navToggle.addEventListener("click", function () {
+          if (!sidebar) {
+            return;
+          }
+          setSidebarOpen(!sidebar.classList.contains("open"));
+        });
+      }
+      if (navClose) {
+        navClose.addEventListener("click", function () {
+          setSidebarOpen(false);
+        });
+      }
+      if (backdrop) {
+        backdrop.addEventListener("click", function () {
+          setSidebarOpen(false);
+        });
+      }
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+          setSidebarOpen(false);
+        }
+      });
+      if (window.matchMedia) {
+        var desktopMedia = window.matchMedia("(min-width: 941px)");
+        if (desktopMedia.addEventListener) {
+          desktopMedia.addEventListener("change", function (event) {
+            if (event.matches) {
+              setSidebarOpen(false);
+            }
+          });
+        }
+      }
+
+      setSidebarOpen(false);
+      updateThemeToggle();
+    })();
+  </script>
 </body>
 </html>
 {{- end }}

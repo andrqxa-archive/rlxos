@@ -1,5 +1,9 @@
 {{ define "project_page" -}}
-<h1>{{ .Title }}</h1>
-<p class="muted mono doc-path">{{ .RelPath }}</p>
-{{ .CardsHTML }}
+<section class="doc-ref-shell">
+  <header class="doc-ref-hero">
+    <h1>{{ .Title }}</h1>
+    <p class="muted mono doc-path">{{ .RelPath }}</p>
+  </header>
+  {{ .CardsHTML }}
+</section>
 {{- end }}
