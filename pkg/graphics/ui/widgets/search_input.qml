@@ -8,8 +8,8 @@ component SearchInput {
 
     editable: true
     focusable: true
-    minHeight: 36
-    background: "theme.color.control.fill"
+    minHeight: 42
+    background: "theme.color.surface.card"
     hoverBackground: "theme.color.control.hover"
     textColor: "theme.color.text.primary"
     placeholderColor: "theme.color.text.muted"
@@ -17,8 +17,8 @@ component SearchInput {
     focusedBorderColor: "theme.color.stroke.hairline"
     focusRing: true
     focusRingColor: "theme.color.stroke.focus"
-    focusRingWidth: 2
+    focusRingWidth: 3
     focusRingOffset: 1
-    borderRadius: 18
-    padding: "8 12"
+    borderRadius: 14
+    padding: "9 14"
 }

@@ -200,7 +200,7 @@ func buildLaunchpadTile(entry appcatalog.Entry, onClick func()) *ui.Element {
 	label.SetAttribute("minWidth", 96)
 	label.SetAttribute("maxWidth", 96)
 	label.SetAttribute("clipText", true)
-	label.SetAttribute("textColor", "#F2F6FF")
+	label.SetAttribute("textColor", "theme.color.text.primary")
 	label.SetAttribute("interactive", false)
 
 	col.AddChild(icon)

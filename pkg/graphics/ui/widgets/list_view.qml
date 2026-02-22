@@ -6,17 +6,17 @@ component ListView {
 
     listView: true
     focusable: true
-    borderRadius: 10
-    rowRadius: 10
-    rowHeight: 38
-    background: "theme.color.control.fill"
-    gradientTop: "#FFFFFFD9"
-    gradientBottom: "#ECF2FFC0"
+    borderRadius: 14
+    rowRadius: 12
+    rowHeight: 40
+    background: "theme.color.surface.card"
+    gradientTop: "transparent"
+    gradientBottom: "transparent"
     borderColor: "theme.color.stroke.hairline"
     focusedBorderColor: "theme.color.stroke.hairline"
     focusRing: true
     focusRingColor: "theme.color.stroke.focus"
-    focusRingWidth: 2
+    focusRingWidth: 3
     focusRingOffset: 1
     dividerColor: "theme.color.stroke.divider"
     hoverBackground: "theme.color.accent.subtle"
@@ -25,7 +25,7 @@ component ListView {
     selectedIndicatorWidth: 3
     textColor: "theme.color.text.primary"
     shadow: true
-    shadowColor: "#10182818"
+    shadowColor: "#101A2B17"
     shadowOffsetY: 2
-    shadowSpread: 6
+    shadowSpread: 8
 }

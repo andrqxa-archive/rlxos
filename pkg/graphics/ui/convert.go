@@ -140,6 +140,8 @@ func parseColorStr(s string) graphics.Color {
 			return graphics.DefaultTheme.Background
 		case "color.bg":
 			return graphics.DefaultTheme.Background
+		case "color.bg.alt":
+			return graphics.DefaultTheme.Secondary
 		case "foreground":
 			return graphics.DefaultTheme.Foreground
 		case "color.text.primary":
@@ -148,6 +150,8 @@ func parseColorStr(s string) graphics.Color {
 			return graphics.DefaultTheme.Primary
 		case "color.accent":
 			return graphics.DefaultTheme.Primary
+		case "color.accent.alt", "color.accent.secondary", "color.accent2":
+			return graphics.DefaultTheme.AccentAlt
 		case "primaryhover":
 			return graphics.DefaultTheme.PrimaryHover
 		case "color.accent.hover":
@@ -174,6 +178,8 @@ func parseColorStr(s string) graphics.Color {
 			return graphics.DefaultTheme.ButtonText
 		case "color.surface.glass":
 			return graphics.DefaultTheme.SurfaceGlass
+		case "color.surface.card":
+			return graphics.DefaultTheme.SurfaceRaised
 		case "color.surface.glassraised":
 			return graphics.DefaultTheme.SurfaceRaised
 		case "color.surface.sidebar":

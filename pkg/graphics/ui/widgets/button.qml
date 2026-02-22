@@ -5,24 +5,24 @@ component Button {
 
     interactive: true
     focusable: true
-    background: "theme.color.control.fill"
-    gradientTop: "#FFFFFFE6"
-    gradientBottom: "#EEF3FFC0"
+    background: "theme.color.surface.glass"
+    gradientTop: "transparent"
+    gradientBottom: "transparent"
     hoverBackground: "theme.color.control.hover"
     pressedBackground: "theme.color.control.pressed"
     borderColor: "theme.color.stroke.hairline"
     focusedBorderColor: "theme.color.stroke.hairline"
     focusRing: true
     focusRingColor: "theme.color.stroke.focus"
-    focusRingWidth: 2
+    focusRingWidth: 3
     focusRingOffset: 1
-    borderRadius: 10
-    minHeight: 36
-    padding: "8 14"
+    borderRadius: 14
+    minHeight: 40
+    padding: "10 16"
     textColor: "theme.color.text.primary"
     textAlign: "center"
     shadow: true
-    shadowColor: "#1018281A"
+    shadowColor: "#101A2B1A"
     shadowOffsetY: 2
-    shadowSpread: 6
+    shadowSpread: 8
 }

@@ -1,6 +1,6 @@
 component Page {
     orientation: "vertical"
-    property spacing: 16
-    property padding: "20"
+    property spacing: 20
+    property padding: "22"
     property alignment: "stretch"
 }

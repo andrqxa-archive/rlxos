@@ -5,22 +5,22 @@ component IconButton {
 
     interactive: true
     focusable: true
-    minWidth: 36
-    minHeight: 36
+    minWidth: 42
+    minHeight: 42
     padding: "0"
     textAlign: "center"
-    background: "theme.color.control.fill"
+    background: "theme.color.surface.glass"
     hoverBackground: "theme.color.control.hover"
     pressedBackground: "theme.color.control.pressed"
     borderColor: "theme.color.stroke.hairline"
     focusedBorderColor: "theme.color.stroke.hairline"
     focusRing: true
     focusRingColor: "theme.color.stroke.focus"
-    focusRingWidth: 2
+    focusRingWidth: 3
     focusRingOffset: 1
-    borderRadius: 18
+    borderRadius: 14
     shadow: true
-    shadowColor: "#10182814"
+    shadowColor: "#101A2B17"
     shadowOffsetY: 2
-    shadowSpread: 4
+    shadowSpread: 8
 }

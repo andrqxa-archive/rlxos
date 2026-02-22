@@ -4,13 +4,13 @@ component Menu {
     property padding: "8"
     property menuWidth: 220
 
-    background: "theme.color.surface.glassraised"
-    gradientTop: "#FFFFFFEA"
-    gradientBottom: "#E8F0FFC8"
+    background: "theme.color.surface.card"
+    gradientTop: "transparent"
+    gradientBottom: "transparent"
     borderColor: "theme.color.stroke.hairline"
-    borderRadius: 10
+    borderRadius: 14
     shadow: true
-    shadowColor: "#1018282A"
-    shadowOffsetY: 2
-    shadowSpread: 12
+    shadowColor: "#101A2B22"
+    shadowOffsetY: 4
+    shadowSpread: 14
 }

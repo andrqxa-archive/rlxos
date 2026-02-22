@@ -5,19 +5,18 @@ component PrimaryButton {
 
     interactive: true
     focusable: true
-    gradientTop: "#6FA4FF"
-    gradientBottom: "theme.color.accent"
+    gradientTop: "theme.color.accent"
+    gradientBottom: "theme.color.accent.alt"
     hoverBackground: "theme.color.accent.hover"
     pressedBackground: "theme.primaryactive"
     borderColor: "theme.color.accent"
     textColor: "#FFFFFF"
-    borderRadius: 10
-    minHeight: 36
-    padding: "8 14"
-    textColor: "theme.color.bg"
+    borderRadius: 14
+    minHeight: 40
+    padding: "10 16"
     textAlign: "center"
     shadow: true
-    shadowColor: "#1018282A"
-    shadowOffsetY: 3
-    shadowSpread: 8
+    shadowColor: "#0D63F34D"
+    shadowOffsetY: 4
+    shadowSpread: 12
 }

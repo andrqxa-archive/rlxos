@@ -1,8 +1,8 @@
 HBox {
     id: TaskList
-    background: "theme.color.surface.glassraised"
-    gradientTop: "#FFFFFFE3"
-    gradientBottom: "#F2F6FFD1"
+    background: "theme.color.surface.card"
+    gradientTop: "transparent"
+    gradientBottom: "transparent"
     borderColor: "theme.color.stroke.hairline"
-    borderRadius: 14
+    borderRadius: 20
 }

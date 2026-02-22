@@ -19,7 +19,7 @@ component Slider {
     thumbHoverColor: "theme.color.accent.hover"
     thumbActiveColor: "theme.primaryactive"
     shadow: true
-    shadowColor: "#10182812"
+    shadowColor: "#101A2B17"
     shadowOffsetY: 2
     shadowSpread: 4
 }

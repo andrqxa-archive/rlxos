@@ -1,7 +1,7 @@
 Page {
     padding: "18"
     spacing: 0
-    background: "#0A132680"
+    background: "theme.color.surface.glass"
     overflow: "hidden"
 
     VBox {

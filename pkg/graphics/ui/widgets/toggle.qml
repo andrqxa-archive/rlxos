@@ -6,18 +6,18 @@ component Toggle {
 
     toggleable: true
     focusable: true
-    minHeight: 36
+    minHeight: 40
     background: transparent
-    onTrackColor: "#2F6BFFB8"
-    offTrackColor: "theme.color.control.fill"
-    thumbColor: "#FFFFFF"
+    onTrackColor: "theme.color.accent"
+    offTrackColor: "theme.color.surface.card"
+    thumbColor: "theme.color.surface.card"
     borderColor: transparent
     focusedBorderColor: transparent
     trackBorderColor: "theme.color.stroke.hairline"
     focusedTrackBorderColor: "theme.color.stroke.focus"
     textColor: "theme.color.text.primary"
     shadow: true
-    shadowColor: "#10182810"
+    shadowColor: "#101A2B17"
     shadowOffsetY: 2
-    shadowSpread: 4
+    shadowSpread: 6
 }

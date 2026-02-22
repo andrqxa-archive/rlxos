@@ -9,10 +9,10 @@ component TextInput {
 
     editable: true
     focusable: true
-    minHeight: 36
-    background: "theme.color.control.fill"
-    gradientTop: "#FFFFFFDE"
-    gradientBottom: "#EEF3FFC2"
+    minHeight: 40
+    background: "theme.color.surface.card"
+    gradientTop: "transparent"
+    gradientBottom: "transparent"
     hoverBackground: "theme.color.control.hover"
     textColor: "theme.color.text.primary"
     placeholderColor: "theme.color.text.muted"
@@ -20,9 +20,9 @@ component TextInput {
     focusedBorderColor: "theme.color.stroke.hairline"
     focusRing: true
     focusRingColor: "theme.color.stroke.focus"
-    focusRingWidth: 2
+    focusRingWidth: 3
     focusRingOffset: 1
-    borderRadius: 10
-    padding: "8 10"
+    borderRadius: 14
+    padding: "10 12"
     shadow: false
 }

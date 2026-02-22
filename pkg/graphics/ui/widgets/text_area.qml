@@ -10,21 +10,21 @@ component TextArea {
     editable: true
     multiline: true
     focusable: true
-    background: "theme.color.control.fill"
-    gradientTop: "#FFFFFFD9"
-    gradientBottom: "#ECF2FFC0"
+    background: "theme.color.surface.card"
+    gradientTop: "transparent"
+    gradientBottom: "transparent"
     textColor: "theme.color.text.primary"
     placeholderColor: "theme.color.text.muted"
     borderColor: "theme.color.stroke.hairline"
     focusedBorderColor: "theme.color.stroke.hairline"
     focusRing: true
     focusRingColor: "theme.color.stroke.focus"
-    focusRingWidth: 2
+    focusRingWidth: 3
     focusRingOffset: 1
-    borderRadius: 10
-    padding: "8 10"
+    borderRadius: 14
+    padding: "10 12"
     shadow: true
-    shadowColor: "#10182814"
+    shadowColor: "#101A2B17"
     shadowOffsetY: 2
-    shadowSpread: 6
+    shadowSpread: 8
 }

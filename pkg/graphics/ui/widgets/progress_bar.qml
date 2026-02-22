@@ -5,13 +5,13 @@ component ProgressBar {
     property textRole: "paragraph"
 
     background: "theme.color.control.fill"
-    gradientTop: "#FFFFFFD9"
-    gradientBottom: "#ECF2FFC0"
+    gradientTop: "transparent"
+    gradientBottom: "transparent"
     borderColor: "theme.color.stroke.hairline"
-    borderRadius: 6
+    borderRadius: 8
     fillColor: "theme.color.accent"
-    fillGradientTop: "#6CA8FF"
-    fillGradientBottom: "theme.color.accent"
+    fillGradientTop: "theme.color.accent"
+    fillGradientBottom: "theme.color.accent.alt"
     textColor: "theme.color.text.secondary"
     shadow: false
 }

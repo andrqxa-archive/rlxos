@@ -23,25 +23,13 @@ Page {
                     spacing: 8
                     expand: true
 
-                    Heading {
-                        text: "Settings"
-                    }
-
-                    Paragraph {
-                        text: "Configure system preferences and app behavior."
-                    }
-
                     ListView {
                         id: PageList
-                        items: "Appearance|About System"
+                        items: "Network|Appearance|Display|Sound|Notifications|Security|User|Services|Distro|Devices|Configs|About"
                         selected: 0
                         rowHeight: 36
                         onChanged: SelectPage
                         expand: true
-                    }
-
-                    Paragraph {
-                        text: "Settings tree root: /dev/rlxos"
                     }
                 }
             }
@@ -52,14 +40,35 @@ Page {
                 expand: true
                 background: "transparent"
 
-                Heading {
-                    id: PageTitle
-                    text: "Appearance"
-                }
+                Card {
+                    padding: "12"
+                    expand: false
 
-                Paragraph {
-                    id: PageDescription
-                    text: "Configure wallpaper, fit mode, background color, and dock placement."
+                    HBox {
+                        spacing: 10
+                        expand: false
+
+                        VBox {
+                            spacing: 4
+                            expand: true
+
+                            Heading {
+                                id: PageTitle
+                                text: "Network"
+                            }
+
+                            Paragraph {
+                                id: PageDescription
+                                text: "Wired network status, DNS servers, addresses, and the active default route."
+                            }
+                        }
+
+                        Button {
+                            text: "Refresh"
+                            onClicked: RefreshPage
+                            expand: false
+                        }
+                    }
                 }
 
                 VBox {

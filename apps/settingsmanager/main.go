@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	_ "embed"
+	"encoding/binary"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	osuser "os/user"
@@ -18,11 +20,14 @@ import (
 	"syscall"
 	"time"
 
+	distroapi "avyos.dev/api/distro"
 	serviceapi "avyos.dev/api/service"
 	settingsapi "avyos.dev/api/settings"
+	ueventapi "avyos.dev/api/uevent"
 	"avyos.dev/pkg/fs"
 	gapp "avyos.dev/pkg/graphics/app"
 	"avyos.dev/pkg/graphics/ui"
+	"avyos.dev/pkg/identity"
 	"avyos.dev/pkg/ini"
 	"avyos.dev/pkg/logger"
 	"avyos.dev/pkg/sutra"
@@ -36,16 +41,22 @@ const (
 	defaultBackgroundScale = "cover"
 	defaultDockPos         = "bottom"
 	defaultBgColor         = ""
+	defaultRoundedRadius   = "12"
+	defaultBrightness      = "70"
 
 	settingValueColWidth = 420
 	settingValueColMin   = 240
 )
 
 const (
-	keyBackgroundSource = "/dev/rlxos/background/source"
-	keyBackgroundScale  = "/dev/rlxos/background/scale"
-	keyBackgroundColor  = "/dev/rlxos/background/color"
-	keyDockPosition     = "/dev/rlxos/dock/position"
+	keyBackgroundSource      = "/dev/rlxos/background/source"
+	keyBackgroundScale       = "/dev/rlxos/background/scale"
+	keyBackgroundColor       = "/dev/rlxos/background/color"
+	keyDockPosition          = "/dev/rlxos/dock/position"
+	keyRoundedCornersEnabled = "/dev/rlxos/ui/rounded_corners/enabled"
+	keyRoundedCornersRadius  = "/dev/rlxos/ui/rounded_corners/radius"
+	keyDisplayBrightness     = "/dev/rlxos/display/brightness"
+	keySystemGoVersion       = "/dev/rlxos/system/about/golang"
 )
 
 var (
@@ -53,6 +64,8 @@ var (
 		"background.wallpaper": keyBackgroundSource,
 		"background.color":     keyBackgroundColor,
 		"dock.position":        keyDockPosition,
+		"display.brightness":   keyDisplayBrightness,
+		"desktop.rounded":      keyRoundedCornersEnabled,
 	}
 	canonicalToLegacy map[string][]string
 
@@ -80,6 +93,7 @@ const (
 	fieldText fieldKind = iota
 	fieldToggle
 	fieldChoice
+	fieldSlider
 )
 
 type settingChoice struct {
@@ -97,6 +111,9 @@ type settingField struct {
 	Choices     []settingChoice
 	Kind        fieldKind
 	ReadOnly    bool
+	Min         float64
+	Max         float64
+	Step        float64
 }
 
 type settingSection struct {
@@ -158,6 +175,26 @@ func choiceSetting(id, key, label, hint, def string, choices ...settingChoice) s
 	}
 }
 
+func sliderSetting(id, key, label, hint, def string, min, max, step float64) settingField {
+	if max < min {
+		max = min
+	}
+	if step < 0 {
+		step = 0
+	}
+	return settingField{
+		ID:      id,
+		Key:     key,
+		Label:   label,
+		Hint:    hint,
+		Default: def,
+		Kind:    fieldSlider,
+		Min:     min,
+		Max:     max,
+		Step:    step,
+	}
+}
+
 func readOnlyTextSetting(id, key, label, hint, def string) settingField {
 	field := textSetting(id, key, label, hint, def, def)
 	field.ReadOnly = true
@@ -167,13 +204,18 @@ func readOnlyTextSetting(id, key, label, hint, def string) settingField {
 func supportedSettingsPages() []settingPage {
 	return []settingPage{
 		{
+			Name:        "network",
+			Title:       "Network",
+			Description: "Wired network status, DNS servers, addresses, and the active default route.",
+		},
+		{
 			Name:        "appearance",
 			Title:       "Appearance",
-			Description: "Configure wallpaper, fit mode, background color, and dock placement.",
+			Description: "Background image controls, rounded corners, and dock placement.",
 			Sections: []settingSection{
 				{
-					Title:       "Desktop Layout",
-					Description: "Core desktop behavior that is currently applied by running services.",
+					Title:       "Desktop Style",
+					Description: "General desktop appearance preferences.",
 					Fields: []settingField{
 						choiceSetting(
 							"BackgroundScale",
@@ -195,18 +237,99 @@ func supportedSettingsPages() []settingPage {
 							settingChoice{Label: "Bottom", Value: "bottom"},
 							settingChoice{Label: "Top", Value: "top"},
 						),
+						toggleSetting(
+							"RoundedCornersEnabled",
+							keyRoundedCornersEnabled,
+							"Rounded Corners",
+							"Enable rounded corners across desktop surfaces.",
+							true,
+						),
+						choiceSetting(
+							"RoundedCornersRadius",
+							keyRoundedCornersRadius,
+							"Corner Radius",
+							"Corner radius used when rounded corners are enabled.",
+							defaultRoundedRadius,
+							settingChoice{Label: "Subtle (8px)", Value: "8"},
+							settingChoice{Label: "Balanced (12px)", Value: "12"},
+							settingChoice{Label: "Large (16px)", Value: "16"},
+							settingChoice{Label: "Extra (20px)", Value: "20"},
+						),
 					},
 				},
 			},
 		},
 		{
-			Name:        "about-system",
-			Title:       "About System",
-			Description: "Runtime information detected from this system.",
+			Name:        "display",
+			Title:       "Display",
+			Description: "Current display information and brightness control.",
 			Sections: []settingSection{
 				{
-					Title:       "Identity",
-					Description: "Product and release metadata.",
+					Title:       "Brightness",
+					Description: "Adjust preferred display brightness percentage.",
+					Fields: []settingField{
+						sliderSetting(
+							"DisplayBrightness",
+							keyDisplayBrightness,
+							"Brightness",
+							"Preferred screen brightness level.",
+							defaultBrightness,
+							1,
+							100,
+							1,
+						),
+					},
+				},
+			},
+		},
+		{
+			Name:        "sound",
+			Title:       "Sound",
+			Description: "Volume, output, and input controls.",
+		},
+		{
+			Name:        "notifications",
+			Title:       "Notifications",
+			Description: "Banner behavior and per-app notification controls.",
+		},
+		{
+			Name:        "security",
+			Title:       "Security",
+			Description: "Authentication, policies, and system hardening.",
+		},
+		{
+			Name:        "user",
+			Title:       "User",
+			Description: "Current user identity and password management.",
+		},
+		{
+			Name:        "services",
+			Title:       "Services",
+			Description: "Inspect and control running system services.",
+		},
+		{
+			Name:        "distro",
+			Title:       "Distro",
+			Description: "Manage installed and available distributions.",
+		},
+		{
+			Name:        "devices",
+			Title:       "Devices",
+			Description: "Manage detected hardware devices from uevent.",
+		},
+		{
+			Name:        "configs",
+			Title:       "Configs",
+			Description: "List and manage raw settings keys and values.",
+		},
+		{
+			Name:        "about",
+			Title:       "About",
+			Description: "System build and runtime metadata.",
+			Sections: []settingSection{
+				{
+					Title:       "System Defaults",
+					Description: "Metadata persisted in settings for other services.",
 					Fields: []settingField{
 						readOnlyTextSetting("SystemName", "/dev/rlxos/system/about/name", "System Name", "Distribution name.", "RlxOS"),
 						readOnlyTextSetting("SystemVersion", "/dev/rlxos/system/about/version", "Version", "Operating system version.", "0.1.0"),
@@ -220,6 +343,7 @@ func supportedSettingsPages() []settingPage {
 						readOnlyTextSetting("KernelVersion", "/dev/rlxos/system/about/kernel", "Kernel", "Kernel release string.", runtime.GOOS),
 						readOnlyTextSetting("Architecture", "/dev/rlxos/system/about/architecture", "Architecture", "CPU architecture.", runtime.GOARCH),
 						readOnlyTextSetting("SessionType", "/dev/rlxos/system/about/session", "Session", "Current session type.", "wayland"),
+						readOnlyTextSetting("GoVersion", keySystemGoVersion, "Go Runtime", "Go runtime version.", runtime.Version()),
 						readOnlyTextSetting("DefaultUser", "/dev/rlxos/accounts/default_user", "Default User", "Detected active user.", "user"),
 					},
 				},
@@ -358,7 +482,7 @@ func detectRuntimeDefaults() map[string]string {
 		out["/dev/rlxos/display/resolution"] = resolution
 	}
 	if brightness := detectBacklightBrightnessPercent(); brightness != "" {
-		out["/dev/rlxos/display/brightness"] = brightness
+		out[keyDisplayBrightness] = brightness
 	}
 
 	hasBattery, batteryCapacity := detectBattery()
@@ -417,6 +541,7 @@ func detectRuntimeDefaults() map[string]string {
 	}
 	out["/dev/rlxos/system/about/architecture"] = runtime.GOARCH
 	out["/dev/rlxos/system/about/session"] = detectSessionType()
+	out[keySystemGoVersion] = runtime.Version()
 
 	applyRuntimeServiceDefaults(out)
 	return out
@@ -879,6 +1004,19 @@ type settingsApp struct {
 	currentPage int
 	values      map[string]string
 	persisted   map[string]string
+
+	serviceTarget      string
+	distroPullName     string
+	distroPullURL      string
+	distroRemoveName   string
+	deviceTriggerScope string
+	configFilterPrefix string
+	configEditKey      string
+	configEditValue    string
+
+	passwordCurrent string
+	passwordNext    string
+	passwordConfirm string
 }
 
 func (a *settingsApp) e(id string) *ui.Element { return a.FindElement(id) }
@@ -954,6 +1092,11 @@ func (a *settingsApp) SelectPage(index int, label string) {
 	a.setPage(index)
 }
 
+func (a *settingsApp) RefreshPage() {
+	a.renderPage()
+	a.setStatus("Page refreshed")
+}
+
 func (a *settingsApp) renderPage() {
 	if a.currentPage < 0 || a.currentPage >= len(settingsPages) {
 		a.currentPage = 0
@@ -968,11 +1111,56 @@ func (a *settingsApp) renderPage() {
 	}
 	host.ClearChildren()
 
-	if page.Name == "appearance" {
+	switch page.Name {
+	case "network":
+		host.AddChild(a.buildNetworkWiredCard())
+	case "appearance":
 		host.AddChild(a.buildWallpaperCard())
-	}
-	for _, section := range page.Sections {
-		host.AddChild(a.buildSectionCard(section))
+		for _, section := range page.Sections {
+			host.AddChild(a.buildSectionCard(section))
+		}
+	case "display":
+		host.AddChild(a.buildDisplayInfoCard())
+		for _, section := range page.Sections {
+			host.AddChild(a.buildSectionCard(section))
+		}
+	case "sound":
+		host.AddChild(a.buildNotImplementedCard(
+			"Sound",
+			"Output and input settings are not yet implemented.",
+		))
+	case "notifications":
+		host.AddChild(a.buildNotImplementedCard(
+			"Notifications",
+			"Notification settings are not yet implemented.",
+		))
+	case "security":
+		host.AddChild(a.buildNotImplementedCard(
+			"Security",
+			"Security settings are not yet implemented.",
+		))
+	case "user":
+		host.AddChild(a.buildUserInfoCard())
+		host.AddChild(a.buildUserPasswordCard())
+	case "services":
+		host.AddChild(a.buildServicesListCard())
+		host.AddChild(a.buildServicesActionCard())
+	case "distro":
+		host.AddChild(a.buildDistroListCard())
+		host.AddChild(a.buildDistroManageCard())
+	case "devices":
+		host.AddChild(a.buildDevicesListCard())
+		host.AddChild(a.buildDevicesManageCard())
+	case "configs":
+		host.AddChild(a.buildConfigsListCard())
+		host.AddChild(a.buildConfigsManageCard())
+	case "about":
+		host.AddChild(a.buildAboutSystemCard())
+		host.AddChild(a.buildAboutUpdatesCard())
+	default:
+		for _, section := range page.Sections {
+			host.AddChild(a.buildSectionCard(section))
+		}
 	}
 }
 
@@ -1047,6 +1235,8 @@ func (a *settingsApp) buildFieldRow(field settingField) *ui.Element {
 		controlWrap.AddChild(a.buildToggleField(field))
 	case fieldChoice:
 		controlWrap.AddChild(a.buildChoiceField(field))
+	case fieldSlider:
+		controlWrap.AddChild(a.buildSliderField(field))
 	default:
 		controlWrap.AddChild(a.buildTextField(field))
 	}
@@ -1171,6 +1361,127 @@ func (a *settingsApp) buildChoiceField(field settingField) *ui.Element {
 	}
 	updateChoiceLabels(current)
 	return flow
+}
+
+func (a *settingsApp) buildSliderField(field settingField) *ui.Element {
+	container := ui.NewElement("VBox")
+	container.SetAttribute("direction", "column")
+	container.SetAttribute("spacing", 6)
+	container.SetAttribute("expand", false)
+
+	current, err := strconv.ParseFloat(strings.TrimSpace(a.values[field.Key]), 64)
+	if err != nil {
+		current, err = strconv.ParseFloat(strings.TrimSpace(field.Default), 64)
+		if err != nil {
+			current = field.Min
+		}
+	}
+	if current < field.Min {
+		current = field.Min
+	}
+	if current > field.Max {
+		current = field.Max
+	}
+
+	slider := ui.NewElement("Slider")
+	slider.SetAttribute("id", field.ID)
+	slider.SetAttribute("min", field.Min)
+	slider.SetAttribute("max", field.Max)
+	slider.SetAttribute("step", field.Step)
+	slider.SetAttribute("value", current)
+	if field.ReadOnly {
+		slider.SetAttribute("slidable", false)
+	}
+
+	valueInput := ui.NewElement("TextInput")
+	valueInput.SetAttribute("text", strconv.Itoa(int(current+0.5)))
+	valueInput.SetAttribute("placeholder", strconv.Itoa(int(field.Min)))
+	valueInput.SetAttribute("maxWidth", 96)
+	valueInput.SetAttribute("textAlign", "center")
+	if field.ReadOnly {
+		valueInput.SetAttribute("readOnly", true)
+	}
+
+	suffix := ui.NewElement("Label")
+	suffix.SetAttribute("text", "%")
+	suffix.SetAttribute("textAlign", "left")
+	suffix.SetAttribute("minWidth", 24)
+
+	inputRow := ui.NewElement("HBox")
+	inputRow.SetAttribute("direction", "row")
+	inputRow.SetAttribute("spacing", 6)
+	inputRow.SetAttribute("expand", false)
+	inputRow.AddChild(valueInput)
+	inputRow.AddChild(suffix)
+
+	normalize := func(v float64) float64 {
+		if v < field.Min {
+			v = field.Min
+		}
+		if v > field.Max {
+			v = field.Max
+		}
+		if field.Step > 0 {
+			steps := (v - field.Min) / field.Step
+			rounded := float64(int(steps + 0.5))
+			v = field.Min + rounded*field.Step
+			if v < field.Min {
+				v = field.Min
+			}
+			if v > field.Max {
+				v = field.Max
+			}
+		}
+		return v
+	}
+	updateValue := func(v float64, syncSlider bool) {
+		v = normalize(v)
+		text := strconv.Itoa(int(v + 0.5))
+		a.values[field.Key] = text
+		valueInput.SetAttribute("text", text)
+		if syncSlider {
+			slider.SetAttribute("value", v)
+		}
+		a.refreshPendingStatus()
+	}
+
+	fieldCopy := field
+	slider.BindSignal("changed", func(v float64) {
+		if fieldCopy.ReadOnly {
+			return
+		}
+		updateValue(v, false)
+	})
+	valueInput.BindSignal("changed", func(text string) {
+		if fieldCopy.ReadOnly {
+			return
+		}
+		trimmed := strings.TrimSpace(text)
+		if trimmed == "" {
+			return
+		}
+		value, err := strconv.ParseFloat(trimmed, 64)
+		if err != nil {
+			return
+		}
+		updateValue(value, true)
+	})
+	valueInput.BindSignal("submitted", func(text string) {
+		if fieldCopy.ReadOnly {
+			return
+		}
+		trimmed := strings.TrimSpace(text)
+		value, err := strconv.ParseFloat(trimmed, 64)
+		if err != nil {
+			valueInput.SetAttribute("text", a.values[fieldCopy.Key])
+			return
+		}
+		updateValue(value, true)
+	})
+
+	container.AddChild(slider)
+	container.AddChild(inputRow)
+	return container
 }
 
 func (a *settingsApp) buildWallpaperCard() *ui.Element {
@@ -1501,6 +1812,1073 @@ func isWallpaperImage(path string) bool {
 	}
 }
 
+type infoRow struct {
+	Label string
+	Value string
+}
+
+type wiredNetworkSnapshot struct {
+	Interface string
+	DNS       string
+	IP        string
+	Route     string
+}
+
+func (a *settingsApp) buildNotImplementedCard(title, description string) *ui.Element {
+	card, box := newSectionCard(title, description)
+	msg := ui.NewElement("Paragraph")
+	msg.SetAttribute("text", "This section is planned and currently not yet implemented.")
+	box.AddChild(msg)
+	return card
+}
+
+func (a *settingsApp) buildNetworkWiredCard() *ui.Element {
+	card, box := newSectionCard(
+		"Wired",
+		"Current wired network interface details based on system state.",
+	)
+
+	snap := detectWiredNetworkSnapshot()
+	addInfoRows(box, []infoRow{
+		{Label: "Interface", Value: snap.Interface},
+		{Label: "DNS", Value: snap.DNS},
+		{Label: "IP", Value: snap.IP},
+		{Label: "Route", Value: snap.Route},
+	})
+
+	actions := ui.NewElement("HBox")
+	actions.SetAttribute("direction", "row")
+	actions.SetAttribute("spacing", 8)
+	actions.SetAttribute("expand", false)
+
+	refresh := ui.NewElement("Button")
+	refresh.SetAttribute("text", "Refresh Network")
+	refresh.BindSignal("clicked", func() {
+		a.renderPage()
+		a.setStatus("Network section refreshed")
+	})
+	actions.AddChild(refresh)
+	box.AddChild(actions)
+	return card
+}
+
+func detectWiredNetworkSnapshot() wiredNetworkSnapshot {
+	snap := wiredNetworkSnapshot{
+		Interface: "Unavailable",
+		DNS:       fallbackText(detectDNSServers(), "Unavailable"),
+		IP:        "Unavailable",
+		Route:     "Unavailable",
+	}
+
+	iface, ok := detectPrimaryWiredInterface()
+	if ok {
+		snap.Interface = iface.Name
+		snap.IP = fallbackText(interfaceAddressSummary(iface), "No address")
+	}
+
+	routeIface, gateway := detectDefaultRoute()
+	if gateway != "" {
+		route := "default via " + gateway
+		if routeIface != "" {
+			route += " dev " + routeIface
+		}
+		snap.Route = route
+	}
+	return snap
+}
+
+func detectPrimaryWiredInterface() (net.Interface, bool) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return net.Interface{}, false
+	}
+
+	pick := -1
+	for i := range ifaces {
+		iface := ifaces[i]
+		name := strings.ToLower(strings.TrimSpace(iface.Name))
+		if iface.Flags&net.FlagLoopback != 0 || !looksLikeWiredInterface(name) {
+			continue
+		}
+		if pick < 0 {
+			pick = i
+		}
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		if hasInterfaceAddress(iface) {
+			return iface, true
+		}
+		if pick >= 0 && ifaces[pick].Flags&net.FlagUp == 0 {
+			pick = i
+		}
+	}
+
+	if pick < 0 {
+		return net.Interface{}, false
+	}
+	return ifaces[pick], true
+}
+
+func looksLikeWiredInterface(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return false
+	}
+	if strings.HasPrefix(name, "wl") || strings.HasPrefix(name, "wlan") {
+		return false
+	}
+	switch {
+	case strings.HasPrefix(name, "eth"):
+		return true
+	case strings.HasPrefix(name, "en"):
+		return true
+	default:
+		return false
+	}
+}
+
+func hasInterfaceAddress(iface net.Interface) bool {
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return false
+	}
+	for _, addr := range addrs {
+		ipnet, ok := addr.(*net.IPNet)
+		if !ok || ipnet.IP == nil {
+			continue
+		}
+		if ipnet.IP.IsGlobalUnicast() {
+			return true
+		}
+	}
+	return false
+}
+
+func interfaceAddressSummary(iface net.Interface) string {
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return ""
+	}
+	values := make([]string, 0, len(addrs))
+	for _, addr := range addrs {
+		switch v := addr.(type) {
+		case *net.IPNet:
+			ip := v.IP
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			ones, _ := v.Mask.Size()
+			values = append(values, fmt.Sprintf("%s/%d", ip.String(), ones))
+		default:
+			text := strings.TrimSpace(addr.String())
+			if text != "" {
+				values = append(values, text)
+			}
+		}
+	}
+	sort.Strings(values)
+	if len(values) == 0 {
+		return ""
+	}
+	return strings.Join(values, ", ")
+}
+
+func detectDefaultRoute() (ifaceName, gateway string) {
+	paths := []string{
+		"/proc/net/route",
+		fs.Resolve("process", "net/route"),
+	}
+	for _, path := range paths {
+		f, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			fields := strings.Fields(line)
+			if len(fields) < 3 || strings.EqualFold(fields[0], "Iface") {
+				continue
+			}
+			destination := strings.TrimSpace(fields[1])
+			if destination != "00000000" {
+				continue
+			}
+			gw := decodeRouteGateway(fields[2])
+			if gw == "" {
+				continue
+			}
+			_ = f.Close()
+			return fields[0], gw
+		}
+		_ = f.Close()
+	}
+	return "", ""
+}
+
+func decodeRouteGateway(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	parsed, err := strconv.ParseUint(value, 16, 32)
+	if err != nil {
+		return ""
+	}
+	buf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(buf, uint32(parsed))
+	ip := net.IPv4(buf[0], buf[1], buf[2], buf[3])
+	if ip == nil || ip.IsUnspecified() {
+		return ""
+	}
+	return ip.String()
+}
+
+func (a *settingsApp) buildDisplayInfoCard() *ui.Element {
+	card, box := newSectionCard(
+		"Current Display",
+		"Detected display/session state from live runtime information.",
+	)
+
+	resolution := fallbackText(detectFramebufferResolution(), "Unavailable")
+	brightness := fallbackText(detectBacklightBrightnessPercent(), "Unavailable")
+	if brightness != "Unavailable" {
+		brightness += "%"
+	}
+	preferredBrightness := normalizeDisplayBrightness(a.values[keyDisplayBrightness])
+
+	addInfoRows(box, []infoRow{
+		{Label: "Resolution", Value: resolution},
+		{Label: "Session", Value: detectSessionType()},
+		{Label: "Architecture", Value: runtime.GOARCH},
+		{Label: "Brightness (Live)", Value: brightness},
+		{Label: "Brightness (Preferred)", Value: preferredBrightness + "%"},
+	})
+	return card
+}
+
+func (a *settingsApp) buildUserInfoCard() *ui.Element {
+	card, box := newSectionCard(
+		"User Info",
+		"Current session identity from pkg/identity.",
+	)
+
+	username := a.currentUsername()
+	rows := []infoRow{
+		{Label: "Username", Value: username},
+	}
+
+	if id, err := identity.LookupByName(username); err == nil && id != nil {
+		rows = append(rows,
+			infoRow{Label: "User ID", Value: strconv.FormatUint(uint64(id.ID), 10)},
+			infoRow{Label: "Home", Value: fallbackText(id.Home, "-")},
+			infoRow{Label: "Shell", Value: fallbackText(id.Shell, "-")},
+		)
+		if len(id.Capabilities) > 0 {
+			rows = append(rows, infoRow{
+				Label: "Capabilities",
+				Value: strings.Join(id.Capabilities, ", "),
+			})
+		}
+	} else if err != nil {
+		rows = append(rows, infoRow{
+			Label: "Identity",
+			Value: "Unavailable (" + err.Error() + ")",
+		})
+	}
+
+	if authType, err := identity.GetAuthType(username); err == nil {
+		rows = append(rows, infoRow{Label: "Auth Type", Value: authType})
+	}
+
+	addInfoRows(box, rows)
+	return card
+}
+
+func (a *settingsApp) buildUserPasswordCard() *ui.Element {
+	card, box := newSectionCard(
+		"Change Password",
+		"Update current account password using pkg/identity.",
+	)
+
+	currentInput := ui.NewElement("TextInput")
+	currentInput.SetAttribute("text", a.passwordCurrent)
+	currentInput.SetAttribute("placeholder", "Current password")
+	currentInput.SetAttribute("password", true)
+	currentInput.BindSignal("changed", func(text string) {
+		a.passwordCurrent = text
+	})
+
+	newInput := ui.NewElement("TextInput")
+	newInput.SetAttribute("text", a.passwordNext)
+	newInput.SetAttribute("placeholder", "New password")
+	newInput.SetAttribute("password", true)
+	newInput.BindSignal("changed", func(text string) {
+		a.passwordNext = text
+	})
+
+	confirmInput := ui.NewElement("TextInput")
+	confirmInput.SetAttribute("text", a.passwordConfirm)
+	confirmInput.SetAttribute("placeholder", "Confirm new password")
+	confirmInput.SetAttribute("password", true)
+	confirmInput.BindSignal("changed", func(text string) {
+		a.passwordConfirm = text
+	})
+
+	buttons := ui.NewElement("HBox")
+	buttons.SetAttribute("direction", "row")
+	buttons.SetAttribute("spacing", 8)
+	buttons.SetAttribute("expand", false)
+
+	updateBtn := ui.NewElement("PrimaryButton")
+	updateBtn.SetAttribute("text", "Update Password")
+	updateBtn.BindSignal("clicked", func() {
+		username := a.currentUsername()
+		if strings.TrimSpace(username) == "" {
+			a.setStatus("No active user detected")
+			return
+		}
+		if a.passwordNext == "" {
+			a.setStatus("New password is required")
+			return
+		}
+		if a.passwordNext != a.passwordConfirm {
+			a.setStatus("New password and confirmation do not match")
+			return
+		}
+		if err := identity.UpdatePassword(username, a.passwordCurrent, a.passwordNext); err != nil {
+			a.setStatus(fmt.Sprintf("Password update failed: %v", err))
+			return
+		}
+
+		a.passwordCurrent = ""
+		a.passwordNext = ""
+		a.passwordConfirm = ""
+		a.renderPage()
+		a.setStatus("Password updated")
+	})
+	buttons.AddChild(updateBtn)
+
+	clearBtn := ui.NewElement("Button")
+	clearBtn.SetAttribute("text", "Clear")
+	clearBtn.BindSignal("clicked", func() {
+		a.passwordCurrent = ""
+		a.passwordNext = ""
+		a.passwordConfirm = ""
+		a.renderPage()
+		a.setStatus("Password form cleared")
+	})
+	buttons.AddChild(clearBtn)
+
+	box.AddChild(currentInput)
+	box.AddChild(newInput)
+	box.AddChild(confirmInput)
+	box.AddChild(buttons)
+	return card
+}
+
+func (a *settingsApp) currentUsername() string {
+	if user, err := osuser.Current(); err == nil {
+		name := strings.TrimSpace(user.Username)
+		if name != "" {
+			return name
+		}
+	}
+	if fallback := strings.TrimSpace(a.values["/dev/rlxos/accounts/default_user"]); fallback != "" {
+		return fallback
+	}
+	return "user"
+}
+
+func (a *settingsApp) buildServicesListCard() *ui.Element {
+	card, box := newSectionCard(
+		"Service List",
+		"Table view for services from api/service.",
+	)
+
+	items, err := listServices()
+	if err != nil {
+		errMsg := ui.NewElement("Paragraph")
+		errMsg.SetAttribute("text", "Unable to list services: "+err.Error())
+		box.AddChild(errMsg)
+		return card
+	}
+
+	rows := make([][]string, 0, len(items))
+	for _, item := range items {
+		rows = append(rows, []string{
+			item.Name,
+			serviceStateLabel(item),
+			strconv.Itoa(item.PID),
+			item.Type,
+			item.Restart,
+		})
+	}
+
+	table := buildTableView(
+		[]string{"Name", "State", "PID", "Type", "Restart"},
+		rows,
+		240,
+	)
+	box.AddChild(table)
+	return card
+}
+
+func (a *settingsApp) buildServicesActionCard() *ui.Element {
+	card, box := newSectionCard(
+		"Service Actions",
+		"Start, stop, restart, and refresh services.",
+	)
+
+	target := ui.NewElement("TextInput")
+	target.SetAttribute("text", a.serviceTarget)
+	target.SetAttribute("placeholder", "service name")
+	target.BindSignal("changed", func(text string) {
+		a.serviceTarget = strings.TrimSpace(text)
+	})
+	box.AddChild(target)
+
+	actions := ui.NewElement("HBox")
+	actions.SetAttribute("direction", "row")
+	actions.SetAttribute("spacing", 8)
+	actions.SetAttribute("expand", false)
+
+	startBtn := ui.NewElement("PrimaryButton")
+	startBtn.SetAttribute("text", "Start")
+	startBtn.BindSignal("clicked", func() { a.runServiceAction("start") })
+	actions.AddChild(startBtn)
+
+	stopBtn := ui.NewElement("Button")
+	stopBtn.SetAttribute("text", "Stop")
+	stopBtn.BindSignal("clicked", func() { a.runServiceAction("stop") })
+	actions.AddChild(stopBtn)
+
+	restartBtn := ui.NewElement("Button")
+	restartBtn.SetAttribute("text", "Restart")
+	restartBtn.BindSignal("clicked", func() { a.runServiceAction("restart") })
+	actions.AddChild(restartBtn)
+
+	refreshBtn := ui.NewElement("Button")
+	refreshBtn.SetAttribute("text", "Refresh")
+	refreshBtn.BindSignal("clicked", func() { a.RefreshPage() })
+	actions.AddChild(refreshBtn)
+
+	box.AddChild(actions)
+	return card
+}
+
+func (a *settingsApp) runServiceAction(action string) {
+	name := strings.TrimSpace(a.serviceTarget)
+	if name == "" {
+		a.setStatus("Select a service name first")
+		return
+	}
+
+	client, err := serviceapi.Connect()
+	if err != nil {
+		a.setStatus("Service API unavailable: " + err.Error())
+		return
+	}
+	defer client.Close()
+
+	switch action {
+	case "start":
+		err = client.Start(name)
+	case "stop":
+		err = client.Stop(name)
+	case "restart":
+		err = client.Restart(name)
+	default:
+		err = fmt.Errorf("unknown action %q", action)
+	}
+	if err != nil {
+		a.setStatus(fmt.Sprintf("Service %s failed: %v", action, err))
+		return
+	}
+	a.renderPage()
+	a.setStatus(fmt.Sprintf("Service %s: %s", action, name))
+}
+
+func listServices() ([]serviceapi.ServiceStatus, error) {
+	client, err := serviceapi.Connect()
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	items, err := client.List()
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return strings.ToLower(items[i].Name) < strings.ToLower(items[j].Name)
+	})
+	return items, nil
+}
+
+func serviceStateLabel(item serviceapi.ServiceStatus) string {
+	switch {
+	case item.Running:
+		return "running"
+	case item.Failed:
+		return "failed"
+	case item.Started:
+		return "started"
+	default:
+		return "stopped"
+	}
+}
+
+func (a *settingsApp) buildDistroListCard() *ui.Element {
+	card, box := newSectionCard(
+		"Distro Inventory",
+		"Installed and available distro entries from api/distro.",
+	)
+
+	client, err := distroapi.Connect()
+	if err != nil {
+		msg := ui.NewElement("Paragraph")
+		msg.SetAttribute("text", "Distro API unavailable: "+err.Error())
+		box.AddChild(msg)
+		return card
+	}
+	defer client.Close()
+
+	installed, installedErr := client.ListDistros(false)
+	available, availableErr := client.ListDistros(true)
+	if installedErr != nil {
+		msg := ui.NewElement("Paragraph")
+		msg.SetAttribute("text", "Failed to list installed distros: "+installedErr.Error())
+		box.AddChild(msg)
+		return card
+	}
+	if availableErr != nil {
+		msg := ui.NewElement("Paragraph")
+		msg.SetAttribute("text", "Failed to list available distros: "+availableErr.Error())
+		box.AddChild(msg)
+		return card
+	}
+
+	sort.Slice(installed, func(i, j int) bool {
+		return strings.ToLower(installed[i].Name) < strings.ToLower(installed[j].Name)
+	})
+	sort.Slice(available, func(i, j int) bool {
+		return strings.ToLower(available[i].Name) < strings.ToLower(available[j].Name)
+	})
+
+	installedTitle := ui.NewElement("Subheading")
+	installedTitle.SetAttribute("text", "Installed")
+	box.AddChild(installedTitle)
+	box.AddChild(buildTableView(
+		[]string{"Name", "Version", "Size", "Path"},
+		distroRows(installed, 20),
+		180,
+	))
+
+	availableTitle := ui.NewElement("Subheading")
+	availableTitle.SetAttribute("text", "Available")
+	box.AddChild(availableTitle)
+	box.AddChild(buildTableView(
+		[]string{"Name", "Version", "Size", "URL"},
+		distroAvailableRows(available, 20),
+		180,
+	))
+	return card
+}
+
+func distroRows(items []distroapi.DistroInfo, limit int) [][]string {
+	if limit <= 0 || len(items) < limit {
+		limit = len(items)
+	}
+	rows := make([][]string, 0, limit)
+	for i := 0; i < limit; i++ {
+		rows = append(rows, []string{
+			items[i].Name,
+			items[i].Version,
+			humanSize(items[i].Size),
+			items[i].Path,
+		})
+	}
+	return rows
+}
+
+func distroAvailableRows(items []distroapi.DistroInfo, limit int) [][]string {
+	if limit <= 0 || len(items) < limit {
+		limit = len(items)
+	}
+	rows := make([][]string, 0, limit)
+	for i := 0; i < limit; i++ {
+		rows = append(rows, []string{
+			items[i].Name,
+			items[i].Version,
+			humanSize(items[i].Size),
+			items[i].URL,
+		})
+	}
+	return rows
+}
+
+func humanSize(size int) string {
+	if size <= 0 {
+		return "-"
+	}
+	value := float64(size)
+	units := []string{"B", "KB", "MB", "GB", "TB"}
+	idx := 0
+	for value >= 1024 && idx < len(units)-1 {
+		value /= 1024
+		idx++
+	}
+	if value >= 10 || idx == 0 {
+		return fmt.Sprintf("%.0f%s", value, units[idx])
+	}
+	return fmt.Sprintf("%.1f%s", value, units[idx])
+}
+
+func (a *settingsApp) buildDistroManageCard() *ui.Element {
+	card, box := newSectionCard(
+		"Manage Distro",
+		"Pull a distro image or remove an installed distro.",
+	)
+
+	nameInput := ui.NewElement("TextInput")
+	nameInput.SetAttribute("text", a.distroPullName)
+	nameInput.SetAttribute("placeholder", "Distro name")
+	nameInput.BindSignal("changed", func(text string) {
+		a.distroPullName = strings.TrimSpace(text)
+	})
+	box.AddChild(nameInput)
+
+	urlInput := ui.NewElement("TextInput")
+	urlInput.SetAttribute("text", a.distroPullURL)
+	urlInput.SetAttribute("placeholder", "Optional source URL")
+	urlInput.BindSignal("changed", func(text string) {
+		a.distroPullURL = strings.TrimSpace(text)
+	})
+	box.AddChild(urlInput)
+
+	removeInput := ui.NewElement("TextInput")
+	removeInput.SetAttribute("text", a.distroRemoveName)
+	removeInput.SetAttribute("placeholder", "Distro name to remove")
+	removeInput.BindSignal("changed", func(text string) {
+		a.distroRemoveName = strings.TrimSpace(text)
+	})
+	box.AddChild(removeInput)
+
+	buttons := ui.NewElement("HBox")
+	buttons.SetAttribute("direction", "row")
+	buttons.SetAttribute("spacing", 8)
+	buttons.SetAttribute("expand", false)
+
+	pullBtn := ui.NewElement("PrimaryButton")
+	pullBtn.SetAttribute("text", "Pull")
+	pullBtn.BindSignal("clicked", func() {
+		if strings.TrimSpace(a.distroPullName) == "" {
+			a.setStatus("Distro name is required")
+			return
+		}
+		client, err := distroapi.Connect()
+		if err != nil {
+			a.setStatus("Distro API unavailable: " + err.Error())
+			return
+		}
+		defer client.Close()
+		if err := client.PullDistro(a.distroPullName, a.distroPullURL); err != nil {
+			a.setStatus("Pull failed: " + err.Error())
+			return
+		}
+		a.renderPage()
+		a.setStatus("Pull requested for " + a.distroPullName)
+	})
+	buttons.AddChild(pullBtn)
+
+	removeBtn := ui.NewElement("Button")
+	removeBtn.SetAttribute("text", "Remove")
+	removeBtn.BindSignal("clicked", func() {
+		name := strings.TrimSpace(a.distroRemoveName)
+		if name == "" {
+			name = strings.TrimSpace(a.distroPullName)
+		}
+		if name == "" {
+			a.setStatus("Distro name is required")
+			return
+		}
+		client, err := distroapi.Connect()
+		if err != nil {
+			a.setStatus("Distro API unavailable: " + err.Error())
+			return
+		}
+		defer client.Close()
+		if err := client.RemoveDistro(name); err != nil {
+			a.setStatus("Remove failed: " + err.Error())
+			return
+		}
+		a.renderPage()
+		a.setStatus("Removed distro " + name)
+	})
+	buttons.AddChild(removeBtn)
+
+	refreshBtn := ui.NewElement("Button")
+	refreshBtn.SetAttribute("text", "Refresh")
+	refreshBtn.BindSignal("clicked", func() { a.RefreshPage() })
+	buttons.AddChild(refreshBtn)
+
+	box.AddChild(buttons)
+	return card
+}
+
+func (a *settingsApp) buildDevicesListCard() *ui.Element {
+	card, box := newSectionCard(
+		"Device List",
+		"Device inventory from api/uevent.",
+	)
+
+	devices, err := listDevices()
+	if err != nil {
+		msg := ui.NewElement("Paragraph")
+		msg.SetAttribute("text", "Failed to list devices: "+err.Error())
+		box.AddChild(msg)
+		return card
+	}
+
+	rows := make([][]string, 0, len(devices))
+	for i, dev := range devices {
+		if i >= 80 {
+			break
+		}
+		rows = append(rows, []string{
+			fallbackText(dev.DevName, "-"),
+			fallbackText(dev.Subsystem, "-"),
+			fallbackText(dev.DevType, "-"),
+			fallbackText(dev.Driver, "-"),
+			fallbackText(dev.DevPath, "-"),
+		})
+	}
+
+	box.AddChild(buildTableView(
+		[]string{"Name", "Subsystem", "Type", "Driver", "Path"},
+		rows,
+		260,
+	))
+	return card
+}
+
+func (a *settingsApp) buildDevicesManageCard() *ui.Element {
+	card, box := newSectionCard(
+		"Device Actions",
+		"Trigger device scan/events using api/uevent.",
+	)
+
+	triggerInput := ui.NewElement("TextInput")
+	triggerInput.SetAttribute("text", a.deviceTriggerScope)
+	triggerInput.SetAttribute("placeholder", "Subsystem (example: net)")
+	triggerInput.BindSignal("changed", func(text string) {
+		a.deviceTriggerScope = strings.TrimSpace(text)
+	})
+	box.AddChild(triggerInput)
+
+	buttons := ui.NewElement("HBox")
+	buttons.SetAttribute("direction", "row")
+	buttons.SetAttribute("spacing", 8)
+	buttons.SetAttribute("expand", false)
+
+	triggerBtn := ui.NewElement("PrimaryButton")
+	triggerBtn.SetAttribute("text", "Trigger")
+	triggerBtn.BindSignal("clicked", func() {
+		client, err := ueventapi.Connect()
+		if err != nil {
+			a.setStatus("uevent API unavailable: " + err.Error())
+			return
+		}
+		defer client.Close()
+
+		if err := client.Trigger(a.deviceTriggerScope); err != nil {
+			a.setStatus("Trigger failed: " + err.Error())
+			return
+		}
+		a.renderPage()
+		if strings.TrimSpace(a.deviceTriggerScope) == "" {
+			a.setStatus("Triggered uevent scan")
+			return
+		}
+		a.setStatus("Triggered uevent for " + a.deviceTriggerScope)
+	})
+	buttons.AddChild(triggerBtn)
+
+	refreshBtn := ui.NewElement("Button")
+	refreshBtn.SetAttribute("text", "Refresh")
+	refreshBtn.BindSignal("clicked", func() { a.RefreshPage() })
+	buttons.AddChild(refreshBtn)
+
+	box.AddChild(buttons)
+	return card
+}
+
+func listDevices() ([]ueventapi.DeviceInfo, error) {
+	client, err := ueventapi.Connect()
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	devices, err := client.ListDevices()
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Slice(devices, func(i, j int) bool {
+		keyI := strings.ToLower(devices[i].Subsystem + "|" + devices[i].DevName + "|" + devices[i].DevPath)
+		keyJ := strings.ToLower(devices[j].Subsystem + "|" + devices[j].DevName + "|" + devices[j].DevPath)
+		return keyI < keyJ
+	})
+	return devices, nil
+}
+
+func (a *settingsApp) buildConfigsListCard() *ui.Element {
+	card, box := newSectionCard(
+		"Config Entries",
+		"Raw settings list from api/settings.",
+	)
+
+	filterInput := ui.NewElement("TextInput")
+	filterInput.SetAttribute("text", a.configFilterPrefix)
+	filterInput.SetAttribute("placeholder", "Optional prefix (for example /dev/rlxos/display)")
+	filterInput.BindSignal("changed", func(text string) {
+		a.configFilterPrefix = strings.TrimSpace(text)
+	})
+	box.AddChild(filterInput)
+
+	filterButtons := ui.NewElement("HBox")
+	filterButtons.SetAttribute("direction", "row")
+	filterButtons.SetAttribute("spacing", 8)
+	filterButtons.SetAttribute("expand", false)
+
+	applyFilter := ui.NewElement("PrimaryButton")
+	applyFilter.SetAttribute("text", "Apply Filter")
+	applyFilter.BindSignal("clicked", func() {
+		a.renderPage()
+		a.setStatus("Filter applied")
+	})
+	filterButtons.AddChild(applyFilter)
+
+	clearFilter := ui.NewElement("Button")
+	clearFilter.SetAttribute("text", "Clear")
+	clearFilter.BindSignal("clicked", func() {
+		a.configFilterPrefix = ""
+		a.renderPage()
+		a.setStatus("Filter cleared")
+	})
+	filterButtons.AddChild(clearFilter)
+	box.AddChild(filterButtons)
+
+	client, err := settingsapi.Connect()
+	if err != nil {
+		msg := ui.NewElement("Paragraph")
+		msg.SetAttribute("text", "Settings API unavailable: "+err.Error())
+		box.AddChild(msg)
+		return card
+	}
+	defer client.Close()
+
+	items, err := client.List(a.configFilterPrefix)
+	if err != nil {
+		msg := ui.NewElement("Paragraph")
+		msg.SetAttribute("text", "Failed to list settings: "+err.Error())
+		box.AddChild(msg)
+		return card
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].Key < items[j].Key
+	})
+
+	rows := make([][]string, 0, len(items))
+	for i, item := range items {
+		if i >= 200 {
+			break
+		}
+		rows = append(rows, []string{item.Key, item.Value})
+	}
+
+	box.AddChild(buildTableView([]string{"Key", "Value"}, rows, 280))
+	return card
+}
+
+func (a *settingsApp) buildConfigsManageCard() *ui.Element {
+	card, box := newSectionCard(
+		"Manage Config",
+		"Set a raw setting key/value pair through api/settings.",
+	)
+
+	keyInput := ui.NewElement("TextInput")
+	keyInput.SetAttribute("text", a.configEditKey)
+	keyInput.SetAttribute("placeholder", "/dev/rlxos/example/key")
+	keyInput.BindSignal("changed", func(text string) {
+		a.configEditKey = text
+	})
+	box.AddChild(keyInput)
+
+	valueInput := ui.NewElement("TextInput")
+	valueInput.SetAttribute("text", a.configEditValue)
+	valueInput.SetAttribute("placeholder", "value")
+	valueInput.BindSignal("changed", func(text string) {
+		a.configEditValue = text
+	})
+	box.AddChild(valueInput)
+
+	buttons := ui.NewElement("HBox")
+	buttons.SetAttribute("direction", "row")
+	buttons.SetAttribute("spacing", 8)
+	buttons.SetAttribute("expand", false)
+
+	saveBtn := ui.NewElement("PrimaryButton")
+	saveBtn.SetAttribute("text", "Save")
+	saveBtn.BindSignal("clicked", func() {
+		key := strings.TrimSpace(a.configEditKey)
+		if key == "" {
+			a.setStatus("Config key is required")
+			return
+		}
+
+		client, err := settingsapi.Connect()
+		if err != nil {
+			a.setStatus("Settings API unavailable: " + err.Error())
+			return
+		}
+		defer client.Close()
+
+		if err := client.Set(key, a.configEditValue); err != nil {
+			a.setStatus("Save failed: " + err.Error())
+			return
+		}
+
+		canonical := canonicalSettingKey(key)
+		if field, ok := settingFieldByKey[canonical]; ok {
+			value := normalizeSettingValue(field, a.configEditValue)
+			a.values[field.Key] = value
+			a.persisted[field.Key] = value
+		}
+		a.renderPage()
+		a.setStatus("Saved " + canonical)
+	})
+	buttons.AddChild(saveBtn)
+
+	refreshBtn := ui.NewElement("Button")
+	refreshBtn.SetAttribute("text", "Refresh")
+	refreshBtn.BindSignal("clicked", func() { a.RefreshPage() })
+	buttons.AddChild(refreshBtn)
+	box.AddChild(buttons)
+	return card
+}
+
+func (a *settingsApp) buildAboutSystemCard() *ui.Element {
+	card, box := newSectionCard(
+		"System Info",
+		"Core OS/runtime information.",
+	)
+
+	defaults := detectRuntimeDefaults()
+	addInfoRows(box, []infoRow{
+		{Label: "Name", Value: fallbackText(defaults["/dev/rlxos/system/about/name"], "RlxOS")},
+		{Label: "Version", Value: fallbackText(defaults["/dev/rlxos/system/about/version"], "0.1.0")},
+		{Label: "Kernel", Value: fallbackText(defaults["/dev/rlxos/system/about/kernel"], runtime.GOOS)},
+		{Label: "Go Version", Value: fallbackText(defaults[keySystemGoVersion], runtime.Version())},
+		{Label: "Architecture", Value: fallbackText(defaults["/dev/rlxos/system/about/architecture"], runtime.GOARCH)},
+	})
+	return card
+}
+
+func (a *settingsApp) buildAboutUpdatesCard() *ui.Element {
+	card, box := newSectionCard(
+		"Updates",
+		"System update controls will be added in a later release.",
+	)
+
+	msg := ui.NewElement("Paragraph")
+	msg.SetAttribute("text", "Automatic update checks are currently disabled for this build.")
+	box.AddChild(msg)
+
+	checkBtn := ui.NewElement("PrimaryButton")
+	checkBtn.SetAttribute("text", "Check for Updates")
+	checkBtn.SetAttribute("interactive", false)
+	box.AddChild(checkBtn)
+	return card
+}
+
+func buildTableView(headers []string, rows [][]string, minHeight int) *ui.Element {
+	table := ui.NewElement("TableView")
+	table.SetAttribute("text", buildTableText(headers, rows))
+	table.SetAttribute("readOnly", true)
+	table.SetAttribute("minHeight", minHeight)
+	return table
+}
+
+func buildTableText(headers []string, rows [][]string) string {
+	cleanHeaders := make([]string, 0, len(headers))
+	for _, header := range headers {
+		cleanHeaders = append(cleanHeaders, sanitizeTableCell(header))
+	}
+
+	lines := make([]string, 0, len(rows)+1)
+	if len(cleanHeaders) > 0 {
+		lines = append(lines, strings.Join(cleanHeaders, " "))
+	}
+	for _, row := range rows {
+		cols := make([]string, 0, len(cleanHeaders))
+		maxCols := len(cleanHeaders)
+		if maxCols == 0 {
+			maxCols = len(row)
+		}
+		for i := 0; i < maxCols; i++ {
+			value := "-"
+			if i < len(row) {
+				value = sanitizeTableCell(row[i])
+			}
+			cols = append(cols, value)
+		}
+		lines = append(lines, strings.Join(cols, " "))
+	}
+	if len(lines) == 0 {
+		return "Key Value\n- -"
+	}
+	return strings.Join(lines, "\n")
+}
+
+func sanitizeTableCell(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "-"
+	}
+	value = strings.Join(strings.Fields(value), "_")
+	return value
+}
+
+func addInfoRows(host *ui.Element, rows []infoRow) {
+	tableRows := make([][]string, 0, len(rows))
+	for _, row := range rows {
+		tableRows = append(tableRows, []string{
+			fallbackText(row.Label, "-"),
+			fallbackText(row.Value, "-"),
+		})
+	}
+	minHeight := 120
+	if len(tableRows) > 0 {
+		minHeight = 56 + len(tableRows)*34
+	}
+	if minHeight > 320 {
+		minHeight = 320
+	}
+	host.AddChild(buildTableView([]string{"Key", "Value"}, tableRows, minHeight))
+}
+
+func fallbackText(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
 func (a *settingsApp) getSetting(client *settingsapi.Client, key string) (string, error) {
 	value, err := client.Get(key)
 	if err == nil {
@@ -1639,6 +3017,10 @@ func normalizeSettingValue(field settingField, value string) string {
 		return normalizeDockPosition(value)
 	case keyBackgroundColor:
 		return normalizeColor(value)
+	case keyRoundedCornersRadius:
+		return normalizeRoundedRadius(value)
+	case keyDisplayBrightness:
+		return normalizeDisplayBrightness(value)
 	default:
 		return value
 	}
@@ -1668,6 +3050,35 @@ func normalizeDockPosition(value string) string {
 	default:
 		return defaultDockPos
 	}
+}
+
+func normalizeRoundedRadius(value string) string {
+	switch strings.TrimSpace(value) {
+	case "8":
+		return "8"
+	case "12":
+		return "12"
+	case "16":
+		return "16"
+	case "20":
+		return "20"
+	default:
+		return defaultRoundedRadius
+	}
+}
+
+func normalizeDisplayBrightness(value string) string {
+	parsed, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil {
+		return defaultBrightness
+	}
+	if parsed < 1 {
+		parsed = 1
+	}
+	if parsed > 100 {
+		parsed = 100
+	}
+	return strconv.Itoa(parsed)
 }
 
 func normalizeColor(value string) string {

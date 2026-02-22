@@ -5,13 +5,17 @@ component DangerButton {
 
     interactive: true
     focusable: true
-    minHeight: 36
-    padding: "8 14"
+    minHeight: 40
+    padding: "10 16"
     background: "theme.color.semantic.danger"
     hoverBackground: "theme.color.semantic.danger"
     pressedBackground: "theme.color.semantic.danger"
     borderColor: "theme.color.semantic.danger"
     focusedBorderColor: "theme.color.stroke.focus"
+    borderRadius: 14
     textColor: "#FFFFFF"
-    shadow: false
+    shadow: true
+    shadowColor: "#101A2B22"
+    shadowOffsetY: 2
+    shadowSpread: 8
 }

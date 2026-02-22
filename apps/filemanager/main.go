@@ -1015,25 +1015,25 @@ func (fm *fileManager) styleIconTile(btn *ui.Element, selected bool) {
 		return
 	}
 	if selected {
-		btn.SetAttribute("background", "#DCE8FF")
-		btn.SetAttribute("hoverBackground", "#DCE8FF")
-		btn.SetAttribute("pressedBackground", "#DCE8FF")
+		btn.SetAttribute("background", "theme.color.accent.subtle")
+		btn.SetAttribute("hoverBackground", "theme.color.accent.subtle")
+		btn.SetAttribute("pressedBackground", "theme.color.accent.subtle")
 		btn.SetAttribute("borderColor", "theme.color.accent")
 		btn.SetAttribute("focusedBorderColor", "theme.color.accent")
 		btn.SetAttribute("shadow", "true")
 		btn.SetAttribute("shadowOnlyOnHover", "false")
-		btn.SetAttribute("shadowColor", "#2F6BFF28")
+		btn.SetAttribute("shadowColor", "theme.color.accent.subtle")
 		btn.SetAttribute("shadowSpread", "10")
 		return
 	}
-	btn.SetAttribute("background", "#F4F7FC")
-	btn.SetAttribute("hoverBackground", "#F4F7FC")
-	btn.SetAttribute("pressedBackground", "#F4F7FC")
+	btn.SetAttribute("background", "theme.color.surface.glass")
+	btn.SetAttribute("hoverBackground", "theme.color.control.hover")
+	btn.SetAttribute("pressedBackground", "theme.color.control.pressed")
 	btn.SetAttribute("borderColor", "theme.color.stroke.hairline")
 	btn.SetAttribute("focusedBorderColor", "theme.color.stroke.hairline")
 	btn.SetAttribute("shadow", "true")
 	btn.SetAttribute("shadowOnlyOnHover", "true")
-	btn.SetAttribute("shadowColor", "#2F6BFF38")
+	btn.SetAttribute("shadowColor", "theme.color.stroke.divider")
 	btn.SetAttribute("shadowSpread", "8")
 	btn.SetAttribute("shadowOffsetY", "3")
 }

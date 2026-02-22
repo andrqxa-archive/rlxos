@@ -1,12 +1,12 @@
 component Card {
-    background: "theme.color.surface.glassraised"
-    gradientTop: "#FFFFFFE3"
-    gradientBottom: "#F2F6FFD1"
+    background: "theme.color.surface.card"
+    gradientTop: "transparent"
+    gradientBottom: "transparent"
     borderColor: "theme.color.stroke.hairline"
-    borderRadius: 14
-    padding: "16"
+    borderRadius: 20
+    padding: "18"
     shadow: true
-    shadowColor: "#10182824"
-    shadowOffsetY: 6
-    shadowSpread: 18
+    shadowColor: "#101A2B17"
+    shadowOffsetY: 8
+    shadowSpread: 24
 }

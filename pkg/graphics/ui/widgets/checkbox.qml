@@ -6,9 +6,9 @@ component Checkbox {
 
     checkable: true
     focusable: true
-    minHeight: 36
+    minHeight: 40
     background: transparent
-    boxBackground: "theme.color.control.fill"
+    boxBackground: "theme.color.surface.card"
     borderColor: transparent
     focusedBorderColor: transparent
     boxBorderColor: "theme.color.stroke.hairline"

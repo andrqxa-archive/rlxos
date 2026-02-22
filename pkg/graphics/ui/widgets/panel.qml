@@ -1,10 +1,10 @@
 component Panel {
     background: "theme.color.surface.glass"
     borderColor: "theme.color.stroke.hairline"
-    borderRadius: 12
-    padding: "12"
+    borderRadius: 14
+    padding: "14"
     shadow: true
-    shadowColor: "#1018281A"
+    shadowColor: "#101A2B17"
     shadowOffsetY: 4
-    shadowSpread: 12
+    shadowSpread: 14
 }

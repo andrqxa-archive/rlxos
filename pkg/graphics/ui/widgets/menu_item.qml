@@ -5,8 +5,8 @@ component MenuItem {
 
     interactive: true
     focusable: true
-    minHeight: 34
-    padding: "7 12"
+    minHeight: 38
+    padding: "8 12"
     textAlign: "left"
 
     background: "transparent"
@@ -15,7 +15,7 @@ component MenuItem {
     borderColor: "transparent"
     focusedBorderColor: "theme.color.stroke.hairline"
     focusRing: false
-    borderRadius: 8
+    borderRadius: 10
 
     hoverBackground: "theme.color.accent.subtle"
     pressedBackground: "theme.color.control.pressed"

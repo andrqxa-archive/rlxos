@@ -32,10 +32,10 @@ Image {
         padding: "28 48 24 48"
         alignment: "center"
         expand: true
-        background: "#0B1225AA"
-        gradientTop: "#101B35B5"
-        gradientBottom: "#090F1FC4"
-        borderColor: "transparent"
+        background: "theme.color.surface.glass"
+        gradientTop: "theme.color.surface.card"
+        gradientBottom: "theme.color.surface.glass"
+        borderColor: "theme.color.stroke.hairline"
 
         HBox {
             id: SearchRow
@@ -55,7 +55,7 @@ Image {
                 minHeight: 40
                 maxHeight: 40
                 borderRadius: 12
-                textColor: "#1D2A3E"
+                textColor: "theme.color.text.primary"
             }
         }
 
@@ -81,7 +81,7 @@ Image {
             id: EmptyState
             text: "No apps"
             textAlign: "center"
-            textColor: "#E7EEFF"
+            textColor: "theme.color.text.primary"
             minHeight: 22
             maxHeight: 22
             expand: false
@@ -91,7 +91,7 @@ Image {
             id: FooterHint
             text: "Press Esc to close"
             textAlign: "center"
-            textColor: "#C8D3EA"
+            textColor: "theme.color.text.secondary"
             minHeight: 20
             maxHeight: 20
             expand: false
