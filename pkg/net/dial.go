@@ -42,7 +42,7 @@ func NewDialer() *Dialer {
 		Resolver: DefaultResolver(),
 		Config:   cfg,
 	}
-	d.Pool = x509.NewCertPool()
+	d.Pool = newCAPool()
 	loadCertificates(d.Pool, cfg.TLS.CertPath)
 	loadCertificates(d.Pool, "/avyos/config/certificates")
 	return d

@@ -24,6 +24,14 @@ import (
 	"path/filepath"
 )
 
+func newCAPool() *x509.CertPool {
+	pool, err := x509.SystemCertPool()
+	if err == nil && pool != nil {
+		return pool
+	}
+	return x509.NewCertPool()
+}
+
 func loadCertificate(pool *x509.CertPool, path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {

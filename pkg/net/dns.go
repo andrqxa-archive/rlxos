@@ -130,7 +130,7 @@ func (r *Resolver) LookupHost(host string) ([]string, error) {
 
 	var ips []string
 	for _, rec := range records {
-		if rec.Type == TypeA || rec.Type == TypeAAAA {
+		if (rec.Type == TypeA || rec.Type == TypeAAAA) && net.ParseIP(rec.Data) != nil {
 			ips = append(ips, rec.Data)
 		}
 	}
@@ -152,11 +152,7 @@ func (r *Resolver) Query(name string, qtype uint16) ([]DNSRecord, error) {
 	query := r.buildQuery(name, qtype)
 
 	var lastErr error
-	for _, server := range r.servers {
-		addr := server
-		if !strings.Contains(addr, ":") {
-			addr = addr + ":53"
-		}
+	for _, addr := range r.serverAddrs() {
 
 		conn, err := net.DialTimeout("udp", addr, r.timeout)
 		if err != nil {
@@ -193,6 +189,75 @@ func (r *Resolver) Query(name string, qtype uint16) ([]DNSRecord, error) {
 		return nil, lastErr
 	}
 	return nil, errors.New("no DNS servers available")
+}
+
+func (r *Resolver) serverAddrs() []string {
+	out := make([]string, 0, len(r.servers)+3)
+	seen := make(map[string]struct{}, len(r.servers)+3)
+	hasNonLoopback := false
+
+	add := func(server string) {
+		addr := normalizeDNSServerAddr(server)
+		if addr == "" {
+			return
+		}
+		if _, ok := seen[addr]; ok {
+			return
+		}
+		seen[addr] = struct{}{}
+		out = append(out, addr)
+		if !isLoopbackDNSAddr(addr) {
+			hasNonLoopback = true
+		}
+	}
+
+	for _, server := range r.servers {
+		add(server)
+	}
+
+	// If config only points to local stubs (for example ::1/127.0.0.1) and they
+	// are down, keep DNS functional by trying public resolvers as fallback.
+	if !hasNonLoopback {
+		for _, server := range []string{"1.1.1.1", "8.8.8.8", "8.8.4.4"} {
+			add(server)
+		}
+	}
+
+	return out
+}
+
+func normalizeDNSServerAddr(server string) string {
+	server = strings.TrimSpace(server)
+	if server == "" {
+		return ""
+	}
+
+	if host, port, err := net.SplitHostPort(server); err == nil {
+		if strings.TrimSpace(port) == "" {
+			port = "53"
+		}
+		return net.JoinHostPort(host, port)
+	}
+
+	trimmed := strings.Trim(server, "[]")
+	if ip := net.ParseIP(trimmed); ip != nil {
+		return net.JoinHostPort(ip.String(), "53")
+	}
+
+	return net.JoinHostPort(server, "53")
+}
+
+func isLoopbackDNSAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (r *Resolver) buildQuery(name string, qtype uint16) []byte {
@@ -373,13 +438,11 @@ func (r *Resolver) parseRData(rtype uint16, rdata []byte, buf []byte) string {
 			return net.IP(rdata).String()
 		}
 	case TypeCNAME, TypeNS:
-		name, _ := r.parseName(buf, int(rdata[0]))
-		return name
+		return r.parseCompressedName(rdata, buf)
 	case TypeMX:
 		if len(rdata) > 2 {
 			// prio := binary.BigEndian.Uint16(rdata[0:2])
-			name, _ := r.parseName(buf, int(rdata[2]))
-			return name
+			return r.parseCompressedName(rdata[2:], buf)
 		}
 	case TypeTXT:
 		var texts []string
@@ -397,6 +460,25 @@ func (r *Resolver) parseRData(rtype uint16, rdata []byte, buf []byte) string {
 	return ""
 }
 
+func (r *Resolver) parseCompressedName(rdata, msg []byte) string {
+	if len(rdata) == 0 {
+		return ""
+	}
+
+	// RFC 1035 compressed pointer: two-byte offset in original message.
+	if rdata[0]&0xC0 == 0xC0 {
+		if len(rdata) < 2 {
+			return ""
+		}
+		offset := int(binary.BigEndian.Uint16(rdata[:2]) & 0x3FFF)
+		name, _ := r.parseName(msg, offset)
+		return name
+	}
+
+	name, _ := r.parseName(rdata, 0)
+	return name
+}
+
 func (r *Resolver) checkCache(name string, qtype uint16) []string {
 	r.cache.mu.RLock()
 	defer r.cache.mu.RUnlock()
@@ -409,6 +491,9 @@ func (r *Resolver) checkCache(name string, qtype uint16) []string {
 
 	var result []string
 	for _, rec := range entry.records {
+		if (rec.Type != TypeA && rec.Type != TypeAAAA) || net.ParseIP(rec.Data) == nil {
+			continue
+		}
 		result = append(result, rec.Data)
 	}
 	return result

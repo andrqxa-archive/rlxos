@@ -64,7 +64,7 @@ func NewClient() *Client {
 		resolver: DefaultResolver(),
 		timeout:  time.Duration(cfg.HTTP.Timeout) * time.Second,
 	}
-	c.pool = x509.NewCertPool()
+	c.pool = newCAPool()
 	loadCertificates(c.pool, c.config.TLS.CertPath)
 	loadCertificates(c.pool, "/avyos/config/certificates")
 	return c
@@ -123,6 +123,17 @@ func (c *Client) doWithRedirects(req *Request, redirectCount int) (*Response, er
 		return nil, fmt.Errorf("no addresses found for %s", host)
 	}
 
+	targetIP := ""
+	for _, ip := range ips {
+		if net.ParseIP(ip) != nil {
+			targetIP = ip
+			break
+		}
+	}
+	if targetIP == "" {
+		return nil, fmt.Errorf("no valid IP addresses found for %s", host)
+	}
+
 	// Determine port
 	if port == "" {
 		if scheme == "https" {
@@ -133,7 +144,7 @@ func (c *Client) doWithRedirects(req *Request, redirectCount int) (*Response, er
 	}
 
 	// Connect
-	addr := ips[0] + ":" + port
+	addr := targetIP + ":" + port
 	var conn net.Conn
 
 	dialer := &net.Dialer{Timeout: c.timeout}
