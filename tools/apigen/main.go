@@ -633,6 +633,8 @@ func resolveBinaryType(goType string) binaryTypeMapping {
 		return binaryTypeMapping{EncMethod: "PutRune", DecMethod: "Rune"}
 	case "graphics.Key":
 		return binaryTypeMapping{EncMethod: "PutInt", DecMethod: "Int", EncCast: "int", DecCast: "graphics.Key"}
+	case "input.Key":
+		return binaryTypeMapping{EncMethod: "PutInt", DecMethod: "Int", EncCast: "int", DecCast: "input.Key"}
 	default:
 		return binaryTypeMapping{}
 	}

@@ -23,7 +23,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"avyos.dev/pkg/graphics"
+	graphics "avyos.dev/pkg/graphics/input"
 )
 
 // WL_SHM_FORMAT_ARGB8888 = 0 (BGRA in memory on little-endian)

@@ -17,7 +17,7 @@
 
 package compositor
 
-import "avyos.dev/pkg/graphics"
+import graphics "avyos.dev/pkg/graphics/input"
 
 // layerSurfaceState represents a zwlr_layer_surface_v1.
 type layerSurfaceState struct {

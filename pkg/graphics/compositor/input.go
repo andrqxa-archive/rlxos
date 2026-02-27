@@ -20,7 +20,7 @@ package compositor
 import (
 	"time"
 
-	"avyos.dev/pkg/graphics"
+	graphics "avyos.dev/pkg/graphics/input"
 )
 
 // inputState tracks the compositor's input routing state.

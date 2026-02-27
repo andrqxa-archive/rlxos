@@ -1,0 +1,16 @@
+{
+  "id": "dev.avyos.gallery",
+  "name": "Gallery",
+  "description": "Open and preview image files.",
+  "support_extensions": [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".bmp",
+    ".webp",
+    ".svg",
+    ".tif",
+    ".tiff"
+  ]
+}

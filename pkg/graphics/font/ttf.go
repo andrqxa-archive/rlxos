@@ -53,8 +53,8 @@ type ShapedGlyph struct {
 	Advance fixed.Int26_6
 }
 
-// Font is a pure-Go anti-aliased TTF renderer.
-type Font struct {
+// Face is a pure-Go anti-aliased TTF renderer.
+type Face struct {
 	mu          sync.Mutex
 	face        xfont.Face
 	lineHeight  int
@@ -64,7 +64,7 @@ type Font struct {
 }
 
 // NewFromTTF parses a TTF payload and returns a renderable face.
-func NewFromTTF(ttf []byte, opts *Options) (*Font, error) {
+func NewFromTTF(ttf []byte, opts *Options) (*Face, error) {
 	if len(ttf) == 0 {
 		return nil, errors.New("font: empty TTF payload")
 	}
@@ -90,7 +90,7 @@ func NewFromTTF(ttf []byte, opts *Options) (*Font, error) {
 		lineHeight = 1
 	}
 
-	return &Font{
+	return &Face{
 		face:        face,
 		lineHeight:  lineHeight,
 		ascent:      ceilFixed(metrics.Ascent),
@@ -100,7 +100,7 @@ func NewFromTTF(ttf []byte, opts *Options) (*Font, error) {
 }
 
 // NewFromFile loads and parses a TTF file from disk.
-func NewFromFile(path string, opts *Options) (*Font, error) {
+func NewFromFile(path string, opts *Options) (*Face, error) {
 	if path == "" {
 		return nil, errors.New("font: empty font path")
 	}
@@ -112,12 +112,12 @@ func NewFromFile(path string, opts *Options) (*Font, error) {
 }
 
 // NewDefault returns a TTF renderer backed by gofont/goregular.
-func NewDefault(opts *Options) (*Font, error) {
+func NewDefault(opts *Options) (*Face, error) {
 	return NewFromTTF(goregular.TTF, opts)
 }
 
 // Close releases face resources when applicable.
-func (f *Font) Close() error {
+func (f *Face) Close() error {
 	if f == nil || f.face == nil {
 		return nil
 	}
@@ -130,7 +130,7 @@ func (f *Font) Close() error {
 }
 
 // LineHeight returns the configured line height in pixels.
-func (f *Font) LineHeight() int {
+func (f *Face) LineHeight() int {
 	if f == nil {
 		return 0
 	}
@@ -138,7 +138,7 @@ func (f *Font) LineHeight() int {
 }
 
 // Ascent returns the ascent in pixels.
-func (f *Font) Ascent() int {
+func (f *Face) Ascent() int {
 	if f == nil {
 		return 0
 	}
@@ -146,7 +146,7 @@ func (f *Font) Ascent() int {
 }
 
 // Descent returns the descent in pixels.
-func (f *Font) Descent() int {
+func (f *Face) Descent() int {
 	if f == nil {
 		return 0
 	}
@@ -154,7 +154,7 @@ func (f *Font) Descent() int {
 }
 
 // ShapeLine applies kerning-aware shaping to a single text line.
-func (f *Font) ShapeLine(line string) []ShapedGlyph {
+func (f *Face) ShapeLine(line string) []ShapedGlyph {
 	if f == nil || f.face == nil || line == "" {
 		return nil
 	}
@@ -165,7 +165,7 @@ func (f *Font) ShapeLine(line string) []ShapedGlyph {
 }
 
 // DrawText draws anti-aliased text at (x, y), where y is the top of the text box.
-func (f *Font) DrawText(dst draw.Image, text string, x, y int, fg, bg color.Color) {
+func (f *Face) DrawText(dst draw.Image, text string, x, y int, fg, bg color.Color) {
 	if f == nil || f.face == nil || dst == nil || text == "" {
 		return
 	}
@@ -210,7 +210,7 @@ func (f *Font) DrawText(dst draw.Image, text string, x, y int, fg, bg color.Colo
 }
 
 // DrawGlyph draws one rune at (x, y), where y is the top of the glyph box.
-func (f *Font) DrawGlyph(dst draw.Image, r rune, x, y int, fg, bg color.Color) {
+func (f *Face) DrawGlyph(dst draw.Image, r rune, x, y int, fg, bg color.Color) {
 	if r == '\n' {
 		return
 	}
@@ -218,7 +218,7 @@ func (f *Font) DrawGlyph(dst draw.Image, r rune, x, y int, fg, bg color.Color) {
 }
 
 // Measure returns text width and height in pixels.
-func (f *Font) Measure(text string) (int, int) {
+func (f *Face) Measure(text string) (int, int) {
 	if f == nil || f.face == nil {
 		return 0, 0
 	}
@@ -241,7 +241,7 @@ func (f *Font) Measure(text string) (int, int) {
 	return maxWidth, len(lines) * f.lineHeight
 }
 
-func (f *Font) shapeLineLocked(line string) []ShapedGlyph {
+func (f *Face) shapeLineLocked(line string) []ShapedGlyph {
 	if line == "" {
 		return nil
 	}
@@ -265,7 +265,7 @@ func (f *Font) shapeLineLocked(line string) []ShapedGlyph {
 	return shaped
 }
 
-func (f *Font) glyphAdvanceLocked(r rune) fixed.Int26_6 {
+func (f *Face) glyphAdvanceLocked(r rune) fixed.Int26_6 {
 	advance, ok := f.face.GlyphAdvance(r)
 	if ok {
 		return advance

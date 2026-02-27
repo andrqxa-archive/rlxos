@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"sync"
 
-	"avyos.dev/pkg/graphics"
+	graphics "avyos.dev/pkg/graphics/input"
 )
 
 // Backend implements graphics.Backend and graphics.InputHandler for Wayland.

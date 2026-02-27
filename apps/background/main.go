@@ -11,10 +11,11 @@ import (
 
 	display "avyos.dev/api/display"
 	settingsapi "avyos.dev/api/settings"
-	"avyos.dev/pkg/graphics"
 	gapp "avyos.dev/pkg/graphics/app"
+	declapp "avyos.dev/pkg/graphics/app/decl"
 	displaybackend "avyos.dev/pkg/graphics/backend/display"
-	"avyos.dev/pkg/graphics/ui"
+	graphics "avyos.dev/pkg/graphics/input"
+	gfxtheme "avyos.dev/pkg/graphics/theme"
 	"avyos.dev/pkg/logger"
 )
 
@@ -73,7 +74,7 @@ func init() {
 }
 
 type BackgroundApp struct {
-	ui.App
+	declapp.App
 	mouseX int
 	mouseY int
 }
@@ -239,9 +240,9 @@ func watchSettings(app *BackgroundApp) {
 			case keyBackgroundColor, legacyColorKey:
 				value := strings.TrimSpace(ev.Value)
 				if value == "" {
-					setAppBackground(app, graphics.DefaultTheme.Background)
+					setAppBackground(app, gfxtheme.DefaultTheme.Background)
 					if root := app.FindElement("Root"); root != nil {
-						root.SetAttribute("background", colorToHex(graphics.DefaultTheme.Background))
+						root.SetAttribute("background", colorToHex(gfxtheme.DefaultTheme.Background))
 					}
 					return
 				}
@@ -275,7 +276,7 @@ func parseOptions() (options, error) {
 		mode:      strings.ToLower(strings.TrimSpace(flagMode)),
 		imagePath: strings.TrimSpace(flagImage),
 		scaleMode: "cover",
-		color:     graphics.DefaultTheme.Background,
+		color:     gfxtheme.DefaultTheme.Background,
 	}
 
 	if !flagProvided("mode") {

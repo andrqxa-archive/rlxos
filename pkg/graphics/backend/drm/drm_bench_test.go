@@ -3,7 +3,7 @@ package drm
 import (
 	"testing"
 
-	"avyos.dev/pkg/graphics"
+	graphics "avyos.dev/pkg/graphics/input"
 )
 
 var drmBenchSink byte

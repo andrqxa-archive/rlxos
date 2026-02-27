@@ -26,13 +26,27 @@ import (
 
 	display "avyos.dev/api/display"
 
-	"avyos.dev/pkg/graphics"
+	graphics "avyos.dev/pkg/graphics/input"
 )
+
+type popupWidget interface {
+	Draw(buf *graphics.Buffer)
+	Bounds() graphics.Rect
+	SetBounds(r graphics.Rect)
+	MinSize() graphics.Point
+	HandleEvent(ev graphics.Event) bool
+	SetFocused(focused bool)
+	IsFocused() bool
+	IsDirty() bool
+	MarkClean()
+	SetVisible(visible bool)
+	IsVisible() bool
+}
 
 // Popup represents a popup window managed by the display backend.
 type Popup struct {
 	win     *display.ClientWindow
-	widget  graphics.Widget
+	widget  popupWidget
 	onClose func()
 	backend *Backend
 	mouseX  int // last known pointer position (window-local)
@@ -422,7 +436,7 @@ func (b *Backend) HasSystemCursor() bool {
 // OpenPopup creates a popup window positioned relative to the main window.
 // The content widget is rendered into the popup buffer and receives events.
 // onClose is called when the popup is dismissed (e.g. click outside).
-func (b *Backend) OpenPopup(x, y, w, h int, content graphics.Widget, onClose func()) *Popup {
+func (b *Backend) OpenPopup(x, y, w, h int, content popupWidget, onClose func()) *Popup {
 	b.mu.Lock()
 	cl := b.client
 	mainWin := b.window

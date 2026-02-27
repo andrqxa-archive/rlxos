@@ -22,7 +22,7 @@ import (
 	"sync"
 	"syscall"
 
-	"avyos.dev/pkg/graphics"
+	graphics "avyos.dev/pkg/graphics/input"
 )
 
 // surfaceState represents a wl_surface created by a client.

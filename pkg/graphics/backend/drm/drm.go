@@ -29,7 +29,7 @@ import (
 	"unsafe"
 
 	"avyos.dev/pkg/fs"
-	"avyos.dev/pkg/graphics"
+	graphics "avyos.dev/pkg/graphics/input"
 	"avyos.dev/pkg/simd"
 )
 

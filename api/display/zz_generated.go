@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"avyos.dev/pkg/fs"
-	"avyos.dev/pkg/graphics"
+	"avyos.dev/pkg/graphics/input"
 	"avyos.dev/pkg/sutra"
 )
 
@@ -573,7 +573,7 @@ func (v *PointerButtonEvent) UnmarshalBinary(data []byte) error {
 
 type KeyEvent struct {
 	WindowID uint32
-	Key      graphics.Key
+	Key      input.Key
 	Char     rune
 	Pressed  bool
 }
@@ -587,7 +587,7 @@ func (v KeyEvent) encodeTo(enc *sutra.Encoder) {
 
 func (v *KeyEvent) decodeFrom(dec *sutra.Decoder) {
 	v.WindowID = dec.Uint32()
-	v.Key = graphics.Key(dec.Int())
+	v.Key = input.Key(dec.Int())
 	v.Char = dec.Rune()
 	v.Pressed = dec.Bool()
 }
@@ -803,7 +803,7 @@ type RegisterShortcutRequest struct {
 	ShortcutID uint32
 	WindowID   uint32
 	Scope      uint32
-	Key        graphics.Key
+	Key        input.Key
 	Rune       rune
 	Modifiers  uint8
 }
@@ -821,7 +821,7 @@ func (v *RegisterShortcutRequest) decodeFrom(dec *sutra.Decoder) {
 	v.ShortcutID = dec.Uint32()
 	v.WindowID = dec.Uint32()
 	v.Scope = dec.Uint32()
-	v.Key = graphics.Key(dec.Int())
+	v.Key = input.Key(dec.Int())
 	v.Rune = dec.Rune()
 	v.Modifiers = dec.Uint8()
 }
@@ -866,7 +866,7 @@ type ShortcutEvent struct {
 	ShortcutID uint32
 	WindowID   uint32
 	Scope      uint32
-	Key        graphics.Key
+	Key        input.Key
 	Rune       rune
 	Modifiers  uint8
 }
@@ -884,7 +884,7 @@ func (v *ShortcutEvent) decodeFrom(dec *sutra.Decoder) {
 	v.ShortcutID = dec.Uint32()
 	v.WindowID = dec.Uint32()
 	v.Scope = dec.Uint32()
-	v.Key = graphics.Key(dec.Int())
+	v.Key = input.Key(dec.Int())
 	v.Rune = dec.Rune()
 	v.Modifiers = dec.Uint8()
 }

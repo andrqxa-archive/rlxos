@@ -1,6 +1,5 @@
 {
   "id": "dev.avyos.oobe",
   "name": "Welcome",
-  "description": "Out-of-box setup and onboarding screen.",
-  "icon": "star"
+  "description": "Out-of-box setup and onboarding screen"
 }

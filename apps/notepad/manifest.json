@@ -1,8 +1,7 @@
 {
   "id": "dev.avyos.notepad",
   "name": "Notepad",
-  "description": "Edit plain text files.",
-  "icon": "notes",
+  "description": "Edit plain text files",
   "support_extensions": [
     ".txt",
     ".md",

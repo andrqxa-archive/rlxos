@@ -23,7 +23,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"avyos.dev/pkg/graphics"
+	graphics "avyos.dev/pkg/graphics/input"
 )
 
 // minimalXKBKeymap is a minimal but valid XKB keymap that maps evdev keycodes

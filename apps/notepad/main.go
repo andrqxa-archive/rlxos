@@ -11,14 +11,15 @@ import (
 	"unicode/utf8"
 
 	gapp "avyos.dev/pkg/graphics/app"
-	"avyos.dev/pkg/graphics/ui"
+	declapp "avyos.dev/pkg/graphics/app/decl"
+	ui "avyos.dev/pkg/graphics/widget/engine"
 )
 
 //go:embed ui/notepad.ui
 var notepadUI string
 
 type NotepadApp struct {
-	ui.App
+	declapp.App
 
 	currentPath string
 	savedText   string

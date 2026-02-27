@@ -9,10 +9,12 @@ import (
 
 	display "avyos.dev/api/display"
 	"avyos.dev/pkg/fs"
-	"avyos.dev/pkg/graphics"
 	gapp "avyos.dev/pkg/graphics/app"
+	declapp "avyos.dev/pkg/graphics/app/decl"
 	displaybackend "avyos.dev/pkg/graphics/backend/display"
-	"avyos.dev/pkg/graphics/ui"
+	gfxicons "avyos.dev/pkg/graphics/icons"
+	graphics "avyos.dev/pkg/graphics/input"
+	ui "avyos.dev/pkg/graphics/widget/engine"
 )
 
 //go:embed ui/power.ui
@@ -21,7 +23,7 @@ var powerUI string
 const iconSize = 64
 
 type powerApp struct {
-	ui.App
+	declapp.App
 }
 
 func (a *powerApp) e(id string) *ui.Element { return a.FindElement(id) }
@@ -70,7 +72,7 @@ func (a *powerApp) Shutdown() {
 func runAction(name string, args ...string) error {
 	command := name
 	if name == "power" {
-		if resolved := fs.Resolve("cmd", "power"); resolved != "" {
+		if resolved := fs.Resolve("cmd:power"); resolved != "" {
 			if _, err := os.Stat(resolved); err == nil {
 				command = resolved
 			}
@@ -103,15 +105,15 @@ func main() {
 	})
 
 	if btn := app.e("LogoutBtn"); btn != nil {
-		btn.SetAttribute("src", graphics.ResolveIconPath("lock_closed", iconSize))
+		btn.SetAttribute("src", gfxicons.ResolvePath("lock_closed", iconSize))
 		btn.SetAttribute("srcOpaque", false)
 	}
 	if btn := app.e("RebootBtn"); btn != nil {
-		btn.SetAttribute("src", graphics.ResolveIconPath("reboot", iconSize))
+		btn.SetAttribute("src", gfxicons.ResolvePath("reboot", iconSize))
 		btn.SetAttribute("srcOpaque", false)
 	}
 	if btn := app.e("ShutdownBtn"); btn != nil {
-		btn.SetAttribute("src", graphics.ResolveIconPath("power", iconSize))
+		btn.SetAttribute("src", gfxicons.ResolvePath("power", iconSize))
 		btn.SetAttribute("srcOpaque", false)
 	}
 

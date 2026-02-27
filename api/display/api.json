@@ -6,7 +6,7 @@
     "description": "Display service API."
   },
   "imports": [
-    "avyos.dev/pkg/graphics"
+    "avyos.dev/pkg/graphics/input"
   ],
   "types": [
     {
@@ -335,7 +335,7 @@
         },
         {
           "name": "Key",
-          "type": "graphics.Key"
+          "type": "input.Key"
         },
         {
           "name": "Char",
@@ -459,7 +459,7 @@
         },
         {
           "name": "Key",
-          "type": "graphics.Key"
+          "type": "input.Key"
         },
         {
           "name": "Rune",
@@ -499,7 +499,7 @@
         },
         {
           "name": "Key",
-          "type": "graphics.Key"
+          "type": "input.Key"
         },
         {
           "name": "Rune",

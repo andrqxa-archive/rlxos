@@ -22,10 +22,10 @@ import (
 	"os"
 	"strings"
 
-	"avyos.dev/pkg/graphics"
-	"avyos.dev/pkg/graphics/backend/drm"
 	gapp "avyos.dev/pkg/graphics/app"
+	"avyos.dev/pkg/graphics/backend/drm"
 	"avyos.dev/pkg/graphics/backend/framebuffer"
+	graphics "avyos.dev/pkg/graphics/input"
 	"avyos.dev/pkg/graphics/input/evdev"
 	"avyos.dev/pkg/logger"
 )

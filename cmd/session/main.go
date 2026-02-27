@@ -48,7 +48,7 @@ func main() {
 	}
 
 	components := []component{
-		{name: "settingsmanager", args: []string{"--daemon"}, daemon: true, optional: true},
+		{name: "settings", args: []string{"--daemon"}, daemon: true, optional: true},
 		{name: "waylayer", args: []string{"--daemon"}, daemon: true, optional: true},
 		{name: "background", args: []string{"--mode", "layer"}},
 		{name: "dock"},

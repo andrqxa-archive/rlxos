@@ -1,8 +1,6 @@
 {
   "id": "dev.avyos.power",
   "name": "Power",
-  "description": "Session power actions: lock, logout, restart, shutdown.",
-  "icon": "power",
-  "hidden": true,
-  "dock": true
+  "description": "Session power actions: lock, logout, restart, shutdown",
+  "hidden": true
 }

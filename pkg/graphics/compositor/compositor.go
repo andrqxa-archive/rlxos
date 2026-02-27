@@ -24,7 +24,8 @@ import (
 	"sync"
 	"time"
 
-	"avyos.dev/pkg/graphics"
+	gfxfont "avyos.dev/pkg/graphics/font"
+	graphics "avyos.dev/pkg/graphics/input"
 )
 
 const (
@@ -299,7 +300,7 @@ func (c *Compositor) composite() {
 	fpsText := fmt.Sprintf("FPS: %d", c.fps)
 	w, _ := c.fb.Size()
 	fpsX := w - len(fpsText)*8 - 4
-	graphics.DefaultFont.DrawText(buf, fpsText, fpsX, 4, graphics.NewColorHex(0xECEFF4), graphics.NewColorHex(0x2E3440))
+	gfxfont.DefaultFont.DrawText(buf, fpsText, fpsX, 4, graphics.NewColorHex(0xECEFF4), graphics.NewColorHex(0x2E3440))
 
 	c.fb.Flush()
 }
@@ -337,7 +338,7 @@ func (c *Compositor) drawWindow(buf *graphics.Buffer, win *Window) {
 	textColor := graphics.NewColorHex(decorText)
 	textX := win.x + 6
 	textY := win.y + (win.decorH-16)/2
-	graphics.DefaultFont.DrawText(buf, title, textX, textY, textColor, graphics.Color{})
+	gfxfont.DefaultFont.DrawText(buf, title, textX, textY, textColor, graphics.Color{})
 
 	// Close button [X]
 	closeBtnRect := graphics.Rect{
@@ -349,7 +350,7 @@ func (c *Compositor) drawWindow(buf *graphics.Buffer, win *Window) {
 	buf.FillRect(closeBtnRect, graphics.NewColorHex(closeBtn))
 	xTextX := closeBtnRect.X + (closeBtnRect.W-8)/2
 	xTextY := closeBtnRect.Y + (closeBtnRect.H-16)/2
-	graphics.DefaultFont.DrawText(buf, "X", xTextX, xTextY, textColor, graphics.Color{})
+	gfxfont.DefaultFont.DrawText(buf, "X", xTextX, xTextY, textColor, graphics.Color{})
 
 	// Window border
 	borderRect := graphics.Rect{X: win.x - 1, Y: win.y - 1, W: win.width + 2, H: win.height + win.decorH + 2}

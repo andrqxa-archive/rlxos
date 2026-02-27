@@ -23,14 +23,14 @@ import (
 	"log"
 
 	gapp "avyos.dev/pkg/graphics/app"
-	"avyos.dev/pkg/graphics/ui"
+	declapp "avyos.dev/pkg/graphics/app/decl"
 )
 
 //go:embed ui/demo.ui
 var demoUI string
 
 type DemoApp struct {
-	ui.App
+	declapp.App
 	clickCount   int
 	optionCursor int
 }
@@ -131,7 +131,7 @@ func (a *DemoApp) DialogOK() {
 }
 
 func main() {
-	
+
 	app := &DemoApp{}
 	app.SetOptions(gapp.Options{Title: "Demo App"})
 	if err := app.LoadString(demoUI, app); err != nil {

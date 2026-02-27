@@ -31,7 +31,9 @@ import (
 	"unicode"
 
 	displayapi "avyos.dev/api/display"
-	"avyos.dev/pkg/graphics"
+	gfxfont "avyos.dev/pkg/graphics/font"
+	graphics "avyos.dev/pkg/graphics/input"
+	gfxtheme "avyos.dev/pkg/graphics/theme"
 	"avyos.dev/pkg/identity"
 	"avyos.dev/pkg/simd"
 	"avyos.dev/pkg/sutra"
@@ -1643,7 +1645,7 @@ func (s *Server) composite() {
 		buf.SetClip(flushRect)
 
 		// Re-composite only the clipped dirty region.
-		buf.FillRect(flushRect, graphics.DefaultTheme.Background)
+		buf.FillRect(flushRect, gfxtheme.DefaultTheme.Background)
 
 		for _, win := range bgLayers {
 			if windowScreenRect(win).Intersects(flushRect) {
@@ -1863,15 +1865,15 @@ func (s *Server) drawDiagnostics(buf *graphics.Buffer, clip graphics.Rect) {
 	}
 }
 
-func (s *Server) diagnosticsFont() *graphics.Font {
-	font := graphics.UIFont(graphics.UIFontParagraph)
+func (s *Server) diagnosticsFont() *gfxfont.Font {
+	font := gfxfont.UIFont(gfxfont.UIFontParagraph)
 	if font != nil {
 		return font
 	}
-	return graphics.DefaultFont
+	return gfxfont.DefaultFont
 }
 
-func diagnosticsRectFor(screenW int, lines []string, font *graphics.Font) graphics.Rect {
+func diagnosticsRectFor(screenW int, lines []string, font *gfxfont.Font) graphics.Rect {
 	if screenW <= 0 || len(lines) == 0 || font == nil {
 		return graphics.Rect{}
 	}
@@ -2036,9 +2038,9 @@ func (s *Server) drawWindow(buf *graphics.Buffer, win *window, clip graphics.Rec
 	if title == "" {
 		title = "Untitled"
 	}
-	titleFont := graphics.UIFont(graphics.UIFontHeading)
+	titleFont := gfxfont.UIFont(gfxfont.UIFontHeading)
 	if titleFont == nil {
-		titleFont = graphics.DefaultFont
+		titleFont = gfxfont.DefaultFont
 	}
 	titleY := win.y + (decorHeight-titleFont.Height)/2
 	titleRect := graphics.Rect{X: win.x + titleTextInset, Y: titleY, W: titleFont.TextWidth(title), H: titleFont.Height}

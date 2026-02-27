@@ -10,17 +10,18 @@ import (
 	"strings"
 
 	display "avyos.dev/api/display"
-	"avyos.dev/pkg/graphics"
 	gapp "avyos.dev/pkg/graphics/app"
+	declapp "avyos.dev/pkg/graphics/app/decl"
 	displaybackend "avyos.dev/pkg/graphics/backend/display"
-	"avyos.dev/pkg/graphics/ui"
+	graphics "avyos.dev/pkg/graphics/input"
+	ui "avyos.dev/pkg/graphics/widget/engine"
 	"avyos.dev/pkg/identity"
 )
 
 //go:embed ui/oobe.ui
 var oobeUI string
 
-type OobeApp struct{ ui.App }
+type OobeApp struct{ declapp.App }
 
 func (a *OobeApp) e(id string) *ui.Element { return a.FindElement(id) }
 
@@ -130,8 +131,8 @@ func (a *OobeApp) CreateUser() {
 	}
 
 	id := identity.Identity{
-		Name: name,
-		Home: filepath.Join("/users", name),
+		Name:  name,
+		Home:  filepath.Join("/users", name),
 		Shell: "/avyos/cmd/shell",
 	}
 
@@ -149,7 +150,7 @@ func (a *OobeApp) CreateUser() {
 	}
 	if err := os.Chown(id.Home, int(id.ID), int(id.ID)); err != nil {
 		a.setCreateStatus(fmt.Sprintf("Failed to set permissions to home directory: %v", err))
-		return 
+		return
 	}
 
 	a.setCreateStatus("")

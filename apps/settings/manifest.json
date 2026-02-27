@@ -1,0 +1,5 @@
+{
+  "id": "dev.avyos.settings",
+  "name": "Settings Manager",
+  "description": "Manage session settings and run the user settings daemon"
+}

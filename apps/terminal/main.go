@@ -11,10 +11,12 @@ import (
 	"time"
 	"unicode"
 
-	"avyos.dev/pkg/graphics"
 	gapp "avyos.dev/pkg/graphics/app"
+	declapp "avyos.dev/pkg/graphics/app/decl"
 	gfxfont "avyos.dev/pkg/graphics/font"
-	"avyos.dev/pkg/graphics/ui"
+	graphics "avyos.dev/pkg/graphics/input"
+	gfxtheme "avyos.dev/pkg/graphics/theme"
+	ui "avyos.dev/pkg/graphics/widget/engine"
 	"avyos.dev/pkg/pty"
 )
 
@@ -29,7 +31,7 @@ const (
 )
 
 type TerminalApp struct {
-	ui.App
+	declapp.App
 
 	mu       sync.Mutex
 	term     *pty.Terminal
@@ -40,7 +42,7 @@ type TerminalApp struct {
 	stopOnce sync.Once
 
 	fontKey      string
-	font         *graphics.Font
+	font         *gfxfont.Font
 	lastFrameSig uint64
 	hasFrame     bool
 }
@@ -305,9 +307,9 @@ func (a *TerminalApp) TerminalKey(ev graphics.Event) {
 	}
 }
 
-func terminalCellSize(font *graphics.Font) (charW, charH int) {
+func terminalCellSize(font *gfxfont.Font) (charW, charH int) {
 	if font == nil {
-		font = graphics.UIFont(graphics.UIFontParagraph)
+		font = gfxfont.UIFont(gfxfont.UIFontParagraph)
 	}
 	charW = 8
 	charH = 16
@@ -330,7 +332,7 @@ func terminalCellSize(font *graphics.Font) (charW, charH int) {
 	return charW, charH
 }
 
-func estimateGrid(bounds graphics.Rect, font *graphics.Font) (rows, cols int) {
+func estimateGrid(bounds graphics.Rect, font *gfxfont.Font) (rows, cols int) {
 	if bounds.W <= 0 || bounds.H <= 0 {
 		return defaultRows, defaultCols
 	}
@@ -382,9 +384,9 @@ func resolveElementFontPath(path, family string) string {
 	return ""
 }
 
-func (a *TerminalApp) outputFont(output *ui.Element) *graphics.Font {
+func (a *TerminalApp) outputFont(output *ui.Element) *gfxfont.Font {
 	if output == nil {
-		return graphics.UIFont(graphics.UIFontParagraph)
+		return gfxfont.UIFont(gfxfont.UIFontParagraph)
 	}
 
 	path := output.Attr("fontPath", "")
@@ -405,11 +407,11 @@ func (a *TerminalApp) outputFont(output *ui.Element) *graphics.Font {
 
 	resolved := resolveElementFontPath(path, family)
 	if resolved == "" {
-		return graphics.UIFont(graphics.UIFontParagraph)
+		return gfxfont.UIFont(gfxfont.UIFontParagraph)
 	}
-	font, err := graphics.LoadTTFFontFile(resolved, &gfxfont.Options{Size: size})
+	font, err := gfxfont.LoadTTFFontFile(resolved, &gfxfont.Options{Size: size})
 	if err != nil || font == nil {
-		return graphics.UIFont(graphics.UIFontParagraph)
+		return gfxfont.UIFont(gfxfont.UIFontParagraph)
 	}
 
 	a.mu.Lock()
@@ -441,7 +443,7 @@ func mixColor(a, b graphics.Color, t float64) graphics.Color {
 }
 
 func themeANSIPalette(defaultFg, defaultBg graphics.Color) [16]graphics.Color {
-	t := graphics.DefaultTheme
+	t := gfxtheme.DefaultTheme
 	black := mixColor(defaultBg, graphics.ColorBlack, 0.58)
 	white := mixColor(defaultFg, graphics.ColorWhite, 0.18)
 	red := t.Danger
@@ -644,8 +646,8 @@ func (a *TerminalApp) refreshTerminalView() {
 	running := term.IsRunning()
 	output := a.e("Output")
 
-	defaultFg := graphics.DefaultTheme.Foreground
-	defaultBg := graphics.DefaultTheme.Background
+	defaultFg := gfxtheme.DefaultTheme.Foreground
+	defaultBg := gfxtheme.DefaultTheme.Background
 	if output != nil {
 		defaultFg = output.AttrColor("textColor", defaultFg)
 		defaultBg = output.AttrColor("background", defaultBg)

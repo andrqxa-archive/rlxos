@@ -25,7 +25,7 @@ import (
 	"time"
 
 	displayapi "avyos.dev/api/display"
-	"avyos.dev/pkg/graphics"
+	graphics "avyos.dev/pkg/graphics/input"
 )
 
 // toplevelWindow maps a Wayland xdg surface role to a display window.

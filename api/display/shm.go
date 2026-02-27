@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"avyos.dev/pkg/fs"
-	"avyos.dev/pkg/graphics"
+	graphics "avyos.dev/pkg/graphics/input"
 )
 
 const (

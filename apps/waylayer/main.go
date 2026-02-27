@@ -24,7 +24,8 @@ import (
 	"log"
 
 	gapp "avyos.dev/pkg/graphics/app"
-	"avyos.dev/pkg/graphics/ui"
+	declapp "avyos.dev/pkg/graphics/app/decl"
+	ui "avyos.dev/pkg/graphics/widget/engine"
 )
 
 var (
@@ -35,7 +36,7 @@ var (
 var waylayerUI string
 
 type waylayerInfoApp struct {
-	ui.App
+	declapp.App
 }
 
 func (a *waylayerInfoApp) QuitWindow() {

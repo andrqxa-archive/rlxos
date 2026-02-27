@@ -1,6 +1,0 @@
-{
-  "id": "dev.avyos.settingsmanager",
-  "name": "Settings Manager",
-  "description": "Manage session settings and run the user settings daemon.",
-  "icon": "monitor"
-}

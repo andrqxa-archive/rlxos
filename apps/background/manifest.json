@@ -1,8 +1,6 @@
 {
   "id": "dev.avyos.background",
   "name": "Background",
-  "description": "Wallpaper and desktop background layer.",
-  "icon": "image",
-  "hidden": true,
-  "background": true
+  "description": "Wallpaper and desktop background layer",
+  "hidden": true
 }

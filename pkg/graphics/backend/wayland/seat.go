@@ -17,7 +17,7 @@
 
 package wayland
 
-import "avyos.dev/pkg/graphics"
+import graphics "avyos.dev/pkg/graphics/input"
 
 // wl_seat opcodes (client → server)
 const (

@@ -14,10 +14,13 @@ import (
 	display "avyos.dev/api/display"
 	settingsapi "avyos.dev/api/settings"
 	"avyos.dev/pkg/appcatalog"
-	"avyos.dev/pkg/graphics"
 	gapp "avyos.dev/pkg/graphics/app"
+	declapp "avyos.dev/pkg/graphics/app/decl"
 	displaybackend "avyos.dev/pkg/graphics/backend/display"
-	"avyos.dev/pkg/graphics/ui"
+	gfxicons "avyos.dev/pkg/graphics/icons"
+	graphics "avyos.dev/pkg/graphics/input"
+	gfxtheme "avyos.dev/pkg/graphics/theme"
+	ui "avyos.dev/pkg/graphics/widget/engine"
 	"avyos.dev/pkg/logger"
 )
 
@@ -86,7 +89,7 @@ type menuItem struct {
 }
 
 type TaskbarApp struct {
-	ui.App
+	declapp.App
 
 	home       string
 	catalog    []appcatalog.Entry
@@ -242,7 +245,7 @@ func (a *TaskbarApp) collectTaskGroups() []taskGroup {
 			}
 			icon := entry.IconPath
 			if strings.TrimSpace(icon) == "" {
-				icon = graphics.ResolveIconPath("help", 64)
+				icon = gfxicons.ResolvePath("help", 64)
 			}
 			g = &taskGroup{
 				Key:      key,
@@ -289,7 +292,7 @@ func (a *TaskbarApp) collectTaskGroups() []taskGroup {
 		}
 		icon := entry.IconPath
 		if strings.TrimSpace(icon) == "" {
-			icon = graphics.ResolveIconPath("help", 64)
+			icon = gfxicons.ResolvePath("help", 64)
 		}
 		ordered = append(ordered, taskGroup{
 			Key:      key,
@@ -728,7 +731,7 @@ func run() error {
 	if err := logger.SetupSystemLog(); err != nil {
 		log.Error("failed to setup system log: %v", err)
 	}
-	graphics.DefaultTheme.BorderRadius = 8
+	gfxtheme.DefaultTheme.BorderRadius = 8
 
 	position := resolveDockPosition(strings.TrimSpace(flagPosition))
 	anchor := layerAnchorForPosition(position)

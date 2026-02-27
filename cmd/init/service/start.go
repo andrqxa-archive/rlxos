@@ -36,7 +36,7 @@ func (s *Service) Start() error {
 	var logFile *os.File
 	if s.TTY != "" {
 		var err error
-		ttyFile, err = os.OpenFile(fs.Resolve(s.TTY), os.O_RDWR, 0)
+		ttyFile, err = os.OpenFile(fs.Resolve("%s", s.TTY), os.O_RDWR, 0)
 		if err != nil {
 			return fmt.Errorf("failed to open tty %s: %w", s.TTY, err)
 		}

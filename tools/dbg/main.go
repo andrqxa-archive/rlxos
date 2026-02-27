@@ -24,10 +24,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
+	"syscall"
+	"time"
 
-	dbgapi "avyos.dev/api/dbgd"
+	"avyos.dev/api/dbg"
+	"avyos.dev/pkg/term"
 )
 
 const defaultChunkSize = 32 * 1024
@@ -65,14 +70,14 @@ func run(args []string) int {
 		opt.password = password
 	}
 
-	client, err := dbgapi.NewHostClient(opt.host, opt.port)
+	client, err := dbg.NewHostClient(opt.host, opt.port)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "dbg: connect failed: %v\n", err)
 		return 1
 	}
 	defer client.Close()
 
-	session, err := client.Authenticate(dbgapi.AuthRequest{
+	session, err := client.Authenticate(dbg.AuthRequest{
 		Username: opt.user,
 		Password: opt.password,
 	})
@@ -80,16 +85,16 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "dbg: authentication failed: %v\n", err)
 		return 1
 	}
-	defer client.Logout(dbgapi.SessionToken{Token: session.Token})
+	defer client.Logout(dbg.SessionToken{Token: session.Token})
 
 	sub := rest[0]
 	subArgs := rest[1:]
 
 	switch sub {
 	case "cmd":
-		return runExecCommand(client, session.Token, false, subArgs)
+		return runExecCommand(client, session.Token, subArgs)
 	case "shell":
-		return runExecCommand(client, session.Token, true, subArgs)
+		return runInteractiveShell(client, session.Token, subArgs)
 	case "pull":
 		return runPull(client, session.Token, subArgs)
 	case "push":
@@ -109,8 +114,8 @@ func parseGlobalFlags(args []string) (globalOptions, []string, int) {
 	fs.SetOutput(io.Discard)
 
 	opt := globalOptions{}
-	fs.StringVar(&opt.host, "host", "127.0.0.1", "dbgd host")
-	fs.IntVar(&opt.port, "port", dbgapi.DefaultTCPPort, "dbgd TCP port")
+	fs.StringVar(&opt.host, "host", "127.0.0.1", "dbg host")
+	fs.IntVar(&opt.port, "port", dbg.DefaultTCPPort, "dbg TCP port")
 	fs.StringVar(&opt.user, "user", "admin", "identity username")
 	fs.StringVar(&opt.password, "password", "", "identity password (or use DBG_PASSWORD)")
 
@@ -127,46 +132,34 @@ func parseGlobalFlags(args []string) (globalOptions, []string, int) {
 	return opt, fs.Args(), 0
 }
 
-func runExecCommand(client *dbgapi.Client, token string, useShell bool, args []string) int {
-	name := "cmd"
-	if useShell {
-		name = "shell"
-	}
-	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+func runExecCommand(client *dbg.Client, token string, args []string) int {
+	fs := flag.NewFlagSet("cmd", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	cwd := fs.String("cwd", "", "remote working directory")
 	timeout := fs.Int("timeout", 30, "command timeout in seconds")
 
 	if err := fs.Parse(args); err != nil {
-		fmt.Fprintf(os.Stderr, "dbg %s: %v\n", name, err)
+		fmt.Fprintf(os.Stderr, "dbg cmd: %v\n", err)
 		return 2
 	}
 	if len(fs.Args()) == 0 {
-		fmt.Fprintf(os.Stderr, "dbg %s: command is required\n", name)
+		fmt.Fprintln(os.Stderr, "dbg cmd: command is required")
 		return 2
 	}
 	if *timeout <= 0 {
 		*timeout = 30
 	}
 
-	req := dbgapi.ExecRequest{
+	req := dbg.ExecRequest{
 		Token:      token,
 		Command:    strings.Join(fs.Args(), " "),
 		Cwd:        strings.TrimSpace(*cwd),
 		TimeoutSec: int32(*timeout),
 	}
 
-	var (
-		resp dbgapi.ExecResult
-		err  error
-	)
-	if useShell {
-		resp, err = client.RunShell(req)
-	} else {
-		resp, err = client.RunCommand(req)
-	}
+	resp, err := client.RunCommand(req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "dbg %s: %v\n", name, err)
+		fmt.Fprintf(os.Stderr, "dbg cmd: %v\n", err)
 		return 1
 	}
 
@@ -180,19 +173,206 @@ func runExecCommand(client *dbgapi.Client, token string, useShell bool, args []s
 		fmt.Fprintln(os.Stderr, "dbg: output truncated by daemon capture limit")
 	}
 
-	if resp.ExitCode == 0 {
-		return 0
-	}
-	if resp.ExitCode < 0 {
-		return 1
-	}
-	if resp.ExitCode > 255 {
-		return 255
-	}
-	return resp.ExitCode
+	return normalizeExitCode(resp.ExitCode)
 }
 
-func runPull(client *dbgapi.Client, token string, args []string) int {
+func runInteractiveShell(client *dbg.Client, token string, args []string) int {
+	fs := flag.NewFlagSet("shell", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	cwd := fs.String("cwd", "", "remote working directory")
+	rows := fs.Int("rows", 0, "terminal rows")
+	cols := fs.Int("cols", 0, "terminal columns")
+
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(os.Stderr, "dbg shell: %v\n", err)
+		return 2
+	}
+	if len(fs.Args()) != 0 {
+		fmt.Fprintln(os.Stderr, "usage: dbg shell [-cwd=DIR] [-rows=N] [-cols=N]")
+		return 2
+	}
+
+	termCols, termRows := term.Size()
+	if *rows <= 0 {
+		*rows = termRows
+	}
+	if *cols <= 0 {
+		*cols = termCols
+	}
+	if *rows <= 0 {
+		*rows = 24
+	}
+	if *cols <= 0 {
+		*cols = 80
+	}
+
+	var activeSessionID atomic.Uint32
+	exitCodeCh := make(chan int, 1)
+	client.OnShellOutput(func(_ uint32, ev dbg.ShellOutputEvent) {
+		sessionID := activeSessionID.Load()
+		if sessionID == 0 || ev.SessionID != sessionID || len(ev.Data) == 0 {
+			return
+		}
+		_, _ = os.Stdout.Write(ev.Data)
+	})
+	client.OnShellExit(func(_ uint32, ev dbg.ShellExitEvent) {
+		sessionID := activeSessionID.Load()
+		if sessionID == 0 || ev.SessionID != sessionID {
+			return
+		}
+		select {
+		case exitCodeCh <- ev.ExitCode:
+		default:
+		}
+	})
+
+	session, err := client.ShellOpen(dbg.ShellOpenRequest{
+		Token: token,
+		Cwd:   strings.TrimSpace(*cwd),
+		Rows:  *rows,
+		Cols:  *cols,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dbg shell: %v\n", err)
+		return 1
+	}
+
+	sessionID := session.SessionID
+	activeSessionID.Store(sessionID)
+	shellClosed := false
+	closeShell := func() {
+		if shellClosed || sessionID == 0 {
+			return
+		}
+		shellClosed = true
+		activeSessionID.Store(0)
+		_ = client.ShellClose(dbg.ShellCloseRequest{
+			Token:     token,
+			SessionID: sessionID,
+		})
+	}
+	defer closeShell()
+
+	isTTY := term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
+	rawMode := false
+	if isTTY {
+		if err := term.EnableRawMode(); err == nil {
+			rawMode = true
+			defer term.DisableRawMode()
+		}
+	}
+
+	if isTTY {
+		winch := make(chan os.Signal, 1)
+		signal.Notify(winch, syscall.SIGWINCH)
+		defer signal.Stop(winch)
+		go func() {
+			for range winch {
+				curCols, curRows := term.Size()
+				if curRows <= 0 || curCols <= 0 {
+					continue
+				}
+				_ = client.ShellResize(dbg.ShellResizeRequest{
+					Token:     token,
+					SessionID: sessionID,
+					Rows:      curRows,
+					Cols:      curCols,
+				})
+			}
+		}()
+		winch <- syscall.SIGWINCH
+	}
+
+	interrupts := make(chan os.Signal, 1)
+	signal.Notify(interrupts, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(interrupts)
+
+	inputErrCh := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, readErr := os.Stdin.Read(buf)
+			if n > 0 {
+				chunk := make([]byte, n)
+				copy(chunk, buf[:n])
+				if err := client.ShellInput(dbg.ShellInputRequest{
+					Token:     token,
+					SessionID: sessionID,
+					Data:      chunk,
+				}); err != nil {
+					inputErrCh <- err
+					return
+				}
+			}
+			if readErr != nil {
+				inputErrCh <- readErr
+				return
+			}
+		}
+	}()
+
+	for {
+		select {
+		case exitCode := <-exitCodeCh:
+			return normalizeExitCode(exitCode)
+
+		case err := <-inputErrCh:
+			inputErrCh = nil
+			if err != nil && !errors.Is(err, io.EOF) {
+				fmt.Fprintf(os.Stderr, "dbg shell: %v\n", err)
+				closeShell()
+				select {
+				case exitCode := <-exitCodeCh:
+					return normalizeExitCode(exitCode)
+				case <-time.After(2 * time.Second):
+					return 1
+				}
+			}
+
+			if !isTTY {
+				closeShell()
+				select {
+				case exitCode := <-exitCodeCh:
+					return normalizeExitCode(exitCode)
+				case <-time.After(2 * time.Second):
+					return 0
+				}
+			}
+
+		case sig := <-interrupts:
+			if sig == syscall.SIGINT && rawMode {
+				_ = client.ShellInput(dbg.ShellInputRequest{
+					Token:     token,
+					SessionID: sessionID,
+					Data:      []byte{3},
+				})
+				continue
+			}
+			closeShell()
+			select {
+			case exitCode := <-exitCodeCh:
+				return normalizeExitCode(exitCode)
+			case <-time.After(2 * time.Second):
+				return 1
+			}
+		}
+	}
+}
+
+func normalizeExitCode(code int) int {
+	if code == 0 {
+		return 0
+	}
+	if code < 0 {
+		return 1
+	}
+	if code > 255 {
+		return 255
+	}
+	return code
+}
+
+func runPull(client *dbg.Client, token string, args []string) int {
 	fs := flag.NewFlagSet("pull", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	chunk := fs.Int("chunk", defaultChunkSize, "chunk size in bytes (max 32768)")
@@ -237,7 +417,7 @@ func runPull(client *dbgapi.Client, token string, args []string) int {
 
 	offset := uint64(0)
 	for {
-		resp, err := client.ReadFile(dbgapi.ReadFileRequest{
+		resp, err := client.ReadFile(dbg.ReadFileRequest{
 			Token:  token,
 			Path:   remotePath,
 			Offset: offset,
@@ -263,7 +443,7 @@ func runPull(client *dbgapi.Client, token string, args []string) int {
 	return 0
 }
 
-func runPush(client *dbgapi.Client, token string, args []string) int {
+func runPush(client *dbg.Client, token string, args []string) int {
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	chunk := fs.Int("chunk", defaultChunkSize, "chunk size in bytes (max 32768)")
@@ -317,7 +497,7 @@ func runPush(client *dbgapi.Client, token string, args []string) int {
 
 		if n == 0 {
 			if offset == 0 {
-				if _, err := client.WriteFile(dbgapi.WriteFileRequest{
+				if _, err := client.WriteFile(dbg.WriteFileRequest{
 					Token:    token,
 					Path:     remotePath,
 					Offset:   0,
@@ -334,7 +514,7 @@ func runPush(client *dbgapi.Client, token string, args []string) int {
 
 		chunkData := make([]byte, n)
 		copy(chunkData, buf[:n])
-		resp, err := client.WriteFile(dbgapi.WriteFileRequest{
+		resp, err := client.WriteFile(dbg.WriteFileRequest{
 			Token:    token,
 			Path:     remotePath,
 			Offset:   offset,
@@ -390,14 +570,15 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Subcommands:")
 	fmt.Fprintln(os.Stderr, "  cmd     Run a command without shell parsing")
-	fmt.Fprintln(os.Stderr, "  shell   Run a command through shell semantics")
+	fmt.Fprintln(os.Stderr, "  shell   Open an interactive remote shell session")
 	fmt.Fprintln(os.Stderr, "  pull    Download file from remote host")
 	fmt.Fprintln(os.Stderr, "  push    Upload file to remote host")
 	fmt.Fprintln(os.Stderr, "  whoami  Show authenticated identity")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Examples:")
 	fmt.Fprintln(os.Stderr, "  dbg --host=10.0.2.15 --user=admin cmd list /config")
-	fmt.Fprintln(os.Stderr, "  dbg shell \"list /config | read pattern services\"")
+	fmt.Fprintln(os.Stderr, "  dbg shell")
+	fmt.Fprintln(os.Stderr, "  dbg shell -cwd=/config")
 	fmt.Fprintln(os.Stderr, "  dbg pull /config/init.conf ./init.conf")
 	fmt.Fprintln(os.Stderr, "  dbg push ./init.conf /config/init.conf")
 }

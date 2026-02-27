@@ -18,6 +18,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -26,8 +27,9 @@ import (
 	"syscall"
 	"time"
 
-	"avyos.dev/pkg/graphics"
 	displaybackend "avyos.dev/pkg/graphics/backend/display"
+	graphics "avyos.dev/pkg/graphics/input"
+	gfxtheme "avyos.dev/pkg/graphics/theme"
 )
 
 const cursorSize = 12
@@ -48,13 +50,28 @@ type shortcutBinding struct {
 	handler    func(graphics.Event)
 }
 
+// Widget is the rendering/input contract expected by app.App.
+type Widget interface {
+	Draw(buf *graphics.Buffer)
+	Bounds() graphics.Rect
+	SetBounds(r graphics.Rect)
+	MinSize() graphics.Point
+	HandleEvent(ev graphics.Event) bool
+	SetFocused(focused bool)
+	IsFocused() bool
+	IsDirty() bool
+	MarkClean()
+	SetVisible(visible bool)
+	IsVisible() bool
+}
+
 // App represents the main application with a single root widget
 // that fills the entire screen.
 type App struct {
 	backend    graphics.Backend
 	input      graphics.InputHandler
-	root       graphics.Widget
-	focusables []graphics.Widget
+	root       Widget
+	focusables []Widget
 	focusIndex int
 	running    bool
 	background graphics.Color
@@ -67,7 +84,7 @@ type App struct {
 	shortcuts map[uint32]shortcutBinding
 
 	// Damage tracking
-	prevBounds  map[graphics.Widget]graphics.Rect
+	prevBounds  map[Widget]graphics.Rect
 	damageList  []graphics.Rect
 	fullRedraw  bool
 	frameSignal bool
@@ -82,7 +99,7 @@ type App struct {
 }
 
 type childProvider interface {
-	Children() []graphics.Widget
+	Children() []Widget
 }
 
 type selfDirtyProvider interface {
@@ -125,7 +142,7 @@ func New(opts Options) *App {
 	}
 	bg := opts.Background
 	if !opts.BackgroundSet && bg == (graphics.Color{}) {
-		bg = graphics.DefaultTheme.Background
+		bg = gfxtheme.DefaultTheme.Background
 	}
 	return &App{
 		backend:    opts.Backend,
@@ -135,7 +152,7 @@ func New(opts Options) *App {
 		background: bg,
 		fps:        opts.FPS,
 		fullRedraw: true,
-		prevBounds: make(map[graphics.Widget]graphics.Rect),
+		prevBounds: make(map[Widget]graphics.Rect),
 
 		debugFrames: 6,
 		debugColor:  graphics.NewColor(255, 0, 0, 80),
@@ -185,14 +202,14 @@ func (a *App) SetDebugFlashColor(c graphics.Color) {
 
 // SetRoot sets the single root widget. It will be resized to fill the
 // entire screen when Run() is called.
-func (a *App) SetRoot(widget graphics.Widget) {
+func (a *App) SetRoot(widget Widget) {
 	a.root = widget
-	a.prevBounds = make(map[graphics.Widget]graphics.Rect)
+	a.prevBounds = make(map[Widget]graphics.Rect)
 	a.fullRedraw = true
 }
 
 // Root returns the current root widget.
-func (a *App) Root() graphics.Widget {
+func (a *App) Root() Widget {
 	return a.root
 }
 
@@ -259,7 +276,7 @@ func (a *App) registerPendingShortcuts() error {
 		}
 	}
 	if len(failures) > 0 {
-		return fmt.Errorf(strings.Join(failures, "; "))
+		return errors.New(strings.Join(failures, "; "))
 	}
 	return nil
 }
@@ -267,7 +284,7 @@ func (a *App) registerPendingShortcuts() error {
 // AddFocusable registers a widget for keyboard focus (tab navigation).
 // These are typically interactive leaf widgets (buttons, text inputs)
 // that live somewhere inside the root widget tree.
-func (a *App) AddFocusable(widgets ...graphics.Widget) {
+func (a *App) AddFocusable(widgets ...Widget) {
 	for _, w := range widgets {
 		if isNilWidget(w) {
 			continue
@@ -283,7 +300,7 @@ func (a *App) ClearFocusables() {
 }
 
 // Focus sets keyboard focus to a specific widget.
-func (a *App) Focus(widget graphics.Widget) {
+func (a *App) Focus(widget Widget) {
 	if isNilWidget(widget) {
 		return
 	}
@@ -574,7 +591,7 @@ func (a *App) handleEvent(ev graphics.Event) {
 	}
 }
 
-func isNilWidget(w graphics.Widget) bool {
+func isNilWidget(w Widget) bool {
 	if w == nil {
 		return true
 	}
@@ -606,7 +623,7 @@ func (a *App) frame() {
 	}
 
 	// Collect damage from dirty widgets
-	visited := make(map[graphics.Widget]struct{})
+	visited := make(map[Widget]struct{})
 	if a.root != nil {
 		a.collectDamage(a.root, visited)
 	}
@@ -727,7 +744,7 @@ func (a *App) renderFull(buf *graphics.Buffer) {
 			a.root.Draw(buf)
 		}
 		a.root.MarkClean()
-		a.prevBounds = make(map[graphics.Widget]graphics.Rect)
+		a.prevBounds = make(map[Widget]graphics.Rect)
 		a.syncPrevBounds(a.root)
 	}
 
@@ -825,7 +842,7 @@ func (a *App) addDamage(r graphics.Rect) {
 	a.damageList = append(a.damageList, r)
 }
 
-func (a *App) collectDamage(w graphics.Widget, visited map[graphics.Widget]struct{}) {
+func (a *App) collectDamage(w Widget, visited map[Widget]struct{}) {
 	if w == nil {
 		return
 	}
@@ -867,7 +884,7 @@ func (a *App) collectDamage(w graphics.Widget, visited map[graphics.Widget]struc
 	}
 }
 
-func (a *App) syncPrevBounds(w graphics.Widget) {
+func (a *App) syncPrevBounds(w Widget) {
 	if w == nil {
 		return
 	}
@@ -879,7 +896,7 @@ func (a *App) syncPrevBounds(w graphics.Widget) {
 	}
 }
 
-func (a *App) prunePrevBounds(visited map[graphics.Widget]struct{}) {
+func (a *App) prunePrevBounds(visited map[Widget]struct{}) {
 	for w := range a.prevBounds {
 		if _, ok := visited[w]; !ok {
 			delete(a.prevBounds, w)

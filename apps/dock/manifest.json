@@ -1,8 +1,6 @@
 {
   "id": "dev.avyos.dock",
   "name": "Dock",
-  "description": "macOS-style app dock with pinning and running app indicators.",
-  "icon": "dock",
-  "hidden": true,
-  "dock": true
+  "description": "Application dock",
+  "hidden": true
 }

@@ -1,0 +1,536 @@
+Page {
+    spacing: 8
+    padding: "10"
+    overflow: "hidden"
+
+    VBox {
+        spacing: 8
+        expand: true
+
+        ToolRow {
+            spacing: 8
+
+            IconButton {
+                id: BackBtn
+                text: "←"
+                onClicked: GoBack
+                expand: false
+                minWidth: 36
+                padding: "8 12"
+            }
+
+            IconButton {
+                id: ForwardBtn
+                text: "→"
+                onClicked: GoForward
+                expand: false
+                minWidth: 36
+                padding: "8 12"
+            }
+
+            IconButton {
+                id: UpBtn
+                text: "↑"
+                onClicked: GoUp
+                expand: false
+                minWidth: 36
+                padding: "8 12"
+            }
+
+            TextInput {
+                id: Address
+                placeholder: "/"
+                onSubmitted: Navigate
+                expand: true
+            }
+
+            PrimaryButton {
+                id: GoBtn
+                text: "↻"
+                onClicked: GoAddress
+                expand: false
+            }
+
+            SearchInput {
+                id: FilterInput
+                placeholder: "Search"
+                onChanged: FilterChanged
+                minWidth: 220
+                expand: false
+            }
+
+            IconButton {
+                id: RefreshBtn
+                text: "⌕"
+                onClicked: Refresh
+                expand: false
+                minWidth: 36
+                padding: "8 12"
+            }
+        }
+
+        HSeparator {}
+
+        HBox {
+            spacing: 10
+            expand: true
+
+            Card {
+                id: SidebarPane
+                expand: false
+                minWidth: 230
+                padding: "10"
+
+                ScrollView {
+                    id: SidebarContent
+                    expand: true
+                    overflow: "auto"
+                    scrollStep: 32
+                    spacing: 6
+
+                    Subheading {
+                        text: "Favorites"
+                        expand: false
+                    }
+
+                    Button {
+                        id: PlaceHomeBtn
+                        onClicked: OpenPlaceHome
+                        minHeight: 34
+                        textAlign: "left"
+                        padding: "6 10"
+                        expand: false
+
+                        HBox {
+                            spacing: 8
+                            expand: false
+
+                            Image {
+                                id: PlaceHomeIcon
+                                minWidth: 18
+                                minHeight: 18
+                                expand: false
+                            }
+
+                            Label {
+                                text: "Home"
+                                expand: false
+                            }
+                        }
+                    }
+
+                    Button {
+                        id: PlaceDocumentsBtn
+                        onClicked: OpenPlaceDocuments
+                        minHeight: 34
+                        textAlign: "left"
+                        padding: "6 10"
+                        expand: false
+
+                        HBox {
+                            spacing: 8
+                            expand: false
+
+                            Image {
+                                id: PlaceDocumentsIcon
+                                minWidth: 18
+                                minHeight: 18
+                                expand: false
+                            }
+
+                            Label {
+                                text: "Document"
+                                expand: false
+                            }
+                        }
+                    }
+
+                    Button {
+                        id: PlaceDownloadsBtn
+                        onClicked: OpenPlaceDownloads
+                        minHeight: 34
+                        textAlign: "left"
+                        padding: "6 10"
+                        expand: false
+
+                        HBox {
+                            spacing: 8
+                            expand: false
+
+                            Image {
+                                id: PlaceDownloadsIcon
+                                minWidth: 18
+                                minHeight: 18
+                                expand: false
+                            }
+
+                            Label {
+                                text: "Downloads"
+                                expand: false
+                            }
+                        }
+                    }
+
+                    Button {
+                        id: PlacePicturesBtn
+                        onClicked: OpenPlacePictures
+                        minHeight: 34
+                        textAlign: "left"
+                        padding: "6 10"
+                        expand: false
+
+                        HBox {
+                            spacing: 8
+                            expand: false
+
+                            Image {
+                                id: PlacePicturesIcon
+                                minWidth: 18
+                                minHeight: 18
+                                expand: false
+                            }
+
+                            Label {
+                                text: "Pictures"
+                                expand: false
+                            }
+                        }
+                    }
+
+                    Button {
+                        id: PlaceVideosBtn
+                        onClicked: OpenPlaceVideos
+                        minHeight: 34
+                        textAlign: "left"
+                        padding: "6 10"
+                        expand: false
+
+                        HBox {
+                            spacing: 8
+                            expand: false
+
+                            Image {
+                                id: PlaceVideosIcon
+                                minWidth: 18
+                                minHeight: 18
+                                expand: false
+                            }
+
+                            Label {
+                                text: "Videos"
+                                expand: false
+                            }
+                        }
+                    }
+
+                    HSeparator {}
+
+                    Subheading {
+                        text: "Locations"
+                        expand: false
+                    }
+
+                    Button {
+                        id: DriveBtn0
+                        onClicked: OpenDrive0
+                        minHeight: 34
+                        textAlign: "left"
+                        padding: "6 10"
+                        expand: false
+
+                        HBox {
+                            spacing: 8
+                            expand: false
+
+                            Image {
+                                id: DriveIcon0
+                                minWidth: 18
+                                minHeight: 18
+                                expand: false
+                            }
+
+                            Label {
+                                id: DriveLabel0
+                                text: "-"
+                                expand: false
+                            }
+                        }
+                    }
+
+                    Button {
+                        id: DriveBtn1
+                        onClicked: OpenDrive1
+                        minHeight: 34
+                        textAlign: "left"
+                        padding: "6 10"
+                        expand: false
+
+                        HBox {
+                            spacing: 8
+                            expand: false
+
+                            Image {
+                                id: DriveIcon1
+                                minWidth: 18
+                                minHeight: 18
+                                expand: false
+                            }
+
+                            Label {
+                                id: DriveLabel1
+                                text: "-"
+                                expand: false
+                            }
+                        }
+                    }
+
+                    Button {
+                        id: DriveBtn2
+                        onClicked: OpenDrive2
+                        minHeight: 34
+                        textAlign: "left"
+                        padding: "6 10"
+                        expand: false
+
+                        HBox {
+                            spacing: 8
+                            expand: false
+
+                            Image {
+                                id: DriveIcon2
+                                minWidth: 18
+                                minHeight: 18
+                                expand: false
+                            }
+
+                            Label {
+                                id: DriveLabel2
+                                text: "-"
+                                expand: false
+                            }
+                        }
+                    }
+
+                    Button {
+                        id: DriveBtn3
+                        onClicked: OpenDrive3
+                        minHeight: 34
+                        textAlign: "left"
+                        padding: "6 10"
+                        expand: false
+
+                        HBox {
+                            spacing: 8
+                            expand: false
+
+                            Image {
+                                id: DriveIcon3
+                                minWidth: 18
+                                minHeight: 18
+                                expand: false
+                            }
+
+                            Label {
+                                id: DriveLabel3
+                                text: "-"
+                                expand: false
+                            }
+                        }
+                    }
+
+                    Button {
+                        id: DriveBtn4
+                        onClicked: OpenDrive4
+                        minHeight: 34
+                        textAlign: "left"
+                        padding: "6 10"
+                        expand: false
+
+                        HBox {
+                            spacing: 8
+                            expand: false
+
+                            Image {
+                                id: DriveIcon4
+                                minWidth: 18
+                                minHeight: 18
+                                expand: false
+                            }
+
+                            Label {
+                                id: DriveLabel4
+                                text: "-"
+                                expand: false
+                            }
+                        }
+                    }
+
+                    Button {
+                        id: DriveBtn5
+                        onClicked: OpenDrive5
+                        minHeight: 34
+                        textAlign: "left"
+                        padding: "6 10"
+                        expand: false
+
+                        HBox {
+                            spacing: 8
+                            expand: false
+
+                            Image {
+                                id: DriveIcon5
+                                minWidth: 18
+                                minHeight: 18
+                                expand: false
+                            }
+
+                            Label {
+                                id: DriveLabel5
+                                text: "-"
+                                expand: false
+                            }
+                        }
+                    }
+
+                    Button {
+                        id: RefreshDrivesBtn
+                        text: "Refresh Drives"
+                        onClicked: RefreshDrives
+                        expand: false
+                    }
+                }
+            }
+
+            VBox {
+                id: BrowserPane
+                expand: true
+                spacing: 6
+
+                Card {
+                    id: HeaderBar
+                    padding: "8 10"
+                    expand: false
+
+                    HBox {
+                        spacing: 8
+
+                        Subheading {
+                            text: "Name"
+                            minWidth: 280
+                            expand: false
+                        }
+
+                        Subheading {
+                            text: "Size"
+                            minWidth: 90
+                            expand: false
+                        }
+
+                        Subheading {
+                            text: "Type"
+                            minWidth: 120
+                            expand: false
+                        }
+
+                        Subheading {
+                            text: "Modified"
+                            expand: true
+                        }
+                    }
+                }
+
+                Stack {
+                    id: BrowserStack
+                    active: 0
+                    expand: true
+
+                    ListView {
+                        id: FileList
+                        rowHeight: 34
+                        onChanged: SelectEntry
+                    }
+
+                    VBox {
+                        id: IconPane
+                        spacing: 8
+                        expand: true
+
+                        Flow {
+                            id: IconGrid
+                            expand: true
+                            overflow: "auto"
+                            scrollStep: 32
+                            colSpacing: 10
+                            rowSpacing: 10
+                            padding: "4"
+
+                        }
+                    }
+                }
+
+            }
+        }
+    }
+
+    Card {
+        id: ContextMenu
+        visible: false
+        expand: false
+        padding: "6 8"
+        background: "theme.color.surface.glassraised"
+        borderColor: "theme.color.accent"
+        focusedBorderColor: "theme.color.accent"
+
+        HBox {
+            spacing: 8
+            expand: false
+
+            Label {
+                id: ContextLabel
+                text: "Actions"
+                expand: true
+                clipText: true
+            }
+
+            Button {
+                text: "Rename"
+                onClicked: ContextRename
+                expand: false
+                minWidth: 90
+            }
+
+            Button {
+                text: "New Folder"
+                onClicked: ContextNewFolder
+                expand: false
+                minWidth: 110
+            }
+
+            Button {
+                text: "New File"
+                onClicked: ContextNewFile
+                expand: false
+                minWidth: 90
+            }
+
+            Button {
+                text: "Refresh"
+                onClicked: ContextRefresh
+                expand: false
+                minWidth: 86
+            }
+
+            DangerButton {
+                text: "Delete"
+                onClicked: ContextDelete
+                expand: false
+                minWidth: 86
+            }
+        }
+    }
+
+    StatusLabel {
+        id: Status
+        text: "Ready"
+    }
+}

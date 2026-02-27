@@ -82,6 +82,10 @@ func (s *session) run() {
 	}
 	_ = os.Chown(s.id.Home, int(s.id.ID), int(s.id.ID))
 
+	if err := os.MkdirAll(fs.Resolve("system:user"), 0755); err != nil {
+		serviceLog.Error("failed to create user runtime dir: %v", err)
+	}
+
 	if err := ensureUserRuntimeDir(uid, gid); err != nil {
 		serviceLog.Warn("failed to setup user runtime dir: %v", err)
 	}

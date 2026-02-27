@@ -277,7 +277,7 @@ func executeSingle(line string) int {
 	}
 
 	// Execute external command
-	cmd := exec.Command(fs.Resolve(args[0]), args[1:]...)
+	cmd := exec.Command(fs.Resolve("%s", args[0]), args[1:]...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

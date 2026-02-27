@@ -17,7 +17,7 @@
 
 package evdev
 
-import "avyos.dev/pkg/graphics"
+import graphics "avyos.dev/pkg/graphics/input"
 
 // KeyboardLayout represents a keyboard layout.
 type KeyboardLayout string

@@ -28,10 +28,11 @@ import (
 	displayapi "avyos.dev/api/display"
 	loginapi "avyos.dev/api/login"
 	"avyos.dev/pkg/fs"
-	"avyos.dev/pkg/graphics"
 	gapp "avyos.dev/pkg/graphics/app"
+	declapp "avyos.dev/pkg/graphics/app/decl"
 	displaybackend "avyos.dev/pkg/graphics/backend/display"
-	"avyos.dev/pkg/graphics/ui"
+	gfxtheme "avyos.dev/pkg/graphics/theme"
+	ui "avyos.dev/pkg/graphics/widget/engine"
 	"avyos.dev/pkg/identity"
 	"avyos.dev/pkg/logger"
 	"avyos.dev/pkg/sutra"
@@ -296,7 +297,7 @@ func showLogin() (*identity.Identity, error) {
 		Title:      "Login",
 		Backend:    backend,
 		Input:      backend,
-		Background: graphics.DefaultTheme.Background,
+		Background: gfxtheme.DefaultTheme.Background,
 	})
 
 	if err := app.LoadString(loginUI, app); err != nil {
@@ -321,7 +322,7 @@ func showLogin() (*identity.Identity, error) {
 }
 
 type loginApp struct {
-	ui.App
+	declapp.App
 	result *identity.Identity
 }
 

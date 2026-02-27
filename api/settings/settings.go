@@ -35,7 +35,7 @@ const (
 )
 
 func Connect() (*Client, error) {
-	client, err := NewClient(fs.Resolve("user-service:" + ServiceName))
+	client, err := NewClient(fs.Resolve("user:%s", ServiceName))
 	if err != nil {
 		return nil, err
 	}

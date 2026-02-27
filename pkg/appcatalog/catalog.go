@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"avyos.dev/pkg/graphics"
+	gfxicons "avyos.dev/pkg/graphics/icons"
 )
 
 type Manifest struct {
@@ -304,21 +304,21 @@ func resolveLocalIcon(root, appDir, iconName, id string) string {
 		}
 	}
 	if iconName != "" {
-		if p := graphics.ResolveIconPath(iconName, 64); p != "" {
+		if p := gfxicons.ResolvePath(iconName, 64); p != "" {
 			return p
 		}
 	}
 	if id != "" {
-		if p := graphics.ResolveIconPath(id, 64); p != "" {
+		if p := gfxicons.ResolvePath(id, 64); p != "" {
 			return p
 		}
 		if shortID := strings.TrimPrefix(id, appIDPrefix); shortID != id {
-			if p := graphics.ResolveIconPath(shortID, 64); p != "" {
+			if p := gfxicons.ResolvePath(shortID, 64); p != "" {
 				return p
 			}
 		}
 	}
-	return graphics.ResolveIconPath("help", 64)
+	return gfxicons.ResolvePath("help", 64)
 }
 
 func normalizeID(id string) string {

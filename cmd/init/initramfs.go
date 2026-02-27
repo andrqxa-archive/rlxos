@@ -97,11 +97,11 @@ func parseKernelFlags() error {
 
 		switch k {
 		case "root":
-			rootfs = fs.Resolve(v)
+			rootfs = fs.Resolve("%s", v)
 		case "rootfstype":
 			rootfsType = v
 		case "avyos":
-			avyosfs = fs.Resolve(v)
+			avyosfs = fs.Resolve("%s", v)
 		case "avyosfstype":
 			avysofsType = v
 		case "live":

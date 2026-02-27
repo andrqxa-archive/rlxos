@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"avyos.dev/pkg/graphics"
+	gfxfont "avyos.dev/pkg/graphics/font"
 	"avyos.dev/pkg/ini"
 	xfont "golang.org/x/image/font"
 )
@@ -28,16 +28,16 @@ hinting = vertical
 	if spec.Name != "inter" {
 		t.Fatalf("name = %q, want inter", spec.Name)
 	}
-	if got := spec.RoleSizes[graphics.UIFontParagraph]; got != 16 {
+	if got := spec.RoleSizes[gfxfont.UIFontParagraph]; got != 16 {
 		t.Fatalf("paragraph size = %v, want 16", got)
 	}
-	if got := spec.RoleSizes[graphics.UIFontSubheading]; got != 18 {
+	if got := spec.RoleSizes[gfxfont.UIFontSubheading]; got != 18 {
 		t.Fatalf("subheading size = %v, want 18", got)
 	}
-	if got := spec.RoleSizes[graphics.UIFontHeading]; got != 20 {
+	if got := spec.RoleSizes[gfxfont.UIFontHeading]; got != 20 {
 		t.Fatalf("heading size = %v, want 20", got)
 	}
-	if got := spec.RoleSizes[graphics.UIFontTitle]; got != 24 {
+	if got := spec.RoleSizes[gfxfont.UIFontTitle]; got != 24 {
 		t.Fatalf("title size = %v, want 24", got)
 	}
 	if spec.BaseOpts.DPI != 96 {
@@ -91,16 +91,16 @@ title_size = 30
 	if !ok {
 		t.Fatalf("pickConfiguredFont() expected configured font")
 	}
-	if got := spec.RoleSizes[graphics.UIFontParagraph]; got != 15 {
+	if got := spec.RoleSizes[gfxfont.UIFontParagraph]; got != 15 {
 		t.Fatalf("paragraph size = %v, want 15", got)
 	}
-	if got := spec.RoleSizes[graphics.UIFontSubheading]; got != 18 {
+	if got := spec.RoleSizes[gfxfont.UIFontSubheading]; got != 18 {
 		t.Fatalf("subheading size = %v, want 18", got)
 	}
-	if got := spec.RoleSizes[graphics.UIFontHeading]; got != 22 {
+	if got := spec.RoleSizes[gfxfont.UIFontHeading]; got != 22 {
 		t.Fatalf("heading size = %v, want 22", got)
 	}
-	if got := spec.RoleSizes[graphics.UIFontTitle]; got != 30 {
+	if got := spec.RoleSizes[gfxfont.UIFontTitle]; got != 30 {
 		t.Fatalf("title size = %v, want 30", got)
 	}
 }
