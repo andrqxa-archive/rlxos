@@ -188,7 +188,7 @@ func listen() (*net.UnixListener, string, error) {
 
 	display := os.Getenv("WAYLAND_DISPLAY")
 	if display == "" {
-		display = "waylayer"
+		display = "dev.avyos.waylayer"
 	}
 	socketPath := runtimeDir + "/" + display
 

@@ -1,24 +1,8 @@
-Element {
-    title: "Waylayer"
-    scrollable: true
-    scrollStep: 40
+VBox {
+    spacing: 12
+    padding: "18"
 
-    VBox {
-        spacing: 12
-        padding: "18"
-
-        Label {
-            text: "Waylayer"
-            fontRole: "title"
-        }
-
-        Label {
-            id: SummaryText
-            text: ""
-        }
-
-        HSeparator {}
-
+    Card {
         Label {
             text: "Advertised Globals"
             fontRole: "heading"
@@ -28,9 +12,9 @@ Element {
             id: GlobalList
             spacing: 4
         }
-
-        HSeparator {}
-
+    }
+    
+    Card {
         Label {
             text: "Implemented Objects"
             fontRole: "heading"
@@ -40,9 +24,9 @@ Element {
             id: ObjectList
             spacing: 4
         }
-
-        HSeparator {}
-
+    }
+    
+    Card {
         Label {
             text: "Implemented Event Forwarding"
             fontRole: "heading"
@@ -51,21 +35,6 @@ Element {
         VBox {
             id: EventList
             spacing: 4
-        }
-
-        HSeparator {}
-
-        HBox {
-            spacing: 8
-            alignment: "end"
-
-            Button {
-                text: "Close"
-                minWidth: 96
-                minHeight: 36
-                onClicked: QuitWindow
-                expand: false
-            }
         }
     }
 }

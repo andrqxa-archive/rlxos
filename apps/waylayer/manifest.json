@@ -1,7 +1,5 @@
 {
     "id": "dev.avyos.waylayer",
     "name": "Waylayer",
-    "description": "Wayland translation layer to display service",
-    "icon": "wayland",
-    "hidden": true
+    "description": "Wayland translation layer to display service"
 }
