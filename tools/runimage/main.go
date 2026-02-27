@@ -31,6 +31,7 @@ var (
 	flagCPU     string
 	flagMemory  string
 	flagVNC     string
+	flagAccel   string
 	flagDBGPort int
 )
 
@@ -40,7 +41,9 @@ func init() {
 	flag.StringVar(&flagCPU, "cpu", "2", "CPU to allocate for emulator")
 	flag.StringVar(&flagMemory, "memory", "2G", "Memory to allocate for emulator")
 	flag.StringVar(&flagVNC, "vnc", "", "Start VNC server")
+	flag.StringVar(&flagAccel, "accel", "", "Hardware Acceleration")
 	flag.IntVar(&flagDBGPort, "dbg-port", 5037, "Forward host TCP port to guest dbgd port 5037 (0 disables)")
+
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "runimage - Download and run AvyOS image in QEMU")
 		fmt.Fprintln(os.Stderr)
@@ -106,15 +109,20 @@ func run(args []string) error {
 	}
 	qemuArgs = append(qemuArgs, "-nic", nicArg)
 
-	switch runtime.GOOS {
-	case "linux":
-		if fs.Exists("/dev/kvm") {
-			fmt.Println("[*] Using kvm hardware acceleration")
-			qemuArgs = append(qemuArgs, "-accel", "kvm")
+	if flagAccel != "none" {
+		if flagAccel == "" {
+			switch runtime.GOOS {
+			case "linux":
+				if fs.Exists("/dev/kvm") {
+					fmt.Println("[*] Using kvm hardware acceleration")
+					flagAccel = "kvm"
+				}
+			case "darwin":
+				fmt.Println("[*] Using hcf hardware acceleration")
+				flagAccel = "hvf"
+			}
 		}
-	case "darwin":
-		fmt.Println("[*] Using hcf hardware acceleration")
-		qemuArgs = append(qemuArgs, "-accel", "hvf")
+		qemuArgs = append(qemuArgs, "-accel", flagAccel)
 	}
 
 	switch arch {
