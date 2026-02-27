@@ -23,13 +23,13 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"avyos.dev/pkg/format"
+	avynet "avyos.dev/pkg/net"
 )
 
 func init() {
@@ -164,13 +164,14 @@ func cmdFetch(args []string) error {
 		url = "https://" + url
 	}
 
-	resp, err := http.Get(url)
+	client := avynet.NewClient()
+	resp, err := client.Get(url)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
 
