@@ -20,6 +20,7 @@ package distro
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"avyos.dev/pkg/sutra"
 )
@@ -32,51 +33,48 @@ func (c *Client) Raw() *sutra.Client {
 	return c.client
 }
 
-func (c *Client) ListDistros(available bool) ([]DistroInfo, error) {
-	resp, err := c.List(ListRequest{Available: available})
-	if err != nil {
-		return nil, err
-	}
-	return resp.Items, nil
+func (c *Client) GetStatus() (StatusResponse, error) {
+	return c.Status(Empty{})
 }
 
-func (c *Client) PullDistro(name, url string) error {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return fmt.Errorf("distro name required")
+func (c *Client) InstallDistro(url string) error {
+	prev := c.timeout
+	if c.timeout < installTimeout {
+		c.timeout = installTimeout
 	}
-	_, err := c.Pull(PullRequest{Name: name, URL: strings.TrimSpace(url)})
+	defer func() {
+		c.timeout = prev
+	}()
+
+	_, err := c.Install(InstallRequest{URL: strings.TrimSpace(url)})
 	return err
 }
 
 func (c *Client) RunDistro(req RunRequest) (RunResult, error) {
-	req.Distro = strings.TrimSpace(req.Distro)
-	if req.Distro == "" {
-		return RunResult{}, fmt.Errorf("distro name required")
-	}
 	if strings.TrimSpace(req.Workdir) == "" {
 		req.Workdir = "/"
 	}
 	if strings.TrimSpace(req.Command) == "" {
 		req.Command = defaultCommand
 	}
+
+	prev := c.timeout
+	if c.timeout < runTimeout {
+		c.timeout = runTimeout
+	}
+	defer func() {
+		c.timeout = prev
+	}()
+
 	return c.Run(req)
 }
 
-func (c *Client) RemoveDistro(name string) error {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return fmt.Errorf("distro name required")
-	}
-	_, err := c.Remove(RemoveRequest{Name: name})
+func (c *Client) Uninstall() error {
+	_, err := c.Remove(Empty{})
 	return err
 }
 
 func (c *Client) OpenShell(req ShellOpenRequest) (uint32, error) {
-	req.Distro = strings.TrimSpace(req.Distro)
-	if req.Distro == "" {
-		return 0, fmt.Errorf("distro name required")
-	}
 	if strings.TrimSpace(req.Workdir) == "" {
 		req.Workdir = "/"
 	}
@@ -166,4 +164,6 @@ const (
 	defaultShell   = "/bin/sh"
 	commandSep     = "\x00"
 	defaultCommand = "/bin/sh"
+	installTimeout = 30 * time.Minute
+	runTimeout     = 30 * time.Minute
 )

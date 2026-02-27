@@ -16,8 +16,8 @@ const (
 )
 
 const (
-	RequestList        uint16 = 0x0201
-	RequestPull        uint16 = 0x0202
+	RequestStatus      uint16 = 0x0201
+	RequestInstall     uint16 = 0x0202
 	RequestRun         uint16 = 0x0203
 	RequestRemove      uint16 = 0x0204
 	RequestShellOpen   uint16 = 0x0205
@@ -52,128 +52,61 @@ func (v *Empty) UnmarshalBinary(data []byte) error {
 	return dec.Err()
 }
 
-type ListRequest struct {
-	Available bool
+type StatusResponse struct {
+	Installed bool
+	Path      string
+	Size      int
 }
 
-func (v ListRequest) encodeTo(enc *sutra.Encoder) {
-	enc.PutBool(v.Available)
-}
-
-func (v *ListRequest) decodeFrom(dec *sutra.Decoder) {
-	v.Available = dec.Bool()
-}
-
-func (v ListRequest) MarshalBinary() []byte {
-	enc := sutra.NewEncoder(64)
-	v.encodeTo(enc)
-	return enc.Bytes()
-}
-
-func (v *ListRequest) UnmarshalBinary(data []byte) error {
-	dec := sutra.NewDecoder(data)
-	v.decodeFrom(dec)
-	return dec.Err()
-}
-
-type DistroInfo struct {
-	Name    string
-	URL     string
-	Version string
-	Path    string
-	Size    int
-}
-
-func (v DistroInfo) encodeTo(enc *sutra.Encoder) {
-	enc.PutString(v.Name)
-	enc.PutString(v.URL)
-	enc.PutString(v.Version)
+func (v StatusResponse) encodeTo(enc *sutra.Encoder) {
+	enc.PutBool(v.Installed)
 	enc.PutString(v.Path)
 	enc.PutInt(v.Size)
 }
 
-func (v *DistroInfo) decodeFrom(dec *sutra.Decoder) {
-	v.Name = dec.String()
-	v.URL = dec.String()
-	v.Version = dec.String()
+func (v *StatusResponse) decodeFrom(dec *sutra.Decoder) {
+	v.Installed = dec.Bool()
 	v.Path = dec.String()
 	v.Size = dec.Int()
 }
 
-func (v DistroInfo) MarshalBinary() []byte {
+func (v StatusResponse) MarshalBinary() []byte {
 	enc := sutra.NewEncoder(64)
 	v.encodeTo(enc)
 	return enc.Bytes()
 }
 
-func (v *DistroInfo) UnmarshalBinary(data []byte) error {
+func (v *StatusResponse) UnmarshalBinary(data []byte) error {
 	dec := sutra.NewDecoder(data)
 	v.decodeFrom(dec)
 	return dec.Err()
 }
 
-type DistroList struct {
-	Items []DistroInfo
+type InstallRequest struct {
+	URL string
 }
 
-func (v DistroList) encodeTo(enc *sutra.Encoder) {
-	enc.PutUint32(uint32(len(v.Items)))
-	for i := range v.Items {
-		v.Items[i].encodeTo(enc)
-	}
-}
-
-func (v *DistroList) decodeFrom(dec *sutra.Decoder) {
-	{
-		n := int(dec.Uint32())
-		v.Items = make([]DistroInfo, n)
-		for i := range v.Items {
-			v.Items[i].decodeFrom(dec)
-		}
-	}
-}
-
-func (v DistroList) MarshalBinary() []byte {
-	enc := sutra.NewEncoder(64)
-	v.encodeTo(enc)
-	return enc.Bytes()
-}
-
-func (v *DistroList) UnmarshalBinary(data []byte) error {
-	dec := sutra.NewDecoder(data)
-	v.decodeFrom(dec)
-	return dec.Err()
-}
-
-type PullRequest struct {
-	Name string
-	URL  string
-}
-
-func (v PullRequest) encodeTo(enc *sutra.Encoder) {
-	enc.PutString(v.Name)
+func (v InstallRequest) encodeTo(enc *sutra.Encoder) {
 	enc.PutString(v.URL)
 }
 
-func (v *PullRequest) decodeFrom(dec *sutra.Decoder) {
-	v.Name = dec.String()
+func (v *InstallRequest) decodeFrom(dec *sutra.Decoder) {
 	v.URL = dec.String()
 }
 
-func (v PullRequest) MarshalBinary() []byte {
+func (v InstallRequest) MarshalBinary() []byte {
 	enc := sutra.NewEncoder(64)
 	v.encodeTo(enc)
 	return enc.Bytes()
 }
 
-func (v *PullRequest) UnmarshalBinary(data []byte) error {
+func (v *InstallRequest) UnmarshalBinary(data []byte) error {
 	dec := sutra.NewDecoder(data)
 	v.decodeFrom(dec)
 	return dec.Err()
 }
 
 type RunRequest struct {
-	Distro  string
 	Command string
 	Workdir string
 	Bind    string
@@ -182,7 +115,6 @@ type RunRequest struct {
 }
 
 func (v RunRequest) encodeTo(enc *sutra.Encoder) {
-	enc.PutString(v.Distro)
 	enc.PutString(v.Command)
 	enc.PutString(v.Workdir)
 	enc.PutString(v.Bind)
@@ -191,7 +123,6 @@ func (v RunRequest) encodeTo(enc *sutra.Encoder) {
 }
 
 func (v *RunRequest) decodeFrom(dec *sutra.Decoder) {
-	v.Distro = dec.String()
 	v.Command = dec.String()
 	v.Workdir = dec.String()
 	v.Bind = dec.String()
@@ -241,32 +172,7 @@ func (v *RunResult) UnmarshalBinary(data []byte) error {
 	return dec.Err()
 }
 
-type RemoveRequest struct {
-	Name string
-}
-
-func (v RemoveRequest) encodeTo(enc *sutra.Encoder) {
-	enc.PutString(v.Name)
-}
-
-func (v *RemoveRequest) decodeFrom(dec *sutra.Decoder) {
-	v.Name = dec.String()
-}
-
-func (v RemoveRequest) MarshalBinary() []byte {
-	enc := sutra.NewEncoder(64)
-	v.encodeTo(enc)
-	return enc.Bytes()
-}
-
-func (v *RemoveRequest) UnmarshalBinary(data []byte) error {
-	dec := sutra.NewDecoder(data)
-	v.decodeFrom(dec)
-	return dec.Err()
-}
-
 type ShellOpenRequest struct {
-	Distro  string
 	Workdir string
 	Bind    string
 	Env     string
@@ -275,7 +181,6 @@ type ShellOpenRequest struct {
 }
 
 func (v ShellOpenRequest) encodeTo(enc *sutra.Encoder) {
-	enc.PutString(v.Distro)
 	enc.PutString(v.Workdir)
 	enc.PutString(v.Bind)
 	enc.PutString(v.Env)
@@ -284,7 +189,6 @@ func (v ShellOpenRequest) encodeTo(enc *sutra.Encoder) {
 }
 
 func (v *ShellOpenRequest) decodeFrom(dec *sutra.Decoder) {
-	v.Distro = dec.String()
 	v.Workdir = dec.String()
 	v.Bind = dec.String()
 	v.Env = dec.String()
@@ -490,32 +394,32 @@ func (c *Client) SetTimeout(timeout time.Duration) {
 	c.timeout = timeout
 }
 
-func (c *Client) List(req ListRequest) (DistroList, error) {
+func (c *Client) Status(req Empty) (StatusResponse, error) {
 	payload, err := encodePayload(req)
 	if err != nil {
-		var zero DistroList
+		var zero StatusResponse
 		return zero, err
 	}
-	resp, err := c.client.Call(sutra.IDService, RequestList, payload, c.timeout)
+	resp, err := c.client.Call(sutra.IDService, RequestStatus, payload, c.timeout)
 	if err != nil {
-		var zero DistroList
+		var zero StatusResponse
 		return zero, err
 	}
-	var out DistroList
+	var out StatusResponse
 	if err := decodePayload(resp.Payload, &out); err != nil {
-		var zero DistroList
+		var zero StatusResponse
 		return zero, err
 	}
 	return out, nil
 }
 
-func (c *Client) Pull(req PullRequest) (Empty, error) {
+func (c *Client) Install(req InstallRequest) (Empty, error) {
 	payload, err := encodePayload(req)
 	if err != nil {
 		var zero Empty
 		return zero, err
 	}
-	resp, err := c.client.Call(sutra.IDService, RequestPull, payload, c.timeout)
+	resp, err := c.client.Call(sutra.IDService, RequestInstall, payload, c.timeout)
 	if err != nil {
 		var zero Empty
 		return zero, err
@@ -547,7 +451,7 @@ func (c *Client) Run(req RunRequest) (RunResult, error) {
 	return out, nil
 }
 
-func (c *Client) Remove(req RemoveRequest) (Empty, error) {
+func (c *Client) Remove(req Empty) (Empty, error) {
 	payload, err := encodePayload(req)
 	if err != nil {
 		var zero Empty

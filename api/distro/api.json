@@ -3,7 +3,7 @@
     "name": "dev.avyos.distro",
     "id": "0x00000070",
     "package": "distro",
-    "description": "Distribution image management API with pull/run/shell lifecycle operations."
+    "description": "Linux distribution management API with install/run/shell lifecycle operations."
   },
   "types": [
     {
@@ -11,30 +11,12 @@
       "description": "Empty payload used for requests and responses without data."
     },
     {
-      "name": "ListRequest",
-      "description": "Filter for listing available and installed distros.",
+      "name": "StatusResponse",
+      "description": "Current state of the Linux distribution rootfs.",
       "fields": [
         {
-          "name": "Available",
+          "name": "Installed",
           "type": "bool"
-        }
-      ]
-    },
-    {
-      "name": "DistroInfo",
-      "description": "Metadata for one distro image.",
-      "fields": [
-        {
-          "name": "Name",
-          "type": "string"
-        },
-        {
-          "name": "URL",
-          "type": "string"
-        },
-        {
-          "name": "Version",
-          "type": "string"
         },
         {
           "name": "Path",
@@ -47,23 +29,9 @@
       ]
     },
     {
-      "name": "DistroList",
-      "description": "Collection of distro metadata entries.",
+      "name": "InstallRequest",
+      "description": "Optional override URL for installing the distribution rootfs.",
       "fields": [
-        {
-          "name": "Items",
-          "type": "[]DistroInfo"
-        }
-      ]
-    },
-    {
-      "name": "PullRequest",
-      "description": "Payload for pulling a distro image by name and source URL.",
-      "fields": [
-        {
-          "name": "Name",
-          "type": "string"
-        },
         {
           "name": "URL",
           "type": "string"
@@ -72,12 +40,8 @@
     },
     {
       "name": "RunRequest",
-      "description": "Execution payload for running a command inside a distro context.",
+      "description": "Execution payload for running a command inside the distribution.",
       "fields": [
-        {
-          "name": "Distro",
-          "type": "string"
-        },
         {
           "name": "Command",
           "type": "string"
@@ -102,7 +66,7 @@
     },
     {
       "name": "RunResult",
-      "description": "Execution output for a distro command run.",
+      "description": "Execution output for a distribution command run.",
       "fields": [
         {
           "name": "Stdout",
@@ -119,23 +83,9 @@
       ]
     },
     {
-      "name": "RemoveRequest",
-      "description": "Payload for removing an installed distro image.",
-      "fields": [
-        {
-          "name": "Name",
-          "type": "string"
-        }
-      ]
-    },
-    {
       "name": "ShellOpenRequest",
-      "description": "Payload to open an interactive shell session in a distro.",
+      "description": "Payload to open an interactive shell session in the distribution.",
       "fields": [
-        {
-          "name": "Distro",
-          "type": "string"
-        },
         {
           "name": "Workdir",
           "type": "string"
@@ -241,21 +191,21 @@
   ],
   "requests": [
     {
-      "name": "List",
+      "name": "Status",
       "id": "0x0201",
-      "request_type": "ListRequest",
-      "response_type": "DistroList",
-      "description": "List installed or available distro images.",
-      "request_description": "Set `Available=true` to query remote/available entries.",
-      "response_description": "Returns distro metadata list."
+      "request_type": "Empty",
+      "response_type": "StatusResponse",
+      "description": "Get the current installation status of the distribution.",
+      "request_description": "No parameters.",
+      "response_description": "Returns installed state, path, and size."
     },
     {
-      "name": "Pull",
+      "name": "Install",
       "id": "0x0202",
-      "request_type": "PullRequest",
+      "request_type": "InstallRequest",
       "response_type": "Empty",
-      "description": "Pull and install a distro image.",
-      "request_description": "Contains distro name and optional source URL.",
+      "description": "Install the distribution rootfs if not already present.",
+      "request_description": "Optional source URL override.",
       "response_description": "No payload is returned."
     },
     {
@@ -263,17 +213,17 @@
       "id": "0x0203",
       "request_type": "RunRequest",
       "response_type": "RunResult",
-      "description": "Run a non-interactive command in a distro environment.",
+      "description": "Run a non-interactive command in the distribution.",
       "request_description": "Command plus execution environment options.",
       "response_description": "Returns stdout, stderr, and exit code."
     },
     {
       "name": "Remove",
       "id": "0x0204",
-      "request_type": "RemoveRequest",
+      "request_type": "Empty",
       "response_type": "Empty",
-      "description": "Remove an installed distro image.",
-      "request_description": "Contains distro name to remove.",
+      "description": "Remove the installed distribution rootfs.",
+      "request_description": "No parameters.",
       "response_description": "No payload is returned."
     },
     {
@@ -281,7 +231,7 @@
       "id": "0x0205",
       "request_type": "ShellOpenRequest",
       "response_type": "ShellSession",
-      "description": "Open an interactive shell session inside a distro.",
+      "description": "Open an interactive shell session in the distribution.",
       "request_description": "Initial shell context and terminal size.",
       "response_description": "Returns the created shell session id."
     },

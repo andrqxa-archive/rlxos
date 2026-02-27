@@ -10,10 +10,10 @@ import (
 )
 
 type APIHandler interface {
-	List(sender uint32, req distroapi.ListRequest) (distroapi.DistroList, error)
-	Pull(sender uint32, req distroapi.PullRequest) (distroapi.Empty, error)
+	Status(sender uint32, req distroapi.Empty) (distroapi.StatusResponse, error)
+	Install(sender uint32, req distroapi.InstallRequest) (distroapi.Empty, error)
 	Run(sender uint32, req distroapi.RunRequest) (distroapi.RunResult, error)
-	Remove(sender uint32, req distroapi.RemoveRequest) (distroapi.Empty, error)
+	Remove(sender uint32, req distroapi.Empty) (distroapi.Empty, error)
 	ShellOpen(sender uint32, req distroapi.ShellOpenRequest) (distroapi.ShellSession, error)
 	ShellInput(sender uint32, req distroapi.ShellInputRequest) error
 	ShellResize(sender uint32, req distroapi.ShellResizeRequest) error
@@ -21,23 +21,23 @@ type APIHandler interface {
 }
 
 func RegisterHandlers(service *sutra.Service, handler APIHandler) {
-	service.Handle(distroapi.RequestList, func(t *sutra.Transaction) ([]byte, error) {
-		var req distroapi.ListRequest
+	service.Handle(distroapi.RequestStatus, func(t *sutra.Transaction) ([]byte, error) {
+		var req distroapi.Empty
 		if err := decodePayload(t.Payload, &req); err != nil {
 			return nil, err
 		}
-		resp, err := handler.List(t.Sender, req)
+		resp, err := handler.Status(t.Sender, req)
 		if err != nil {
 			return nil, err
 		}
 		return encodePayload(resp)
 	})
-	service.Handle(distroapi.RequestPull, func(t *sutra.Transaction) ([]byte, error) {
-		var req distroapi.PullRequest
+	service.Handle(distroapi.RequestInstall, func(t *sutra.Transaction) ([]byte, error) {
+		var req distroapi.InstallRequest
 		if err := decodePayload(t.Payload, &req); err != nil {
 			return nil, err
 		}
-		resp, err := handler.Pull(t.Sender, req)
+		resp, err := handler.Install(t.Sender, req)
 		if err != nil {
 			return nil, err
 		}
@@ -55,7 +55,7 @@ func RegisterHandlers(service *sutra.Service, handler APIHandler) {
 		return encodePayload(resp)
 	})
 	service.Handle(distroapi.RequestRemove, func(t *sutra.Transaction) ([]byte, error) {
-		var req distroapi.RemoveRequest
+		var req distroapi.Empty
 		if err := decodePayload(t.Payload, &req); err != nil {
 			return nil, err
 		}

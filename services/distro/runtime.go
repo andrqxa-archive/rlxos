@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,56 +36,16 @@ import (
 	"avyos.dev/pkg/fs"
 	"avyos.dev/pkg/ini"
 	avynet "avyos.dev/pkg/net"
+	"github.com/ulikunitz/xz"
 )
 
 const defaultShell = "/bin/sh"
-const distroConfigName = "distro.ini"
 
 var (
 	linuxBase = "/linux"
 )
 
-// Distro represents a Linux distribution configuration.
-type Distro struct {
-	Name    string
-	URL     string
-	Version string
-}
-
-// DistroRegistry holds available distros.
-type DistroRegistry struct {
-	Distros []Distro
-}
-
-var archMapping = map[string]string{
-	"arm64": "aarch64",
-	"amd64": "x86_64",
-}
-
-var defaultDistros = DistroRegistry{
-	Distros: []Distro{
-		{
-			Name:    "debian",
-			URL:     "https://cdimage.debian.org/cdimage/cloud/bookworm/latest/debian-12-genericcloud-<goarch>.tar.gz",
-			Version: "12",
-		},
-		{
-			Name:    "ubuntu",
-			URL:     "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.1-base-<goarch>.tar.gz",
-			Version: "24.04",
-		},
-		{
-			Name:    "arch",
-			URL:     "https://archive.archlinux.org/iso/latest/archlinux-bootstrap-<arch>.tar.gz",
-			Version: "rolling",
-		},
-		{
-			Name:    "alpine",
-			URL:     "https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/<arch>/alpine-minirootfs-3.20.3-<arch>.tar.gz",
-			Version: "3.20",
-		},
-	},
-}
+const defaultDebianURL = "https://cdimage.debian.org/cdimage/cloud/bookworm/latest/debian-12-genericcloud-<goarch>.tar.xz"
 
 func init() {
 	if os.Geteuid() != 0 {
@@ -92,233 +53,56 @@ func init() {
 	}
 }
 
-func mappedArch() string {
-	if arch, ok := archMapping[runtime.GOARCH]; ok {
-		return arch
-	}
-	return runtime.GOARCH
-}
-
-func loadDistroRegistry() (DistroRegistry, error) {
-	path := fs.Resolve("config:%s", distroConfigName)
-	if !fs.Exists(path) {
-		return resolveRegistry(defaultDistros, nil), nil
-	}
-
-	cfg, err := ini.ParseFile(path)
-	if err != nil {
-		return DistroRegistry{}, fmt.Errorf("parse config:%s: %w", distroConfigName, err)
-	}
-
-	registry, err := parseDistroRegistry(cfg)
-	if err != nil {
-		return DistroRegistry{}, fmt.Errorf("parse config:%s: %w", distroConfigName, err)
-	}
-
-	return registry, nil
-}
-
-func parseDistroRegistry(cfg *ini.Config) (DistroRegistry, error) {
-	registry := DistroRegistry{Distros: make([]Distro, 0)}
-	seen := make(map[string]bool)
-
-	for _, entry := range cfg.Entries {
-		if entry.Type != ini.EntrySection {
-			continue
-		}
-		section := strings.TrimSpace(entry.Section)
-		if section == "" || seen[section] {
-			continue
-		}
-		seen[section] = true
-
-		if !isEnabled(cfg, section) {
-			continue
-		}
-
-		url := strings.TrimSpace(firstNonEmpty(
-			valueOrEmpty(cfg.Get(section, "url."+runtime.GOARCH)),
-			valueOrEmpty(cfg.Get(section, "url")),
-		))
-		if url == "" {
-			continue
-		}
-
-		version := strings.TrimSpace(valueOrEmpty(cfg.Get(section, "version")))
-		url = expandArchPlaceholders(cfg, section, url)
-
-		registry.Distros = append(registry.Distros, Distro{
-			Name:    section,
-			URL:     url,
-			Version: version,
-		})
-	}
-
-	if len(registry.Distros) == 0 {
-		return DistroRegistry{}, fmt.Errorf("no distro entries found")
-	}
-
-	return registry, nil
-}
-
-func resolveRegistry(registry DistroRegistry, cfg *ini.Config) DistroRegistry {
-	out := DistroRegistry{Distros: make([]Distro, 0, len(registry.Distros))}
-	for _, distro := range registry.Distros {
-		d := distro
-		section := distro.Name
-		if cfg == nil {
-			d.URL = strings.ReplaceAll(d.URL, "<arch>", mappedArch())
-			d.URL = strings.ReplaceAll(d.URL, "<goarch>", runtime.GOARCH)
-		} else {
-			d.URL = expandArchPlaceholders(cfg, section, d.URL)
-		}
-		out.Distros = append(out.Distros, d)
-	}
-	return out
-}
-
-func expandArchPlaceholders(cfg *ini.Config, section, url string) string {
-	arch := mappedArch()
-	if cfg != nil {
-		if v, ok := cfg.Get(section, "arch."+runtime.GOARCH); ok {
-			if value := strings.TrimSpace(v); value != "" {
-				arch = value
-			}
-		} else if v, ok := cfg.Get(section, "arch"); ok {
-			if value := strings.TrimSpace(v); value != "" {
-				arch = value
-			}
-		}
-	}
-	url = strings.ReplaceAll(url, "<arch>", arch)
+func resolveDebianURL() string {
+	url := defaultDebianURL
 	url = strings.ReplaceAll(url, "<goarch>", runtime.GOARCH)
 	return url
 }
 
-func isEnabled(cfg *ini.Config, section string) bool {
-	v, ok := cfg.Get(section, "enabled")
-	if !ok {
-		return true
+func distroStatus() (bool, string, int) {
+	binPath := filepath.Join(linuxBase, "bin")
+	if _, err := os.Stat(binPath); err != nil {
+		return false, linuxBase, 0
 	}
-	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "0", "false", "no", "off":
-		return false
-	default:
-		return true
-	}
+	return true, linuxBase, getDirSize(linuxBase)
 }
 
-func valueOrEmpty(value string, ok bool) string {
-	if !ok {
-		return ""
-	}
-	return value
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func listDistros(showAvailable bool) ([]distroapi.DistroInfo, error) {
-	if showAvailable {
-		registry, err := loadDistroRegistry()
-		if err != nil {
-			return nil, err
-		}
-		items := make([]distroapi.DistroInfo, 0, len(registry.Distros))
-		for _, distro := range registry.Distros {
-			items = append(items, distroapi.DistroInfo{
-				Name:    distro.Name,
-				Version: distro.Version,
-				URL:     distro.URL,
-			})
-		}
-		return items, nil
-	}
-
-	entries, err := os.ReadDir(linuxBase)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []distroapi.DistroInfo{}, nil
-		}
-		return nil, err
-	}
-
-	items := make([]distroapi.DistroInfo, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
-			continue
-		}
-		path := filepath.Join(linuxBase, entry.Name())
-		items = append(items, distroapi.DistroInfo{
-			Name: entry.Name(),
-			Path: path,
-			Size: getDirSize(path),
-		})
-	}
-
-	return items, nil
-}
-
-func pullDistro(name, customURL string) error {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return fmt.Errorf("distro name required")
-	}
+func installDistro(customURL string) error {
 	customURL = strings.TrimSpace(customURL)
+
+	binPath := filepath.Join(linuxBase, "bin")
+	if _, err := os.Stat(binPath); err == nil {
+		return nil // already installed
+	}
 
 	url := customURL
 	if url == "" {
-		registry, err := loadDistroRegistry()
-		if err != nil {
-			return err
-		}
-		for _, distro := range registry.Distros {
-			if distro.Name == name {
-				url = distro.URL
-				break
-			}
-		}
-		if url == "" {
-			return fmt.Errorf("unknown distro: %s (check config:%s or use --url)", name, distroConfigName)
-		}
+		url = resolveDebianURL()
 	}
 
-	targetDir := filepath.Join(linuxBase, name)
-	if _, err := os.Stat(targetDir); err == nil {
-		return fmt.Errorf("distro %s already exists at %s", name, targetDir)
-	}
-
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
+	if err := os.MkdirAll(linuxBase, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	if err := downloadAndExtract(url, targetDir); err != nil {
-		_ = os.RemoveAll(targetDir)
+	if err := downloadAndExtract(url, linuxBase); err != nil {
+		_ = os.RemoveAll(linuxBase)
 		return fmt.Errorf("failed to download: %w", err)
+	}
+	if err := validateExtractedRootfs(linuxBase); err != nil {
+		_ = os.RemoveAll(linuxBase)
+		return fmt.Errorf("invalid rootfs archive: %w", err)
 	}
 
 	for _, dir := range []string{"proc", "sys", "dev", "tmp", "root"} {
-		_ = os.MkdirAll(filepath.Join(targetDir, dir), 0755)
+		_ = os.MkdirAll(filepath.Join(linuxBase, dir), 0755)
 	}
 
 	return nil
 }
 
 func runContainer(req distroapi.RunRequest, uid uint32) (distroapi.RunResult, error) {
-	req.Distro = strings.TrimSpace(req.Distro)
-	if req.Distro == "" {
-		return distroapi.RunResult{}, fmt.Errorf("distro name required")
-	}
-
-	rootfs := filepath.Join(linuxBase, req.Distro)
-	if _, err := os.Stat(rootfs); os.IsNotExist(err) {
-		return distroapi.RunResult{}, fmt.Errorf("distro %s not found (use 'distro pull %s' first)", req.Distro, req.Distro)
+	if _, err := os.Stat(filepath.Join(linuxBase, "bin")); os.IsNotExist(err) {
+		return distroapi.RunResult{}, fmt.Errorf("distro not installed (use 'distro install' first)")
 	}
 
 	workdir := strings.TrimSpace(req.Workdir)
@@ -333,21 +117,15 @@ func runContainer(req distroapi.RunRequest, uid uint32) (distroapi.RunResult, er
 	defer waylandBridge.Close()
 
 	command := distroapi.DecodeCommand(req.Command)
-	return execContainer(rootfs, command, workdir, req.Bind, req.Env, req.Input, waylandBridge.Env(), waylandBridge.RuntimeHost())
+	return execContainer(linuxBase, command, workdir, req.Bind, req.Env, req.Input, waylandBridge.Env(), waylandBridge.RuntimeHost())
 }
 
-func removeDistro(name string) error {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return fmt.Errorf("distro name required")
+func uninstallDistro() error {
+	if _, err := os.Stat(linuxBase); os.IsNotExist(err) {
+		return fmt.Errorf("distro not installed")
 	}
 
-	targetDir := filepath.Join(linuxBase, name)
-	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
-		return fmt.Errorf("distro %s not found", name)
-	}
-
-	if err := os.RemoveAll(targetDir); err != nil {
+	if err := os.RemoveAll(linuxBase); err != nil {
 		return fmt.Errorf("failed to remove: %w", err)
 	}
 	return nil
@@ -872,8 +650,18 @@ func downloadAndExtract(url, targetDir string) error {
 		return fmt.Errorf("http error: %s", resp.Status)
 	}
 
-	if strings.HasSuffix(url, ".tar.gz") || strings.HasSuffix(url, ".tgz") {
+	lowerURL := strings.ToLower(strings.TrimSpace(url))
+	archivePath := lowerURL
+	if parsed, err := neturl.Parse(lowerURL); err == nil && parsed.Path != "" {
+		archivePath = strings.ToLower(parsed.Path)
+	}
+	switch {
+	case strings.HasSuffix(archivePath, ".tar.gz"), strings.HasSuffix(archivePath, ".tgz"):
 		return extractTarGz(resp.Body, targetDir)
+	case strings.HasSuffix(archivePath, ".tar.xz"), strings.HasSuffix(archivePath, ".txz"):
+		return extractTarXz(resp.Body, targetDir)
+	case strings.HasSuffix(archivePath, ".tar"):
+		return extractTar(resp.Body, targetDir)
 	}
 
 	binPath := filepath.Join(targetDir, "bin")
@@ -902,9 +690,23 @@ func extractTarGz(r io.Reader, targetDir string) error {
 	}
 	defer gzr.Close()
 
+	return extractTar(gzr, targetDir)
+}
+
+func extractTarXz(r io.Reader, targetDir string) error {
+	xzr, err := xz.NewReader(r)
+	if err != nil {
+		return fmt.Errorf("create xz reader: %w", err)
+	}
+
+	return extractTar(xzr, targetDir)
+}
+
+func extractTar(r io.Reader, targetDir string) error {
 	base := filepath.Clean(targetDir)
 	prefix := base + string(os.PathSeparator)
-	tr := tar.NewReader(gzr)
+	tr := tar.NewReader(r)
+	entries := 0
 
 	for {
 		header, err := tr.Next()
@@ -923,27 +725,159 @@ func extractTarGz(r io.Reader, targetDir string) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			_ = os.MkdirAll(cleanTarget, os.FileMode(header.Mode))
-		case tar.TypeReg:
-			_ = os.MkdirAll(filepath.Dir(cleanTarget), 0755)
+			if err := os.MkdirAll(cleanTarget, os.FileMode(header.Mode)); err != nil {
+				return fmt.Errorf("create directory %q: %w", cleanTarget, err)
+			}
+			entries++
+		case tar.TypeReg, tar.TypeRegA:
+			if err := os.MkdirAll(filepath.Dir(cleanTarget), 0755); err != nil {
+				return fmt.Errorf("create parent directory for %q: %w", cleanTarget, err)
+			}
 			f, err := os.Create(cleanTarget)
 			if err != nil {
-				continue
+				return fmt.Errorf("create file %q: %w", cleanTarget, err)
 			}
-			_, _ = io.Copy(f, tr)
-			_ = f.Chmod(os.FileMode(header.Mode))
-			_ = f.Close()
+			n, copyErr := io.Copy(f, tr)
+			closeErr := f.Close()
+			if copyErr != nil {
+				return fmt.Errorf("write file %q: %w", cleanTarget, copyErr)
+			}
+			if closeErr != nil {
+				return fmt.Errorf("close file %q: %w", cleanTarget, closeErr)
+			}
+			if n != header.Size {
+				return fmt.Errorf("incomplete file %q: wrote %d of %d bytes", cleanTarget, n, header.Size)
+			}
+			if err := os.Chmod(cleanTarget, os.FileMode(header.Mode)); err != nil {
+				return fmt.Errorf("set file mode on %q: %w", cleanTarget, err)
+			}
+			entries++
 		case tar.TypeSymlink:
-			_ = os.MkdirAll(filepath.Dir(cleanTarget), 0755)
-			_ = os.Symlink(header.Linkname, cleanTarget)
+			if err := os.MkdirAll(filepath.Dir(cleanTarget), 0755); err != nil {
+				return fmt.Errorf("create parent directory for symlink %q: %w", cleanTarget, err)
+			}
+			if err := os.Remove(cleanTarget); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("remove existing path %q: %w", cleanTarget, err)
+			}
+			if err := os.Symlink(header.Linkname, cleanTarget); err != nil {
+				return fmt.Errorf("create symlink %q -> %q: %w", cleanTarget, header.Linkname, err)
+			}
+			entries++
 		case tar.TypeLink:
-			_ = os.MkdirAll(filepath.Dir(cleanTarget), 0755)
-			linkTarget := filepath.Join(targetDir, header.Linkname)
-			_ = os.Link(linkTarget, cleanTarget)
+			if err := os.MkdirAll(filepath.Dir(cleanTarget), 0755); err != nil {
+				return fmt.Errorf("create parent directory for hardlink %q: %w", cleanTarget, err)
+			}
+			linkTarget := filepath.Clean(filepath.Join(targetDir, header.Linkname))
+			if linkTarget != base && !strings.HasPrefix(linkTarget, prefix) {
+				return fmt.Errorf("invalid hardlink target %q", header.Linkname)
+			}
+			if err := os.Remove(cleanTarget); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("remove existing path %q: %w", cleanTarget, err)
+			}
+			if err := os.Link(linkTarget, cleanTarget); err != nil {
+				return fmt.Errorf("create hardlink %q -> %q: %w", cleanTarget, linkTarget, err)
+			}
+			entries++
 		}
 	}
 
+	if entries == 0 {
+		return fmt.Errorf("archive contains no extractable entries")
+	}
+
 	return nil
+}
+
+func validateExtractedRootfs(rootfs string) error {
+	if hasRootfsShell(rootfs) {
+		return nil
+	}
+	if err := flattenSingleTopLevelRootfs(rootfs); err != nil {
+		return err
+	}
+	if hasRootfsShell(rootfs) {
+		return nil
+	}
+
+	artifacts := findDiskImageArtifacts(rootfs)
+	if len(artifacts) > 0 {
+		return fmt.Errorf(
+			"archive contains VM disk image(s): %s; expected a rootfs tar archive with /bin/sh",
+			strings.Join(artifacts, ", "),
+		)
+	}
+
+	return fmt.Errorf("archive does not contain a Linux rootfs (missing /bin/sh)")
+}
+
+func hasRootfsShell(rootfs string) bool {
+	candidates := []string{
+		filepath.Join(rootfs, "bin", "sh"),
+		filepath.Join(rootfs, "usr", "bin", "sh"),
+		filepath.Join(rootfs, "bin", "bash"),
+		filepath.Join(rootfs, "usr", "bin", "bash"),
+	}
+	for _, candidate := range candidates {
+		info, err := os.Stat(candidate)
+		if err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+func flattenSingleTopLevelRootfs(rootfs string) error {
+	entries, err := os.ReadDir(rootfs)
+	if err != nil {
+		return fmt.Errorf("read extracted rootfs directory: %w", err)
+	}
+	if len(entries) != 1 || !entries[0].IsDir() {
+		return nil
+	}
+
+	top := filepath.Join(rootfs, entries[0].Name())
+	if !hasRootfsShell(top) {
+		return nil
+	}
+
+	children, err := os.ReadDir(top)
+	if err != nil {
+		return fmt.Errorf("read nested rootfs directory %q: %w", top, err)
+	}
+	for _, child := range children {
+		src := filepath.Join(top, child.Name())
+		dst := filepath.Join(rootfs, child.Name())
+		if err := os.Rename(src, dst); err != nil {
+			return fmt.Errorf("flatten rootfs from %q to %q: %w", src, dst, err)
+		}
+	}
+	if err := os.Remove(top); err != nil {
+		return fmt.Errorf("remove nested rootfs directory %q: %w", top, err)
+	}
+
+	return nil
+}
+
+func findDiskImageArtifacts(rootfs string) []string {
+	entries, err := os.ReadDir(rootfs)
+	if err != nil {
+		return nil
+	}
+
+	artifacts := make([]string, 0, 4)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := strings.ToLower(entry.Name())
+		if strings.HasSuffix(name, ".raw") ||
+			strings.HasSuffix(name, ".qcow2") ||
+			strings.HasSuffix(name, ".img") ||
+			strings.HasSuffix(name, ".vmdk") {
+			artifacts = append(artifacts, entry.Name())
+		}
+	}
+	return artifacts
 }
 
 func getDirSize(path string) int {

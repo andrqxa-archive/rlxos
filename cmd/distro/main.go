@@ -23,7 +23,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"sort"
 	"strings"
 	"syscall"
 
@@ -36,17 +35,17 @@ const defaultShell = "/bin/sh"
 
 func init() {
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "distro - Manage Linux distro images and sessions")
+		fmt.Fprintln(os.Stderr, "distro - Manage Linux distro environment")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Usage:")
 		fmt.Fprintln(os.Stderr, "  distro <subcommand> [options] [args]")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Subcommands:")
-		fmt.Fprintln(os.Stderr, "  list    List installed/available distros")
-		fmt.Fprintln(os.Stderr, "  pull    Download and install distro")
-		fmt.Fprintln(os.Stderr, "  run     Run command in distro")
-		fmt.Fprintln(os.Stderr, "  shell   Open interactive shell in distro")
-		fmt.Fprintln(os.Stderr, "  remove  Remove installed distro")
+		fmt.Fprintln(os.Stderr, "  status   Show distro installation status")
+		fmt.Fprintln(os.Stderr, "  install  Install the distro rootfs")
+		fmt.Fprintln(os.Stderr, "  run      Run command in distro")
+		fmt.Fprintln(os.Stderr, "  shell    Open interactive shell in distro")
+		fmt.Fprintln(os.Stderr, "  remove   Remove installed distro")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Exit Codes:")
 		fmt.Fprintln(os.Stderr, "  0  Success")
@@ -60,11 +59,11 @@ func main() {
 	args := flag.Args()
 
 	commands := map[string]func(args []string) error{
-		"list":   runList,
-		"pull":   runPull,
-		"run":    runRun,
-		"shell":  runShell,
-		"remove": runRemove,
+		"status":  runStatus,
+		"install": runInstall,
+		"run":     runRun,
+		"shell":   runShell,
+		"remove":  runRemove,
 	}
 
 	if len(args) < 1 {
@@ -84,9 +83,8 @@ func main() {
 	}
 }
 
-func runList(args []string) error {
-	fs := flag.NewFlagSet("list", flag.ContinueOnError)
-	showAvailable := fs.Bool("available", false, "Show available distros to download")
+func runStatus(args []string) error {
+	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -98,51 +96,30 @@ func runList(args []string) error {
 	}
 	defer client.Close()
 
-	distros, err := client.ListDistros(*showAvailable)
+	status, err := client.GetStatus()
 	if err != nil {
 		return err
 	}
 
-	sort.Slice(distros, func(i, j int) bool {
-		return distros[i].Name < distros[j].Name
-	})
-
-	if *showAvailable {
-		fmt.Println("Available distros:")
-		table := format.NewTable("Name", "Version", "URL")
-		for _, distro := range distros {
-			table.AddRow(distro.Name, distro.Version, distro.URL)
-		}
-		table.Print()
-		return nil
+	if status.Installed {
+		fmt.Printf("Installed: yes\n")
+		fmt.Printf("Path:      %s\n", status.Path)
+		fmt.Printf("Size:      %s\n", format.Size(int64(status.Size)))
+	} else {
+		fmt.Printf("Installed: no\n")
+		fmt.Printf("Path:      %s\n", status.Path)
+		fmt.Println("Use 'distro install' to install the distro rootfs.")
 	}
-
-	if len(distros) == 0 {
-		fmt.Println("No distros installed. Use 'distro pull <distro>' to install one.")
-		return nil
-	}
-
-	fmt.Println("Installed distros:")
-	table := format.NewTable("Name", "Path", "Size")
-	for _, distro := range distros {
-		table.AddRow(distro.Name, distro.Path, format.Size(int64(distro.Size)))
-	}
-	table.Print()
 	return nil
 }
 
-func runPull(args []string) error {
-	fs := flag.NewFlagSet("pull", flag.ContinueOnError)
+func runInstall(args []string) error {
+	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	url := fs.String("url", "", "Custom URL to download from")
 	fs.SetOutput(os.Stderr)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	args = fs.Args()
-
-	if len(args) < 1 {
-		return fmt.Errorf("distro name required")
-	}
 
 	client, err := distroapi.Connect()
 	if err != nil {
@@ -150,12 +127,11 @@ func runPull(args []string) error {
 	}
 	defer client.Close()
 
-	name := strings.TrimSpace(args[0])
-	if err := client.PullDistro(name, *url); err != nil {
+	if err := client.InstallDistro(*url); err != nil {
 		return err
 	}
 
-	fmt.Printf("Successfully installed %s\n", name)
+	fmt.Println("Distro installed successfully.")
 	return nil
 }
 
@@ -170,19 +146,15 @@ func runRun(args []string) error {
 	}
 	args = fs.Args()
 
-	if len(args) < 1 {
-		return fmt.Errorf("distro name required")
-	}
-
 	input, piped, err := readPipedStdin()
 	if err != nil {
 		return fmt.Errorf("failed to read stdin: %w", err)
 	}
 
-	command := args[1:]
+	command := args
 	if len(command) == 0 {
 		if !piped {
-			return fmt.Errorf("interactive distro sessions require 'distro shell'; use a command or pipe input for 'distro run'")
+			return fmt.Errorf("interactive sessions require 'distro shell'; use a command or pipe input for 'distro run'")
 		}
 		command = []string{defaultShell}
 	}
@@ -194,7 +166,6 @@ func runRun(args []string) error {
 	defer client.Close()
 
 	result, err := client.RunDistro(distroapi.RunRequest{
-		Distro:  args[0],
 		Command: distroapi.EncodeCommand(command),
 		Workdir: *workdir,
 		Bind:    *bind,
@@ -220,11 +191,6 @@ func runShell(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	args = fs.Args()
-
-	if len(args) < 1 {
-		return fmt.Errorf("distro name required")
-	}
 
 	client, err := distroapi.Connect()
 	if err != nil {
@@ -234,7 +200,6 @@ func runShell(args []string) error {
 
 	cols, rows := term.Size()
 	sessionID, err := client.OpenShell(distroapi.ShellOpenRequest{
-		Distro:  strings.TrimSpace(args[0]),
 		Workdir: "/root",
 		Bind:    *bind,
 		Env:     *env,
@@ -349,15 +314,9 @@ func runRemove(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	args = fs.Args()
 
-	if len(args) < 1 {
-		return fmt.Errorf("distro name required")
-	}
-
-	distroName := strings.TrimSpace(args[0])
 	if !*force {
-		fmt.Printf("Remove %s? This cannot be undone. [y/N]: ", distroName)
+		fmt.Print("Remove the distro? This cannot be undone. [y/N]: ")
 		var response string
 		fmt.Scanln(&response)
 		if strings.ToLower(response) != "y" {
@@ -372,11 +331,11 @@ func runRemove(args []string) error {
 	}
 	defer client.Close()
 
-	if err := client.RemoveDistro(distroName); err != nil {
+	if err := client.Uninstall(); err != nil {
 		return err
 	}
 
-	fmt.Printf("Removed %s\n", distroName)
+	fmt.Println("Distro removed.")
 	return nil
 }
 

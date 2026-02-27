@@ -62,14 +62,9 @@ func newShellSessionManager(service *sutra.Service) *shellSessionManager {
 }
 
 func (m *shellSessionManager) Open(owner, uid uint32, req distroapi.ShellOpenRequest) (distroapi.ShellSession, error) {
-	req.Distro = strings.TrimSpace(req.Distro)
-	if req.Distro == "" {
-		return distroapi.ShellSession{}, fmt.Errorf("distro name required")
-	}
-
-	rootfs := filepath.Join(linuxBase, req.Distro)
-	if _, err := os.Stat(rootfs); os.IsNotExist(err) {
-		return distroapi.ShellSession{}, fmt.Errorf("distro %s not found (use 'distro pull %s' first)", req.Distro, req.Distro)
+	rootfs := linuxBase
+	if _, err := os.Stat(filepath.Join(rootfs, "bin")); os.IsNotExist(err) {
+		return distroapi.ShellSession{}, fmt.Errorf("distro not installed (use 'distro install' first)")
 	}
 
 	workdir := strings.TrimSpace(req.Workdir)

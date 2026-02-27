@@ -1000,9 +1000,7 @@ type settingsApp struct {
 	persisted   map[string]string
 
 	serviceTarget      string
-	distroPullName     string
-	distroPullURL      string
-	distroRemoveName   string
+	distroInstallURL string
 	deviceTriggerScope string
 	configFilterPrefix string
 	configEditKey      string
@@ -2326,8 +2324,8 @@ func serviceStateLabel(item serviceapi.ServiceStatus) string {
 
 func (a *settingsApp) buildDistroListCard() *ui.Element {
 	card, box := newSectionCard(
-		"Distro Inventory",
-		"Installed and available distro entries from api/distro.",
+		"Distro Status",
+		"Linux distribution environment status.",
 	)
 
 	client, err := distroapi.Connect()
@@ -2339,78 +2337,30 @@ func (a *settingsApp) buildDistroListCard() *ui.Element {
 	}
 	defer client.Close()
 
-	installed, installedErr := client.ListDistros(false)
-	available, availableErr := client.ListDistros(true)
-	if installedErr != nil {
+	status, err := client.GetStatus()
+	if err != nil {
 		msg := ui.NewElement("Paragraph")
-		msg.SetAttribute("text", "Failed to list installed distros: "+installedErr.Error())
-		box.AddChild(msg)
-		return card
-	}
-	if availableErr != nil {
-		msg := ui.NewElement("Paragraph")
-		msg.SetAttribute("text", "Failed to list available distros: "+availableErr.Error())
+		msg.SetAttribute("text", "Failed to get distro status: "+err.Error())
 		box.AddChild(msg)
 		return card
 	}
 
-	sort.Slice(installed, func(i, j int) bool {
-		return strings.ToLower(installed[i].Name) < strings.ToLower(installed[j].Name)
-	})
-	sort.Slice(available, func(i, j int) bool {
-		return strings.ToLower(available[i].Name) < strings.ToLower(available[j].Name)
-	})
-
-	installedTitle := ui.NewElement("Subheading")
-	installedTitle.SetAttribute("text", "Installed")
-	box.AddChild(installedTitle)
-	box.AddChild(buildTableView(
-		[]string{"Name", "Version", "Size", "Path"},
-		distroRows(installed, 20),
-		180,
-	))
-
-	availableTitle := ui.NewElement("Subheading")
-	availableTitle.SetAttribute("text", "Available")
-	box.AddChild(availableTitle)
-	box.AddChild(buildTableView(
-		[]string{"Name", "Version", "Size", "URL"},
-		distroAvailableRows(available, 20),
-		180,
-	))
+	if status.Installed {
+		box.AddChild(buildTableView(
+			[]string{"Property", "Value"},
+			[][]string{
+				{"Installed", "Yes"},
+				{"Path", status.Path},
+				{"Size", humanSize(status.Size)},
+			},
+			180,
+		))
+	} else {
+		msg := ui.NewElement("Paragraph")
+		msg.SetAttribute("text", "Distro is not installed. Use the Install button below to set up the environment.")
+		box.AddChild(msg)
+	}
 	return card
-}
-
-func distroRows(items []distroapi.DistroInfo, limit int) [][]string {
-	if limit <= 0 || len(items) < limit {
-		limit = len(items)
-	}
-	rows := make([][]string, 0, limit)
-	for i := 0; i < limit; i++ {
-		rows = append(rows, []string{
-			items[i].Name,
-			items[i].Version,
-			humanSize(items[i].Size),
-			items[i].Path,
-		})
-	}
-	return rows
-}
-
-func distroAvailableRows(items []distroapi.DistroInfo, limit int) [][]string {
-	if limit <= 0 || len(items) < limit {
-		limit = len(items)
-	}
-	rows := make([][]string, 0, limit)
-	for i := 0; i < limit; i++ {
-		rows = append(rows, []string{
-			items[i].Name,
-			items[i].Version,
-			humanSize(items[i].Size),
-			items[i].URL,
-		})
-	}
-	return rows
 }
 
 func humanSize(size int) string {
@@ -2433,83 +2383,55 @@ func humanSize(size int) string {
 func (a *settingsApp) buildDistroManageCard() *ui.Element {
 	card, box := newSectionCard(
 		"Manage Distro",
-		"Pull a distro image or remove an installed distro.",
+		"Install or remove the Linux distro environment.",
 	)
 
-	nameInput := ui.NewElement("TextInput")
-	nameInput.SetAttribute("text", a.distroPullName)
-	nameInput.SetAttribute("placeholder", "Distro name")
-	nameInput.BindSignal("changed", func(text string) {
-		a.distroPullName = strings.TrimSpace(text)
-	})
-	box.AddChild(nameInput)
-
 	urlInput := ui.NewElement("TextInput")
-	urlInput.SetAttribute("text", a.distroPullURL)
-	urlInput.SetAttribute("placeholder", "Optional source URL")
+	urlInput.SetAttribute("text", a.distroInstallURL)
+	urlInput.SetAttribute("placeholder", "Optional source URL (leave empty for default)")
 	urlInput.BindSignal("changed", func(text string) {
-		a.distroPullURL = strings.TrimSpace(text)
+		a.distroInstallURL = strings.TrimSpace(text)
 	})
 	box.AddChild(urlInput)
-
-	removeInput := ui.NewElement("TextInput")
-	removeInput.SetAttribute("text", a.distroRemoveName)
-	removeInput.SetAttribute("placeholder", "Distro name to remove")
-	removeInput.BindSignal("changed", func(text string) {
-		a.distroRemoveName = strings.TrimSpace(text)
-	})
-	box.AddChild(removeInput)
 
 	buttons := ui.NewElement("HBox")
 	buttons.SetAttribute("direction", "row")
 	buttons.SetAttribute("spacing", 8)
 	buttons.SetAttribute("expand", false)
 
-	pullBtn := ui.NewElement("PrimaryButton")
-	pullBtn.SetAttribute("text", "Pull")
-	pullBtn.BindSignal("clicked", func() {
-		if strings.TrimSpace(a.distroPullName) == "" {
-			a.setStatus("Distro name is required")
-			return
-		}
+	installBtn := ui.NewElement("PrimaryButton")
+	installBtn.SetAttribute("text", "Install")
+	installBtn.BindSignal("clicked", func() {
 		client, err := distroapi.Connect()
 		if err != nil {
 			a.setStatus("Distro API unavailable: " + err.Error())
 			return
 		}
 		defer client.Close()
-		if err := client.PullDistro(a.distroPullName, a.distroPullURL); err != nil {
-			a.setStatus("Pull failed: " + err.Error())
+		if err := client.InstallDistro(a.distroInstallURL); err != nil {
+			a.setStatus("Install failed: " + err.Error())
 			return
 		}
 		a.renderPage()
-		a.setStatus("Pull requested for " + a.distroPullName)
+		a.setStatus("Distro installed successfully")
 	})
-	buttons.AddChild(pullBtn)
+	buttons.AddChild(installBtn)
 
 	removeBtn := ui.NewElement("Button")
 	removeBtn.SetAttribute("text", "Remove")
 	removeBtn.BindSignal("clicked", func() {
-		name := strings.TrimSpace(a.distroRemoveName)
-		if name == "" {
-			name = strings.TrimSpace(a.distroPullName)
-		}
-		if name == "" {
-			a.setStatus("Distro name is required")
-			return
-		}
 		client, err := distroapi.Connect()
 		if err != nil {
 			a.setStatus("Distro API unavailable: " + err.Error())
 			return
 		}
 		defer client.Close()
-		if err := client.RemoveDistro(name); err != nil {
+		if err := client.Uninstall(); err != nil {
 			a.setStatus("Remove failed: " + err.Error())
 			return
 		}
 		a.renderPage()
-		a.setStatus("Removed distro " + name)
+		a.setStatus("Distro removed")
 	})
 	buttons.AddChild(removeBtn)
 

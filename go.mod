@@ -2,7 +2,10 @@ module avyos.dev
 
 go 1.26.0
 
-require golang.org/x/image v0.36.0
+require (
+	github.com/ulikunitz/xz v0.5.15
+	golang.org/x/image v0.36.0
+)
 
 require (
 	github.com/cilium/ebpf v0.11.0 // indirect

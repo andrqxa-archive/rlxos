@@ -29,18 +29,19 @@ type Handler struct {
 	shells  *shellSessionManager
 }
 
-func (h *Handler) List(sender uint32, req distroapi.ListRequest) (distroapi.DistroList, error) {
+func (h *Handler) Status(sender uint32, req distroapi.Empty) (distroapi.StatusResponse, error) {
 	_ = sender
-	items, err := listDistros(req.Available)
-	if err != nil {
-		return distroapi.DistroList{}, err
-	}
-	return distroapi.DistroList{Items: items}, nil
+	installed, path, size := distroStatus()
+	return distroapi.StatusResponse{
+		Installed: installed,
+		Path:      path,
+		Size:      size,
+	}, nil
 }
 
-func (h *Handler) Pull(sender uint32, req distroapi.PullRequest) (distroapi.Empty, error) {
+func (h *Handler) Install(sender uint32, req distroapi.InstallRequest) (distroapi.Empty, error) {
 	_ = sender
-	if err := pullDistro(req.Name, req.URL); err != nil {
+	if err := installDistro(req.URL); err != nil {
 		return distroapi.Empty{}, err
 	}
 	return distroapi.Empty{}, nil
@@ -54,9 +55,9 @@ func (h *Handler) Run(sender uint32, req distroapi.RunRequest) (distroapi.RunRes
 	return runContainer(req, uid)
 }
 
-func (h *Handler) Remove(sender uint32, req distroapi.RemoveRequest) (distroapi.Empty, error) {
+func (h *Handler) Remove(sender uint32, req distroapi.Empty) (distroapi.Empty, error) {
 	_ = sender
-	if err := removeDistro(req.Name); err != nil {
+	if err := uninstallDistro(); err != nil {
 		return distroapi.Empty{}, err
 	}
 	return distroapi.Empty{}, nil
