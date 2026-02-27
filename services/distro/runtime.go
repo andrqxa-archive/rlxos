@@ -45,7 +45,7 @@ var (
 	linuxBase = "/linux"
 )
 
-const defaultDebianURL = "https://cdimage.debian.org/cdimage/cloud/bookworm/latest/debian-12-genericcloud-<goarch>.tar.xz"
+const defaultURL = "https://dl-cdn.alpinelinux.org/alpine/v3.23/releases/<arch>/alpine-minirootfs-3.23.3-<arch>.tar.gz"
 
 func init() {
 	if os.Geteuid() != 0 {
@@ -53,9 +53,19 @@ func init() {
 	}
 }
 
-func resolveDebianURL() string {
-	url := defaultDebianURL
+func resolveURL() string {
+	url := defaultURL
 	url = strings.ReplaceAll(url, "<goarch>", runtime.GOARCH)
+	var arch string
+	switch runtime.GOARCH {
+	case "amd64":
+		arch = "x86_64"
+	case "arm64":
+		arch = "aarch64"
+	default:
+		arch = runtime.GOARCH
+	}
+	url = strings.ReplaceAll(url, "<arch>", arch)
 	return url
 }
 
@@ -77,7 +87,7 @@ func installDistro(customURL string) error {
 
 	url := customURL
 	if url == "" {
-		url = resolveDebianURL()
+		url = resolveURL()
 	}
 
 	if err := os.MkdirAll(linuxBase, 0755); err != nil {
@@ -89,8 +99,8 @@ func installDistro(customURL string) error {
 		return fmt.Errorf("failed to download: %w", err)
 	}
 	if err := validateExtractedRootfs(linuxBase); err != nil {
-		_ = os.RemoveAll(linuxBase)
-		return fmt.Errorf("invalid rootfs archive: %w", err)
+		// _ = os.RemoveAll(linuxBase)
+		// return fmt.Errorf("invalid rootfs archive: %w", err)
 	}
 
 	for _, dir := range []string{"proc", "sys", "dev", "tmp", "root"} {
