@@ -24,7 +24,7 @@ import (
 )
 
 func main() {
-	root := flag.String("root", "/", "filesystem root for library search")
+	root := flag.String("root", "/linux", "filesystem root for library search")
 	debug := flag.Bool("debug", false, "enable debug logging")
 	flag.Parse()
 
@@ -230,7 +230,14 @@ func cmdSelfcheck(opts []dl.Option) {
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 func openLibc(ld *dl.Loader) (*dl.Handle, error) {
-	return openLib(ld, "libc.so.6", "libc.so")
+	arch := runtime.GOARCH
+	switch runtime.GOARCH {
+	case "amd64":
+		arch = "x86_64"
+	case "arm64":
+		arch = "aarch64"
+	}
+	return openLib(ld, "libc.so.6", "libc.so", fmt.Sprintf("libc.musl-%s.so.1", arch))
 }
 
 func openLib(ld *dl.Loader, names ...string) (*dl.Handle, error) {
