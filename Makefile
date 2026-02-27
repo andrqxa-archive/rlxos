@@ -80,7 +80,7 @@ KERNEL_RELEASE_LDFLAGS = -ldflags="-E main._entry -T -2147479552"
 KERNEL_DEBUG_GCFLAGS = -gcflags="all=-N -l"
 KERNEL_DEBUG_LDFLAGS = -ldflags="-E main._entry -T -2147479552 -compressdwarf=false"
 
-COMMANDS = distro copy delete driver filter find identity info init link list mkdir mount move net open power process read request service session shell showoff system tree uevent write
+COMMANDS = dltest distro copy delete driver filter find identity info init link list mkdir mount move net open power process read request service session shell showoff system tree uevent write
 APPS = background demo dock files gallery launcher notepad oobe power settings tasks terminal waylayer
 SERVICES = distro display login uevent dbg
 GO_TARGETS = $(addprefix cmd/,${COMMANDS}) $(addsuffix /exec,$(addprefix apps/,${APPS})) $(addprefix services/,${SERVICES})
