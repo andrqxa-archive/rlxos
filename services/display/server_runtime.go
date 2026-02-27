@@ -31,9 +31,9 @@ import (
 	"unicode"
 
 	displayapi "avyos.dev/api/display"
-	gfxfont "avyos.dev/pkg/graphics/font"
-	graphics "avyos.dev/pkg/graphics/input"
-	gfxtheme "avyos.dev/pkg/graphics/theme"
+	"avyos.dev/pkg/graphics/font"
+	"avyos.dev/pkg/graphics/input"
+	"avyos.dev/pkg/graphics/theme"
 	"avyos.dev/pkg/identity"
 	"avyos.dev/pkg/simd"
 	"avyos.dev/pkg/sutra"
@@ -136,12 +136,12 @@ type window struct {
 
 	// Compositor-owned copy of the client pixels.
 	bufMu  sync.RWMutex
-	buffer *graphics.Buffer
+	buffer *input.Buffer
 
 	sess *session
 }
 
-func (w *window) getBuffer() *graphics.Buffer {
+func (w *window) getBuffer() *input.Buffer {
 	w.bufMu.RLock()
 	b := w.buffer
 	w.bufMu.RUnlock()
@@ -177,15 +177,15 @@ type shortcutBinding struct {
 	ShortcutID uint32
 	WindowID   uint32
 	Scope      uint32
-	Key        graphics.Key
+	Key        input.Key
 	Rune       rune
-	Modifiers  graphics.Modifiers
+	Modifiers  input.Modifiers
 }
 
 // Server is the display compositor.
 type Server struct {
-	fb      graphics.Backend
-	input   graphics.InputHandler
+	fb      input.Backend
+	input   input.InputHandler
 	service *sutra.Service
 
 	sessions map[uint32]*session
@@ -195,7 +195,7 @@ type Server struct {
 	nextWID  uint32
 
 	// Usable area (screen minus exclusive zones from layers).
-	usableArea graphics.Rect
+	usableArea input.Rect
 
 	// Input state
 	mouseX, mouseY int
@@ -219,10 +219,10 @@ type Server struct {
 	// Dirty tracking for partial flush.
 	dirtyMu           sync.Mutex
 	dirty             bool
-	dirtyRects        []graphics.Rect
-	dirtySpare        []graphics.Rect
-	normalizedScratch []graphics.Rect
-	prevCursorRect    graphics.Rect
+	dirtyRects        []input.Rect
+	dirtySpare        []input.Rect
+	normalizedScratch []input.Rect
+	prevCursorRect    input.Rect
 
 	// Reusable visible snapshots to avoid per-frame slice churn.
 	visibleScratch [6][]*window
@@ -233,7 +233,7 @@ type Server struct {
 	lastFPSMs  int64
 
 	// Diagnostics overlay (top-right)
-	diagRect   graphics.Rect
+	diagRect   input.Rect
 	diagLines  []string
 	cpuPct     float64
 	rssBytes   uint64
@@ -259,7 +259,7 @@ type Server struct {
 }
 
 type rectBatchFlusher interface {
-	FlushRects([]graphics.Rect) error
+	FlushRects([]input.Rect) error
 }
 
 const (
@@ -272,7 +272,7 @@ const (
 )
 
 // NewServer creates a display server.
-func NewServer(fb graphics.Backend, input graphics.InputHandler) *Server {
+func NewServer(fb input.Backend, input input.InputHandler) *Server {
 	return &Server{
 		fb:              fb,
 		input:           input,
@@ -286,7 +286,7 @@ func NewServer(fb graphics.Backend, input graphics.InputHandler) *Server {
 }
 
 // markDirty adds a rectangle to the dirty region.
-func (s *Server) markDirty(r graphics.Rect) {
+func (s *Server) markDirty(r input.Rect) {
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}
@@ -316,7 +316,7 @@ func (s *Server) markAllDirty() {
 	s.dirtyMu.Lock()
 	s.dirty = true
 	s.dirtyRects = s.dirtyRects[:0]
-	s.dirtyRects = append(s.dirtyRects, graphics.Rect{X: 0, Y: 0, W: w, H: h})
+	s.dirtyRects = append(s.dirtyRects, input.Rect{X: 0, Y: 0, W: w, H: h})
 	s.dirtyMu.Unlock()
 }
 
@@ -327,7 +327,7 @@ func (s *Server) hasDirty() bool {
 	return dirty
 }
 
-func (s *Server) consumeDirtyRects(bounds graphics.Rect, maxRects int) []graphics.Rect {
+func (s *Server) consumeDirtyRects(bounds input.Rect, maxRects int) []input.Rect {
 	s.dirtyMu.Lock()
 	if !s.dirty {
 		s.dirtyMu.Unlock()
@@ -345,10 +345,10 @@ func (s *Server) consumeDirtyRects(bounds graphics.Rect, maxRects int) []graphic
 }
 
 // windowScreenRect returns the screen-space bounding rect of a window (including decorations).
-func windowScreenRect(win *window) graphics.Rect {
+func windowScreenRect(win *window) input.Rect {
 	switch win.winType {
 	case WindowNormal:
-		frame := graphics.Rect{X: win.x - 1, Y: win.y - 1, W: win.width + 2, H: win.height + decorHeight + 2}
+		frame := input.Rect{X: win.x - 1, Y: win.y - 1, W: win.width + 2, H: win.height + decorHeight + 2}
 		shadow := shadowBounds(frame, windowShadowSpread, windowShadowOffsetX, windowShadowOffsetY, windowShadowTopClip)
 		if shadow.W > 0 && shadow.H > 0 {
 			return frame.Union(shadow)
@@ -356,9 +356,9 @@ func windowScreenRect(win *window) graphics.Rect {
 		return frame
 	case WindowPopup:
 		sx, sy := win.screenPos()
-		return graphics.Rect{X: sx, Y: sy, W: win.width, H: win.height}
+		return input.Rect{X: sx, Y: sy, W: win.width, H: win.height}
 	default: // layers
-		frame := graphics.Rect{X: win.x, Y: win.y, W: win.width, H: win.height}
+		frame := input.Rect{X: win.x, Y: win.y, W: win.width, H: win.height}
 		if win.layer == LayerBackground {
 			return frame
 		}
@@ -370,8 +370,8 @@ func windowScreenRect(win *window) graphics.Rect {
 	}
 }
 
-func shadowBounds(r graphics.Rect, spread, offsetX, offsetY, topClip int) graphics.Rect {
-	shadow := graphics.Rect{
+func shadowBounds(r input.Rect, spread, offsetX, offsetY, topClip int) input.Rect {
+	shadow := input.Rect{
 		X: r.X - spread + offsetX,
 		Y: r.Y - spread + offsetY,
 		W: r.W + 2*spread,
@@ -406,7 +406,7 @@ func (s *Server) Run() error {
 	defer s.input.Close()
 
 	// Initialize usable area to full screen
-	s.usableArea = graphics.Rect{X: 0, Y: 0, W: w, H: h}
+	s.usableArea = input.Rect{X: 0, Y: 0, W: w, H: h}
 
 	svc, err := sutra.NewService(displayapi.ServiceName, "")
 	if err != nil {
@@ -740,8 +740,8 @@ func (s *Server) GetActiveSession(sender uint32, req displayapi.Empty) (displaya
 	return displayapi.ActiveSessionEvent{SessionID: id}, nil
 }
 
-func normalizeShortcutModifiers(mod graphics.Modifiers) graphics.Modifiers {
-	return mod & (graphics.ModShift | graphics.ModCtrl | graphics.ModAlt)
+func normalizeShortcutModifiers(mod input.Modifiers) input.Modifiers {
+	return mod & (input.ModShift | input.ModCtrl | input.ModAlt)
 }
 
 func normalizeShortcutRune(r rune) rune {
@@ -751,17 +751,17 @@ func normalizeShortcutRune(r rune) rune {
 	return unicode.ToLower(r)
 }
 
-func shortcutBindingMatches(binding shortcutBinding, key graphics.Key, r rune, mods graphics.Modifiers) bool {
+func shortcutBindingMatches(binding shortcutBinding, key input.Key, r rune, mods input.Modifiers) bool {
 	if normalizeShortcutModifiers(binding.Modifiers) != mods {
 		return false
 	}
-	if binding.Key != graphics.KeyNone {
+	if binding.Key != input.KeyNone {
 		return binding.Key == key
 	}
 	if binding.Rune == 0 {
 		return false
 	}
-	return key == graphics.KeyNone && binding.Rune == r
+	return key == input.KeyNone && binding.Rune == r
 }
 
 func (s *Server) RegisterShortcut(sender uint32, req displayapi.RegisterShortcutRequest) (displayapi.Empty, error) {
@@ -770,10 +770,10 @@ func (s *Server) RegisterShortcut(sender uint32, req displayapi.RegisterShortcut
 		return displayapi.Empty{}, fmt.Errorf("invalid shortcut id")
 	}
 	shortcutRune := normalizeShortcutRune(req.Rune)
-	if req.Key == graphics.KeyNone && shortcutRune == 0 {
+	if req.Key == input.KeyNone && shortcutRune == 0 {
 		return displayapi.Empty{}, fmt.Errorf("invalid shortcut key")
 	}
-	if req.Key != graphics.KeyNone {
+	if req.Key != input.KeyNone {
 		shortcutRune = 0
 	}
 	if req.Scope != displayapi.ShortcutScopeGlobal && req.Scope != displayapi.ShortcutScopeClient {
@@ -794,7 +794,7 @@ func (s *Server) RegisterShortcut(sender uint32, req displayapi.RegisterShortcut
 		}
 	}
 
-	mods := normalizeShortcutModifiers(graphics.Modifiers(req.Modifiers))
+	mods := normalizeShortcutModifiers(input.Modifiers(req.Modifiers))
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -862,7 +862,7 @@ func (s *Server) resolveKeyTargetLocked() *window {
 	return s.focused
 }
 
-func (s *Server) matchShortcutLocked(target *window, ev *graphics.Event) (uint32, displayapi.ShortcutEvent, bool) {
+func (s *Server) matchShortcutLocked(target *window, ev *input.Event) (uint32, displayapi.ShortcutEvent, bool) {
 	mods := normalizeShortcutModifiers(ev.Modifiers)
 	keyRune := normalizeShortcutRune(ev.Rune)
 
@@ -974,22 +974,22 @@ func openShmRO(path string, size int) (int, []byte, error) {
 	return fd, data, nil
 }
 
-func resizeOrAllocWindowBuffer(buf *graphics.Buffer, w, h int) (*graphics.Buffer, bool) {
-	if buf != nil && buf.Format == graphics.PixelFormatBGRA {
+func resizeOrAllocWindowBuffer(buf *input.Buffer, w, h int) (*input.Buffer, bool) {
+	if buf != nil && buf.Format == input.PixelFormatBGRA {
 		oldW, oldH := buf.Width, buf.Height
 		buf.Resize(w, h)
 		return buf, oldW != w || oldH != h
 	}
-	return graphics.NewBuffer(w, h), true
+	return input.NewBuffer(w, h), true
 }
 
-func (s *Server) mmapAndCopy(shmKey string, w, h, stride int) (int, []byte, *graphics.Buffer, error) {
+func (s *Server) mmapAndCopy(shmKey string, w, h, stride int) (int, []byte, *input.Buffer, error) {
 	size := stride * h
 	fd, data, err := openShmRO(shmKey, size)
 	if err != nil {
 		return -1, nil, nil, err
 	}
-	buf := graphics.NewBuffer(w, h)
+	buf := input.NewBuffer(w, h)
 	for y := 0; y < h; y++ {
 		srcOff := y * stride
 		dstOff := y * buf.Stride
@@ -1262,7 +1262,7 @@ func (s *Server) handleCreateLayer(sess *session, layer, anchor uint32, exclusiv
 	}
 
 	// Create compositor buffer at the stretched size.
-	buf := graphics.NewBuffer(w, h)
+	buf := input.NewBuffer(w, h)
 	// Copy only the overlapping region from the client buffer.
 	copyW := clientW
 	if copyW > w {
@@ -1430,7 +1430,7 @@ func (s *Server) computeLayerPosition(win *window, screenW, screenH int) {
 
 func (s *Server) recomputeUsableArea() {
 	screenW, screenH := s.fb.Size()
-	area := graphics.Rect{X: 0, Y: 0, W: screenW, H: screenH}
+	area := input.Rect{X: 0, Y: 0, W: screenW, H: screenH}
 
 	// Only Top and Bottom layers affect usable area with exclusive zones
 	for _, layerList := range []uint32{LayerTop, LayerBottom} {
@@ -1562,7 +1562,7 @@ func (s *Server) handleDamage(sess *session, wid uint32, x, y, w, h int) {
 	default:
 		ox, oy = win.x, win.y
 	}
-	s.markDirty(graphics.Rect{X: ox + x, Y: oy + y, W: w, H: h})
+	s.markDirty(input.Rect{X: ox + x, Y: oy + y, W: w, H: h})
 }
 
 func (s *Server) handleResize(sess *session, wid uint32, w, h, stride int, shmKey string) error {
@@ -1654,7 +1654,7 @@ func (s *Server) composite() {
 	}
 
 	sw, sh := s.fb.Size()
-	damageRects := s.consumeDirtyRects(graphics.Rect{W: sw, H: sh}, 24)
+	damageRects := s.consumeDirtyRects(input.Rect{W: sw, H: sh}, 24)
 	if len(damageRects) == 0 {
 		return
 	}
@@ -1675,7 +1675,7 @@ func (s *Server) composite() {
 	s.visibleScratch[visibleSlotOverlay] = ovrLayers
 	s.mu.Unlock()
 
-	cursorRect := graphics.Rect{X: s.mouseX, Y: s.mouseY, W: 16, H: 20}
+	cursorRect := input.Rect{X: s.mouseX, Y: s.mouseY, W: 16, H: 20}
 	totalDamage := uint64(0)
 
 	for _, flushRect := range damageRects {
@@ -1687,7 +1687,7 @@ func (s *Server) composite() {
 		buf.SetClip(flushRect)
 
 		// Re-composite only the clipped dirty region.
-		buf.FillRect(flushRect, gfxtheme.DefaultTheme.Background)
+		buf.FillRect(flushRect, theme.DefaultTheme.Background)
 
 		for _, win := range bgLayers {
 			if windowScreenRect(win).Intersects(flushRect) {
@@ -1748,7 +1748,7 @@ func (s *Server) composite() {
 	s.flushQueuedMove()
 }
 
-func flushBackendRects(fb graphics.Backend, rects []graphics.Rect) {
+func flushBackendRects(fb input.Backend, rects []input.Rect) {
 	if len(rects) == 0 {
 		return
 	}
@@ -1762,7 +1762,7 @@ func flushBackendRects(fb graphics.Backend, rects []graphics.Rect) {
 	}
 }
 
-func normalizeDamageRectsDisplay(rects []graphics.Rect, bounds graphics.Rect, maxRects int, reuse []graphics.Rect) []graphics.Rect {
+func normalizeDamageRectsDisplay(rects []input.Rect, bounds input.Rect, maxRects int, reuse []input.Rect) []input.Rect {
 	if len(rects) == 0 {
 		return nil
 	}
@@ -1771,7 +1771,7 @@ func normalizeDamageRectsDisplay(rects []graphics.Rect, bounds graphics.Rect, ma
 	}
 	out := reuse[:0]
 	if cap(out) < len(rects) {
-		out = make([]graphics.Rect, 0, len(rects))
+		out = make([]input.Rect, 0, len(rects))
 	}
 	for _, r := range rects {
 		r = r.Intersection(bounds)
@@ -1817,7 +1817,7 @@ func normalizeDamageRectsDisplay(rects []graphics.Rect, bounds graphics.Rect, ma
 	return out
 }
 
-func rectsTouchOrOverlapDisplay(a, b graphics.Rect) bool {
+func rectsTouchOrOverlapDisplay(a, b input.Rect) bool {
 	// Expand A by 1px so edge-touching damage rects coalesce.
 	ax0 := a.X - 1
 	ay0 := a.Y - 1
@@ -1887,7 +1887,7 @@ func (s *Server) buildDiagnosticsLines(sw, sh int) []string {
 	}
 }
 
-func (s *Server) drawDiagnostics(buf *graphics.Buffer, clip graphics.Rect) {
+func (s *Server) drawDiagnostics(buf *input.Buffer, clip input.Rect) {
 	if len(s.diagLines) == 0 {
 		return
 	}
@@ -1896,51 +1896,51 @@ func (s *Server) drawDiagnostics(buf *graphics.Buffer, clip graphics.Rect) {
 		sw, _ := s.fb.Size()
 		rect = diagnosticsRectFor(sw, s.diagLines, s.diagnosticsFont())
 	}
-	blendFillRoundedRect(buf, rect, 8, graphics.NewColor(9, 14, 25, 172), clip)
-	buf.DrawRoundedRect(rect, 8, graphics.NewColor(234, 240, 255, 44))
+	blendFillRoundedRect(buf, rect, 8, input.NewColor(9, 14, 25, 172), clip)
+	buf.DrawRoundedRect(rect, 8, input.NewColor(234, 240, 255, 44))
 
-	font := s.diagnosticsFont()
-	if font == nil {
+	f := s.diagnosticsFont()
+	if f == nil {
 		return
 	}
 	const pad = 6
 	const lineGap = 2
 	y := rect.Y + pad
 	for _, line := range s.diagLines {
-		font.DrawText(buf, line, rect.X+pad, y, graphics.NewColor(234, 240, 255, 240), graphics.Color{})
-		y += font.Height + lineGap
+		f.DrawText(buf, line, rect.X+pad, y, input.NewColor(234, 240, 255, 240), input.Color{})
+		y += f.Height + lineGap
 	}
 }
 
-func (s *Server) diagnosticsFont() *gfxfont.Font {
-	font := gfxfont.UIFont(gfxfont.UIFontParagraph)
-	if font != nil {
-		return font
+func (s *Server) diagnosticsFont() *font.Font {
+	f := font.UIFont(font.UIFontParagraph)
+	if f != nil {
+		return f
 	}
-	return gfxfont.DefaultFont
+	return font.DefaultFont
 }
 
-func diagnosticsRectFor(screenW int, lines []string, font *gfxfont.Font) graphics.Rect {
-	if screenW <= 0 || len(lines) == 0 || font == nil {
-		return graphics.Rect{}
+func diagnosticsRectFor(screenW int, lines []string, f *font.Font) input.Rect {
+	if screenW <= 0 || len(lines) == 0 || f == nil {
+		return input.Rect{}
 	}
 	const margin = 6
 	const pad = 6
 	const lineGap = 2
 	maxW := 0
 	for _, line := range lines {
-		w := font.TextWidth(line)
+		w := f.TextWidth(line)
 		if w > maxW {
 			maxW = w
 		}
 	}
 	panelW := maxW + pad*2
-	panelH := pad*2 + len(lines)*(font.Height+lineGap) - lineGap
+	panelH := pad*2 + len(lines)*(f.Height+lineGap) - lineGap
 	x := screenW - panelW - margin
 	if x < margin {
 		x = margin
 	}
-	return graphics.Rect{X: x, Y: margin, W: panelW, H: panelH}
+	return input.Rect{X: x, Y: margin, W: panelW, H: panelH}
 }
 
 func formatBytesMiB(v uint64) string {
@@ -2070,9 +2070,9 @@ func readProcessRSSBytesStatm() (uint64, error) {
 	return pages * uint64(os.Getpagesize()), nil
 }
 
-func (s *Server) drawWindow(buf *graphics.Buffer, win *window, clip graphics.Rect) {
-	frameRect := graphics.Rect{X: win.x, Y: win.y, W: win.width, H: win.height + decorHeight}
-	clientRect := graphics.Rect{X: win.x, Y: win.y + decorHeight, W: win.width, H: win.height}
+func (s *Server) drawWindow(buf *input.Buffer, win *window, clip input.Rect) {
+	frameRect := input.Rect{X: win.x, Y: win.y, W: win.width, H: win.height + decorHeight}
+	clientRect := input.Rect{X: win.x, Y: win.y + decorHeight, W: win.width, H: win.height}
 	fastPath := (s.dragging && s.dragWin == win) || (s.resizing && s.resizeWin == win)
 
 	// During drag/resize, prefer lower-cost decorations to keep pointer latency low.
@@ -2081,16 +2081,16 @@ func (s *Server) drawWindow(buf *graphics.Buffer, win *window, clip graphics.Rec
 	}
 
 	// Minimal server-side titlebar with neutral controls.
-	bg := graphics.NewColor(248, 249, 252, windowOpacity)
+	bg := input.NewColor(248, 249, 252, windowOpacity)
 	blendFillRoundedRect(buf, frameRect, windowCornerRadius, bg, clip)
 
 	title := win.title
 	if title == "" {
 		title = "Untitled"
 	}
-	titleFont := gfxfont.UIFont(gfxfont.UIFontHeading)
+	titleFont := font.UIFont(font.UIFontHeading)
 	if titleFont == nil {
-		titleFont = gfxfont.DefaultFont
+		titleFont = font.DefaultFont
 	}
 	if titleFont != nil {
 		titleY := win.y + (decorHeight-titleFont.Height)/2
@@ -2102,21 +2102,21 @@ func (s *Server) drawWindow(buf *graphics.Buffer, win *window, clip graphics.Rec
 		if titleY < clip.Y+clip.H && titleY+titleFont.Height > clip.Y &&
 			titleX < clip.X+clip.W && titleRight > clip.X {
 			titleFont.DrawText(buf, title, titleX, titleY,
-				graphics.NewColorHex(0x2E3442), graphics.Color{})
+				input.NewColorHex(0x2E3442), input.Color{})
 		}
 	}
 
 	minRect := minimizeButtonRect(win)
 	maxRect := maximizeButtonRect(win)
 	closeRect := closeButtonRect(win)
-	glyph := graphics.NewColorHex(0x4A5161)
+	glyph := input.NewColorHex(0x4A5161)
 
 	// Minimize glyph: short horizontal bar.
 	if minRect.Intersects(clip) {
 		buf.DrawLine(minRect.X+4, minRect.Y+minRect.H-6, minRect.X+minRect.W-5, minRect.Y+minRect.H-6, glyph)
 	}
 	// Maximize glyph: simple square outline.
-	maxGlyphRect := graphics.Rect{X: maxRect.X + 4, Y: maxRect.Y + 4, W: maxRect.W - 8, H: maxRect.H - 8}
+	maxGlyphRect := input.Rect{X: maxRect.X + 4, Y: maxRect.Y + 4, W: maxRect.W - 8, H: maxRect.H - 8}
 	if maxGlyphRect.Intersects(clip) {
 		buf.DrawRect(maxGlyphRect, glyph)
 	}
@@ -2128,7 +2128,7 @@ func (s *Server) drawWindow(buf *graphics.Buffer, win *window, clip graphics.Rec
 
 	// Subtle separator between titlebar decoration and client content.
 	sepY := win.y + decorHeight - 1
-	sep := graphics.NewColor(27, 42, 74, 28)
+	sep := input.NewColor(27, 42, 74, 28)
 	sepX0 := win.x + 1
 	if sepX0 < clip.X {
 		sepX0 = clip.X
@@ -2154,18 +2154,18 @@ func (s *Server) drawWindow(buf *graphics.Buffer, win *window, clip graphics.Rec
 	// Keep client content alpha as authored by the app (no global attenuation).
 	blitWithOpacityRounded(buf, clientBuf, clientRect.X, clientRect.Y, 255, false, frameRect, windowCornerRadius, clip)
 	if win.focused {
-		buf.DrawRoundedRect(frameRect, windowCornerRadius, graphics.NewColorHex(0xB9C5DD))
+		buf.DrawRoundedRect(frameRect, windowCornerRadius, input.NewColorHex(0xB9C5DD))
 	} else {
-		buf.DrawRoundedRect(frameRect, windowCornerRadius, graphics.NewColorHex(0xCCD4E4))
+		buf.DrawRoundedRect(frameRect, windowCornerRadius, input.NewColorHex(0xCCD4E4))
 	}
 	win.bufMu.RUnlock()
 }
 
-func closeButtonRect(win *window) graphics.Rect {
+func closeButtonRect(win *window) input.Rect {
 	btnW := titleButtonSize
 	btnH := titleButtonSize
 	top := win.y + (decorHeight-btnH)/2
-	return graphics.Rect{
+	return input.Rect{
 		X: win.x + win.width - btnW - titleButtonRightPad,
 		Y: top,
 		W: btnW,
@@ -2173,11 +2173,11 @@ func closeButtonRect(win *window) graphics.Rect {
 	}
 }
 
-func maximizeButtonRect(win *window) graphics.Rect {
+func maximizeButtonRect(win *window) input.Rect {
 	btnW := titleButtonSize
 	btnH := titleButtonSize
 	top := win.y + (decorHeight-btnH)/2
-	return graphics.Rect{
+	return input.Rect{
 		X: win.x + win.width - 2*btnW - titleButtonRightPad - titleButtonGap,
 		Y: top,
 		W: btnW,
@@ -2185,11 +2185,11 @@ func maximizeButtonRect(win *window) graphics.Rect {
 	}
 }
 
-func minimizeButtonRect(win *window) graphics.Rect {
+func minimizeButtonRect(win *window) input.Rect {
 	btnW := titleButtonSize
 	btnH := titleButtonSize
 	top := win.y + (decorHeight-btnH)/2
-	return graphics.Rect{
+	return input.Rect{
 		X: win.x + win.width - 3*btnW - titleButtonRightPad - 2*titleButtonGap,
 		Y: top,
 		W: btnW,
@@ -2197,16 +2197,16 @@ func minimizeButtonRect(win *window) graphics.Rect {
 	}
 }
 
-func drawShadowRounded(buf *graphics.Buffer, r graphics.Rect, radius, spread, offsetX, offsetY, topClip int, clip graphics.Rect) {
+func drawShadowRounded(buf *input.Buffer, r input.Rect, radius, spread, offsetX, offsetY, topClip int, clip input.Rect) {
 	minShadowY := r.Y + topClip
 	for i := spread; i >= 1; i-- {
-		outer := graphics.Rect{
+		outer := input.Rect{
 			X: r.X - i + offsetX,
 			Y: r.Y - i + offsetY,
 			W: r.W + 2*i,
 			H: r.H + 2*i,
 		}
-		inner := graphics.Rect{
+		inner := input.Rect{
 			X: r.X - (i - 1) + offsetX,
 			Y: r.Y - (i - 1) + offsetY,
 			W: r.W + 2*(i-1),
@@ -2214,11 +2214,11 @@ func drawShadowRounded(buf *graphics.Buffer, r graphics.Rect, radius, spread, of
 		}
 		step := spread - i + 1
 		alpha := uint8(4 + (step*step*40)/(spread*spread))
-		blendShadowRing(buf, outer, inner, radius+i, radius+i-1, graphics.NewColor(0, 0, 0, alpha), clip, minShadowY)
+		blendShadowRing(buf, outer, inner, radius+i, radius+i-1, input.NewColor(0, 0, 0, alpha), clip, minShadowY)
 	}
 }
 
-func blendShadowRing(buf *graphics.Buffer, outer, inner graphics.Rect, outerRadius, innerRadius int, c graphics.Color, clip graphics.Rect, minShadowY int) {
+func blendShadowRing(buf *input.Buffer, outer, inner input.Rect, outerRadius, innerRadius int, c input.Color, clip input.Rect, minShadowY int) {
 	if outer.W <= 0 || outer.H <= 0 || c.A == 0 {
 		return
 	}
@@ -2293,7 +2293,7 @@ func blendShadowRing(buf *graphics.Buffer, outer, inner graphics.Rect, outerRadi
 	}
 }
 
-func pointInRoundedRect(x, y int, r graphics.Rect, radius int) bool {
+func pointInRoundedRect(x, y int, r input.Rect, radius int) bool {
 	if !r.ContainsXY(x, y) {
 		return false
 	}
@@ -2332,7 +2332,7 @@ func pointInRoundedRect(x, y int, r graphics.Rect, radius int) bool {
 	return dx*dx+dy*dy <= radius*radius
 }
 
-func fillTopRoundedRect(buf *graphics.Buffer, r graphics.Rect, radius int, c graphics.Color) {
+func fillTopRoundedRect(buf *input.Buffer, r input.Rect, radius int, c input.Color) {
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}
@@ -2348,8 +2348,8 @@ func fillTopRoundedRect(buf *graphics.Buffer, r graphics.Rect, radius int, c gra
 	}
 
 	// Center strip and lower body (square bottom corners).
-	buf.FillRect(graphics.Rect{X: r.X + radius, Y: r.Y, W: r.W - 2*radius, H: r.H}, c)
-	buf.FillRect(graphics.Rect{X: r.X, Y: r.Y + radius, W: r.W, H: r.H - radius}, c)
+	buf.FillRect(input.Rect{X: r.X + radius, Y: r.Y, W: r.W - 2*radius, H: r.H}, c)
+	buf.FillRect(input.Rect{X: r.X, Y: r.Y + radius, W: r.W, H: r.H - radius}, c)
 
 	// Top rounded corners.
 	r2 := radius * radius
@@ -2363,7 +2363,7 @@ func fillTopRoundedRect(buf *graphics.Buffer, r graphics.Rect, radius int, c gra
 	}
 }
 
-func blendFillRoundedRect(buf *graphics.Buffer, r graphics.Rect, radius int, c graphics.Color, clip graphics.Rect) {
+func blendFillRoundedRect(buf *input.Buffer, r input.Rect, radius int, c input.Color, clip input.Rect) {
 	if r.W <= 0 || r.H <= 0 || c.A == 0 {
 		return
 	}
@@ -2424,7 +2424,7 @@ func blendFillRoundedRect(buf *graphics.Buffer, r graphics.Rect, radius int, c g
 	}
 }
 
-func blendFillRect(buf *graphics.Buffer, r graphics.Rect, c graphics.Color, clip graphics.Rect) {
+func blendFillRect(buf *input.Buffer, r input.Rect, c input.Color, clip input.Rect) {
 	if r.W <= 0 || r.H <= 0 || c.A == 0 {
 		return
 	}
@@ -2468,7 +2468,7 @@ func blendFillRect(buf *graphics.Buffer, r graphics.Rect, c graphics.Color, clip
 	}
 }
 
-func blendFillTopRoundedRect(buf *graphics.Buffer, r graphics.Rect, radius int, c graphics.Color, clip graphics.Rect) {
+func blendFillTopRoundedRect(buf *input.Buffer, r input.Rect, radius int, c input.Color, clip input.Rect) {
 	if r.W <= 0 || r.H <= 0 || c.A == 0 {
 		return
 	}
@@ -2483,8 +2483,8 @@ func blendFillTopRoundedRect(buf *graphics.Buffer, r graphics.Rect, radius int, 
 		radius = r.H
 	}
 
-	blendFillRect(buf, graphics.Rect{X: r.X + radius, Y: r.Y, W: r.W - 2*radius, H: r.H}, c, clip)
-	blendFillRect(buf, graphics.Rect{X: r.X, Y: r.Y + radius, W: r.W, H: r.H - radius}, c, clip)
+	blendFillRect(buf, input.Rect{X: r.X + radius, Y: r.Y, W: r.W - 2*radius, H: r.H}, c, clip)
+	blendFillRect(buf, input.Rect{X: r.X, Y: r.Y + radius, W: r.W, H: r.H - radius}, c, clip)
 
 	r2 := radius * radius
 	for dy := 0; dy < radius; dy++ {
@@ -2502,7 +2502,7 @@ func blendFillTopRoundedRect(buf *graphics.Buffer, r graphics.Rect, radius int, 
 	}
 }
 
-func maskBottomRoundedCorners(buf *graphics.Buffer, r graphics.Rect, radius int, fill graphics.Color) {
+func maskBottomRoundedCorners(buf *input.Buffer, r input.Rect, radius int, fill input.Color) {
 	if radius <= 0 || r.W <= 0 || r.H <= 0 {
 		return
 	}
@@ -2526,7 +2526,7 @@ func maskBottomRoundedCorners(buf *graphics.Buffer, r graphics.Rect, radius int,
 	}
 }
 
-func maskOutsideRoundedRect(buf *graphics.Buffer, r graphics.Rect, radius int, fill graphics.Color) {
+func maskOutsideRoundedRect(buf *input.Buffer, r input.Rect, radius int, fill input.Color) {
 	if radius <= 0 || r.W <= 0 || r.H <= 0 {
 		return
 	}
@@ -2567,7 +2567,7 @@ func maskOutsideRoundedRect(buf *graphics.Buffer, r graphics.Rect, radius int, f
 }
 
 // drawSurface draws a layer surface (no decorations).
-func (s *Server) drawSurface(buf *graphics.Buffer, win *window, clip graphics.Rect) {
+func (s *Server) drawSurface(buf *input.Buffer, win *window, clip input.Rect) {
 	win.bufMu.RLock()
 	clientBuf := win.buffer
 	if clientBuf == nil {
@@ -2575,7 +2575,7 @@ func (s *Server) drawSurface(buf *graphics.Buffer, win *window, clip graphics.Re
 		return
 	}
 	if win.layer != LayerBackground {
-		frameRect := graphics.Rect{X: win.x, Y: win.y, W: win.width, H: win.height}
+		frameRect := input.Rect{X: win.x, Y: win.y, W: win.width, H: win.height}
 		drawShadowRounded(buf, frameRect, windowCornerRadius, layerShadowSpread, layerShadowOffsetX, layerShadowOffsetY, layerShadowTopClip, clip)
 	}
 	// Keep app content alpha as authored; only app pixels with alpha < 255 are translucent.
@@ -2584,7 +2584,7 @@ func (s *Server) drawSurface(buf *graphics.Buffer, win *window, clip graphics.Re
 }
 
 // drawPopup draws a popup window (no decorations, positioned relative to parent).
-func (s *Server) drawPopup(buf *graphics.Buffer, win *window, clip graphics.Rect) {
+func (s *Server) drawPopup(buf *input.Buffer, win *window, clip input.Rect) {
 	win.bufMu.RLock()
 	clientBuf := win.buffer
 	if clientBuf == nil {
@@ -2597,12 +2597,12 @@ func (s *Server) drawPopup(buf *graphics.Buffer, win *window, clip graphics.Rect
 	win.bufMu.RUnlock()
 }
 
-func blitWithOpacity(dst, src *graphics.Buffer, x, y int, opacity uint8, opaqueHint bool, clip graphics.Rect) {
+func blitWithOpacity(dst, src *input.Buffer, x, y int, opacity uint8, opaqueHint bool, clip input.Rect) {
 	if dst == nil || src == nil {
 		return
 	}
-	dstRect := graphics.Rect{X: x, Y: y, W: src.Width, H: src.Height}
-	drawRect := dstRect.Intersection(clip).Intersection(graphics.Rect{W: dst.Width, H: dst.Height})
+	dstRect := input.Rect{X: x, Y: y, W: src.Width, H: src.Height}
+	drawRect := dstRect.Intersection(clip).Intersection(input.Rect{W: dst.Width, H: dst.Height})
 	if drawRect.IsEmpty() {
 		return
 	}
@@ -2613,7 +2613,7 @@ func blitWithOpacity(dst, src *graphics.Buffer, x, y int, opacity uint8, opaqueH
 	sy1 := sy0 + drawRect.H
 
 	if opaqueHint && opacity == 255 &&
-		dst.Format == graphics.PixelFormatBGRA && src.Format == graphics.PixelFormatBGRA {
+		dst.Format == input.PixelFormatBGRA && src.Format == input.PixelFormatBGRA {
 		rowBytes := drawRect.W * 4
 		for sy := sy0; sy < sy1; sy++ {
 			dy := y + sy
@@ -2628,7 +2628,7 @@ func blitWithOpacity(dst, src *graphics.Buffer, x, y int, opacity uint8, opaqueH
 		return
 	}
 
-	if dst.Format == graphics.PixelFormatBGRA && src.Format == graphics.PixelFormatBGRA {
+	if dst.Format == input.PixelFormatBGRA && src.Format == input.PixelFormatBGRA {
 		rowBytes := drawRect.W * 4
 		for sy := sy0; sy < sy1; sy++ {
 			dy := y + sy
@@ -2665,12 +2665,12 @@ func blitWithOpacity(dst, src *graphics.Buffer, x, y int, opacity uint8, opaqueH
 	}
 }
 
-func blitWithOpacityRounded(dst, src *graphics.Buffer, x, y int, opacity uint8, opaqueHint bool, roundRect graphics.Rect, radius int, clip graphics.Rect) {
+func blitWithOpacityRounded(dst, src *input.Buffer, x, y int, opacity uint8, opaqueHint bool, roundRect input.Rect, radius int, clip input.Rect) {
 	if dst == nil || src == nil {
 		return
 	}
-	dstRect := graphics.Rect{X: x, Y: y, W: src.Width, H: src.Height}
-	drawRect := dstRect.Intersection(clip).Intersection(graphics.Rect{W: dst.Width, H: dst.Height}).Intersection(roundRect)
+	dstRect := input.Rect{X: x, Y: y, W: src.Width, H: src.Height}
+	drawRect := dstRect.Intersection(clip).Intersection(input.Rect{W: dst.Width, H: dst.Height}).Intersection(roundRect)
 	if drawRect.IsEmpty() {
 		return
 	}
@@ -2708,7 +2708,7 @@ func blitWithOpacityRounded(dst, src *graphics.Buffer, x, y int, opacity uint8, 
 	}
 }
 
-func roundedRectCoverageDisplay(x, y int, r graphics.Rect, radius int) float64 {
+func roundedRectCoverageDisplay(x, y int, r input.Rect, radius int) float64 {
 	if radius <= 0 {
 		if r.ContainsXY(x, y) {
 			return 1
@@ -2751,7 +2751,7 @@ func roundedRectCoverageDisplay(x, y int, r graphics.Rect, radius int) float64 {
 	return float64(inside) / float64(samples*samples)
 }
 
-func pointInRoundedRectAtDisplay(px, py float64, r graphics.Rect, radius int) bool {
+func pointInRoundedRectAtDisplay(px, py float64, r input.Rect, radius int) bool {
 	if radius <= 0 {
 		if px < float64(r.X) || px >= float64(r.X+r.W) || py < float64(r.Y) || py >= float64(r.Y+r.H) {
 			return false
@@ -2761,7 +2761,7 @@ func pointInRoundedRectAtDisplay(px, py float64, r graphics.Rect, radius int) bo
 	return pointInRoundedRectAtDisplayClamped(px, py, r, clampRoundedRadiusDisplay(r, radius))
 }
 
-func pointInRoundedRectAtDisplayClamped(px, py float64, r graphics.Rect, radius int) bool {
+func pointInRoundedRectAtDisplayClamped(px, py float64, r input.Rect, radius int) bool {
 	if px < float64(r.X) || px >= float64(r.X+r.W) || py < float64(r.Y) || py >= float64(r.Y+r.H) {
 		return false
 	}
@@ -2790,7 +2790,7 @@ func pointInRoundedRectAtDisplayClamped(px, py float64, r graphics.Rect, radius 
 	return (qx*qx + qy*qy) <= (rr * rr)
 }
 
-func clampRoundedRadiusDisplay(r graphics.Rect, radius int) int {
+func clampRoundedRadiusDisplay(r input.Rect, radius int) int {
 	if radius < 0 {
 		return 0
 	}
@@ -2803,7 +2803,7 @@ func clampRoundedRadiusDisplay(r graphics.Rect, radius int) int {
 	return radius
 }
 
-func roundedRectSignedDistanceDisplay(px, py float64, r graphics.Rect, radius int) float64 {
+func roundedRectSignedDistanceDisplay(px, py float64, r input.Rect, radius int) float64 {
 	if r.W <= 0 || r.H <= 0 {
 		return 1
 	}
@@ -2842,7 +2842,7 @@ func roundedRectSignedDistanceDisplay(px, py float64, r graphics.Rect, radius in
 	return outside + inside - rr
 }
 
-func drawCoverageBlendPixel(buf *graphics.Buffer, x, y int, c graphics.Color, coverage float64) {
+func drawCoverageBlendPixel(buf *input.Buffer, x, y int, c input.Color, coverage float64) {
 	if coverage <= 0 {
 		return
 	}
@@ -2850,38 +2850,38 @@ func drawCoverageBlendPixel(buf *graphics.Buffer, x, y int, c graphics.Color, co
 	if a == 0 {
 		return
 	}
-	sc := graphics.NewColor(c.R, c.G, c.B, a)
+	sc := input.NewColor(c.R, c.G, c.B, a)
 	bg := buf.GetPixel(x, y)
 	buf.SetPixel(x, y, sc.Blend(bg))
 }
 
 // Cursor bitmap: 16x20, 'B' = black outline, 'W' = white fill, ' ' = transparent.
-var cursorBitmap = [20]string{
-	"B               ",
-	"BB              ",
-	"BWB             ",
-	"BWWB            ",
-	"BWWWB           ",
-	"BWWWWB          ",
-	"BWWWWWB         ",
-	"BWWWWWWB        ",
-	"BWWWWWWWB       ",
-	"BWWWWWWWWB      ",
-	"BWWWWWWWWWB     ",
-	"BWWWWWWBBBB     ",
-	"BWWWBWWB        ",
-	"BWWB BWWB       ",
-	"BWB  BWWB       ",
-	"BB    BWWB      ",
-	"B     BWWB      ",
-	"       BWWB     ",
-	"       BBB      ",
-	"                ",
+var cursorBitmap = [24]string{
+	" BB                     ",
+	"BWWWB                   ",
+	"BWWWWB                  ",
+	"BWWWWWB                 ",
+	"BWWWWWWB                ",
+	"BWWWWWWWB               ",
+	"BWWWWWWWWB              ",
+	"BWWWWWWWWWB             ",
+	"BWWWWWWWWWWB            ",
+	"BWWWWWWWWWWWB           ",
+	"BWWWWWWWWWWWWB          ",
+	"BWWWWWWWWWWWWWB         ",
+	"BWWWWWBBBBBBBB          ",
+	"BWWWWB                  ",
+	"BWWWB                   ",
+	"BWWB                    ",
+	" BB                     ",
+	"                        ",
+	"                        ",
+	"                        ",
 }
 
-func (s *Server) drawCursor(buf *graphics.Buffer) {
-	white := graphics.NewColorRGB(255, 255, 255)
-	black := graphics.NewColorRGB(0, 0, 0)
+func (s *Server) drawCursor(buf *input.Buffer) {
+	white := input.NewColorRGB(255, 255, 255)
+	black := input.NewColorRGB(150, 150, 150)
 	cx, cy := s.mouseX, s.mouseY
 	for row := 0; row < len(cursorBitmap); row++ {
 		for col := 0; col < len(cursorBitmap[row]); col++ {
@@ -2898,7 +2898,7 @@ func (s *Server) drawCursor(buf *graphics.Buffer) {
 // --- Input ---
 
 func (s *Server) processInput() {
-	var pendingMove *graphics.Event
+	var pendingMove *input.Event
 	flushMove := func() {
 		if pendingMove == nil {
 			return
@@ -2913,25 +2913,25 @@ func (s *Server) processInput() {
 			flushMove()
 			return
 		}
-		if ev.Type == graphics.EventQuit {
+		if ev.Type == input.EventQuit {
 			flushMove()
 			s.Quit()
 			return
 		}
 		switch ev.Type {
-		case graphics.EventMouseMove:
+		case input.EventMouseMove:
 			// Coalesce high-frequency move events; only latest position matters.
 			pendingMove = ev
-		case graphics.EventMouseButtonPress:
+		case input.EventMouseButtonPress:
 			flushMove()
 			s.handlePointerButton(ev.MouseButton, true)
-		case graphics.EventMouseButtonRelease:
+		case input.EventMouseButtonRelease:
 			flushMove()
 			s.handlePointerButton(ev.MouseButton, false)
-		case graphics.EventKeyPress:
+		case input.EventKeyPress:
 			flushMove()
 			s.handleKey(ev, true)
-		case graphics.EventKeyRelease:
+		case input.EventKeyRelease:
 			flushMove()
 			s.handleKey(ev, false)
 		}
@@ -2947,7 +2947,7 @@ func (s *Server) handlePointerMotion(x, y int) {
 	s.markDirty(s.prevCursorRect)
 	s.mouseX = x
 	s.mouseY = y
-	cursorRect := graphics.Rect{X: x, Y: y, W: 16, H: 20}
+	cursorRect := input.Rect{X: x, Y: y, W: 16, H: 20}
 	s.markDirty(cursorRect)
 
 	// Dragging
@@ -3013,12 +3013,12 @@ func (s *Server) windowLocalCoords(win *window, x, y int) (int, int) {
 	}
 }
 
-func (s *Server) handlePointerButton(button graphics.MouseButton, pressed bool) {
+func (s *Server) handlePointerButton(button input.MouseButton, pressed bool) {
 	win := s.hovered
-	isWheel := button == graphics.MouseButtonWheelUp ||
-		button == graphics.MouseButtonWheelDown ||
-		button == graphics.MouseButtonWheelLeft ||
-		button == graphics.MouseButtonWheelRight
+	isWheel := button == input.MouseButtonWheelUp ||
+		button == input.MouseButtonWheelDown ||
+		button == input.MouseButtonWheelLeft ||
+		button == input.MouseButtonWheelRight
 
 	// Popup dismiss: click outside any popup closes it and removes it.
 	if pressed && !isWheel && len(s.popups) > 0 {
@@ -3116,19 +3116,19 @@ func (s *Server) handlePointerButton(button graphics.MouseButton, pressed bool) 
 	if win != nil {
 		buttonCode := 0
 		switch button {
-		case graphics.MouseButtonLeft:
+		case input.MouseButtonLeft:
 			buttonCode = 0x110
-		case graphics.MouseButtonRight:
+		case input.MouseButtonRight:
 			buttonCode = 0x111
-		case graphics.MouseButtonMiddle:
+		case input.MouseButtonMiddle:
 			buttonCode = 0x112
-		case graphics.MouseButtonWheelUp:
+		case input.MouseButtonWheelUp:
 			buttonCode = 4
-		case graphics.MouseButtonWheelDown:
+		case input.MouseButtonWheelDown:
 			buttonCode = 5
-		case graphics.MouseButtonWheelLeft:
+		case input.MouseButtonWheelLeft:
 			buttonCode = 6
-		case graphics.MouseButtonWheelRight:
+		case input.MouseButtonWheelRight:
 			buttonCode = 7
 		}
 		if buttonCode == 0 {
@@ -3142,7 +3142,7 @@ func (s *Server) handlePointerButton(button graphics.MouseButton, pressed bool) 
 	}
 }
 
-func (s *Server) handleKey(ev *graphics.Event, pressed bool) {
+func (s *Server) handleKey(ev *input.Event, pressed bool) {
 	s.mu.Lock()
 	target := s.resolveKeyTargetLocked()
 	owner, sev, matched := s.matchShortcutLocked(target, ev)
@@ -3160,7 +3160,7 @@ func (s *Server) handleKey(ev *graphics.Event, pressed bool) {
 	s.sendKey(target, ev, pressed)
 }
 
-func (s *Server) sendKey(win *window, ev *graphics.Event, pressed bool) {
+func (s *Server) sendKey(win *window, ev *input.Event, pressed bool) {
 	_ = EmitKey(s.service, win.sess.id, displayapi.KeyEvent{
 		WindowID: win.id,
 		Key:      ev.Key,
