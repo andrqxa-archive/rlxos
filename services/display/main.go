@@ -148,6 +148,28 @@ func (b *fallbackBackend) FlushRect(r graphics.Rect) error {
 	return b.active.FlushRect(r)
 }
 
+type batchRectFlusher interface {
+	FlushRects([]graphics.Rect) error
+}
+
+func (b *fallbackBackend) FlushRects(rects []graphics.Rect) error {
+	if b.active == nil {
+		return fmt.Errorf("backend not open")
+	}
+	if len(rects) == 0 {
+		return nil
+	}
+	if bf, ok := b.active.(batchRectFlusher); ok {
+		return bf.FlushRects(rects)
+	}
+	for _, r := range rects {
+		if err := b.active.FlushRect(r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (b *fallbackBackend) Info() string {
 	if b.active == nil {
 		return "auto: not open"

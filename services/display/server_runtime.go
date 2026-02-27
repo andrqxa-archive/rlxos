@@ -211,15 +211,21 @@ type Server struct {
 	resizeWin                  *window
 	resizeStartX, resizeStartY int
 	resizeStartW, resizeStartH int
+	pendingMovedWin            *window
 
 	mu   sync.Mutex
 	quit chan struct{}
 
 	// Dirty tracking for partial flush.
-	dirtyMu        sync.Mutex
-	dirty          bool
-	dirtyRects     []graphics.Rect
-	prevCursorRect graphics.Rect
+	dirtyMu           sync.Mutex
+	dirty             bool
+	dirtyRects        []graphics.Rect
+	dirtySpare        []graphics.Rect
+	normalizedScratch []graphics.Rect
+	prevCursorRect    graphics.Rect
+
+	// Reusable visible snapshots to avoid per-frame slice churn.
+	visibleScratch [6][]*window
 
 	// FPS
 	frameCount int
@@ -256,6 +262,15 @@ type rectBatchFlusher interface {
 	FlushRects([]graphics.Rect) error
 }
 
+const (
+	visibleSlotBackground = iota
+	visibleSlotBottom
+	visibleSlotWindows
+	visibleSlotPopups
+	visibleSlotTop
+	visibleSlotOverlay
+)
+
 // NewServer creates a display server.
 func NewServer(fb graphics.Backend, input graphics.InputHandler) *Server {
 	return &Server{
@@ -277,7 +292,12 @@ func (s *Server) markDirty(r graphics.Rect) {
 	}
 	s.dirtyMu.Lock()
 	s.dirty = true
-	s.dirtyRects = append(s.dirtyRects, r)
+	// Coalesce with the latest rect to keep the dirty list compact under motion storms.
+	if n := len(s.dirtyRects); n > 0 && rectsTouchOrOverlapDisplay(s.dirtyRects[n-1], r) {
+		s.dirtyRects[n-1] = s.dirtyRects[n-1].Union(r)
+	} else {
+		s.dirtyRects = append(s.dirtyRects, r)
+	}
 	// Bound memory/work under pathological damage storms.
 	if len(s.dirtyRects) > 128 {
 		merged := s.dirtyRects[0]
@@ -313,12 +333,15 @@ func (s *Server) consumeDirtyRects(bounds graphics.Rect, maxRects int) []graphic
 		s.dirtyMu.Unlock()
 		return nil
 	}
-	rects := make([]graphics.Rect, len(s.dirtyRects))
-	copy(rects, s.dirtyRects)
+	rects := s.dirtyRects
 	s.dirty = false
-	s.dirtyRects = s.dirtyRects[:0]
+	s.dirtyRects = s.dirtySpare[:0]
+	s.dirtySpare = rects[:0]
 	s.dirtyMu.Unlock()
-	return normalizeDamageRectsDisplay(rects, bounds, maxRects)
+
+	damage := normalizeDamageRectsDisplay(rects, bounds, maxRects, s.normalizedScratch[:0])
+	s.normalizedScratch = damage[:0]
+	return damage
 }
 
 // windowScreenRect returns the screen-space bounding rect of a window (including decorations).
@@ -926,8 +949,8 @@ func (s *Server) isWindowVisible(win *window) bool {
 
 // filterVisible returns a snapshot of windows that belong to the active session or system session.
 // Must be called with s.mu held.
-func (s *Server) filterVisible(src []*window) []*window {
-	out := make([]*window, 0, len(src))
+func (s *Server) filterVisibleInto(dst []*window, src []*window) []*window {
+	out := dst[:0]
 	for _, w := range src {
 		if s.isWindowVisible(w) {
 			out = append(out, w)
@@ -949,6 +972,15 @@ func openShmRO(path string, size int) (int, []byte, error) {
 		return -1, nil, err
 	}
 	return fd, data, nil
+}
+
+func resizeOrAllocWindowBuffer(buf *graphics.Buffer, w, h int) (*graphics.Buffer, bool) {
+	if buf != nil && buf.Format == graphics.PixelFormatBGRA {
+		oldW, oldH := buf.Width, buf.Height
+		buf.Resize(w, h)
+		return buf, oldW != w || oldH != h
+	}
+	return graphics.NewBuffer(w, h), true
 }
 
 func (s *Server) mmapAndCopy(shmKey string, w, h, stride int) (int, []byte, *graphics.Buffer, error) {
@@ -1502,7 +1534,11 @@ func (s *Server) handleDamage(sess *session, wid uint32, x, y, w, h int) {
 
 	buf := win.buffer
 	if buf == nil || buf.Width != win.width || buf.Height != win.height {
-		buf = graphics.NewBuffer(win.width, win.height)
+		var resized bool
+		buf, resized = resizeOrAllocWindowBuffer(buf, win.width, win.height)
+		if resized {
+			clear(buf.Data)
+		}
 		win.buffer = buf
 	}
 	for dy := y; dy < y+h; dy++ {
@@ -1563,7 +1599,7 @@ func (s *Server) handleResize(sess *session, wid uint32, w, h, stride int, shmKe
 	win.stride = stride
 
 	// Full buffer copy
-	buf := graphics.NewBuffer(w, h)
+	buf, _ := resizeOrAllocWindowBuffer(win.buffer, w, h)
 	for y := 0; y < h; y++ {
 		srcOff := y * stride
 		dstOff := y * buf.Stride
@@ -1625,12 +1661,18 @@ func (s *Server) composite() {
 
 	s.mu.Lock()
 	// Snapshot all lists, filtering by active session
-	bgLayers := s.filterVisible(s.layers[LayerBackground])
-	btmLayers := s.filterVisible(s.layers[LayerBottom])
-	wins := s.filterVisible(s.windows)
-	pops := s.filterVisible(s.popups)
-	topLayers := s.filterVisible(s.layers[LayerTop])
-	ovrLayers := s.filterVisible(s.layers[LayerOverlay])
+	bgLayers := s.filterVisibleInto(s.visibleScratch[visibleSlotBackground][:0], s.layers[LayerBackground])
+	s.visibleScratch[visibleSlotBackground] = bgLayers
+	btmLayers := s.filterVisibleInto(s.visibleScratch[visibleSlotBottom][:0], s.layers[LayerBottom])
+	s.visibleScratch[visibleSlotBottom] = btmLayers
+	wins := s.filterVisibleInto(s.visibleScratch[visibleSlotWindows][:0], s.windows)
+	s.visibleScratch[visibleSlotWindows] = wins
+	pops := s.filterVisibleInto(s.visibleScratch[visibleSlotPopups][:0], s.popups)
+	s.visibleScratch[visibleSlotPopups] = pops
+	topLayers := s.filterVisibleInto(s.visibleScratch[visibleSlotTop][:0], s.layers[LayerTop])
+	s.visibleScratch[visibleSlotTop] = topLayers
+	ovrLayers := s.filterVisibleInto(s.visibleScratch[visibleSlotOverlay][:0], s.layers[LayerOverlay])
+	s.visibleScratch[visibleSlotOverlay] = ovrLayers
 	s.mu.Unlock()
 
 	cursorRect := graphics.Rect{X: s.mouseX, Y: s.mouseY, W: 16, H: 20}
@@ -1692,6 +1734,7 @@ func (s *Server) composite() {
 	flushBackendRects(s.fb, damageRects)
 
 	if totalDamage == 0 {
+		s.flushQueuedMove()
 		return
 	}
 
@@ -1702,6 +1745,7 @@ func (s *Server) composite() {
 	s.damageAccum += totalDamage
 	s.redrawTick++
 	s.redrawAccum++
+	s.flushQueuedMove()
 }
 
 func flushBackendRects(fb graphics.Backend, rects []graphics.Rect) {
@@ -1718,14 +1762,17 @@ func flushBackendRects(fb graphics.Backend, rects []graphics.Rect) {
 	}
 }
 
-func normalizeDamageRectsDisplay(rects []graphics.Rect, bounds graphics.Rect, maxRects int) []graphics.Rect {
+func normalizeDamageRectsDisplay(rects []graphics.Rect, bounds graphics.Rect, maxRects int, reuse []graphics.Rect) []graphics.Rect {
 	if len(rects) == 0 {
 		return nil
 	}
 	if maxRects < 1 {
 		maxRects = 1
 	}
-	out := make([]graphics.Rect, 0, len(rects))
+	out := reuse[:0]
+	if cap(out) < len(rects) {
+		out = make([]graphics.Rect, 0, len(rects))
+	}
 	for _, r := range rects {
 		r = r.Intersection(bounds)
 		if r.IsEmpty() {
@@ -2026,9 +2073,12 @@ func readProcessRSSBytesStatm() (uint64, error) {
 func (s *Server) drawWindow(buf *graphics.Buffer, win *window, clip graphics.Rect) {
 	frameRect := graphics.Rect{X: win.x, Y: win.y, W: win.width, H: win.height + decorHeight}
 	clientRect := graphics.Rect{X: win.x, Y: win.y + decorHeight, W: win.width, H: win.height}
+	fastPath := (s.dragging && s.dragWin == win) || (s.resizing && s.resizeWin == win)
 
-	// Soft shadow around the rounded window.
-	drawShadowRounded(buf, frameRect, windowCornerRadius, windowShadowSpread, windowShadowOffsetX, windowShadowOffsetY, windowShadowTopClip, clip)
+	// During drag/resize, prefer lower-cost decorations to keep pointer latency low.
+	if !fastPath {
+		drawShadowRounded(buf, frameRect, windowCornerRadius, windowShadowSpread, windowShadowOffsetX, windowShadowOffsetY, windowShadowTopClip, clip)
+	}
 
 	// Minimal server-side titlebar with neutral controls.
 	bg := graphics.NewColor(248, 249, 252, windowOpacity)
@@ -2042,11 +2092,18 @@ func (s *Server) drawWindow(buf *graphics.Buffer, win *window, clip graphics.Rec
 	if titleFont == nil {
 		titleFont = gfxfont.DefaultFont
 	}
-	titleY := win.y + (decorHeight-titleFont.Height)/2
-	titleRect := graphics.Rect{X: win.x + titleTextInset, Y: titleY, W: titleFont.TextWidth(title), H: titleFont.Height}
-	if titleRect.Intersects(clip) {
-		titleFont.DrawText(buf, title, titleRect.X, titleRect.Y,
-			graphics.NewColorHex(0x2E3442), graphics.Color{})
+	if titleFont != nil {
+		titleY := win.y + (decorHeight-titleFont.Height)/2
+		titleX := win.x + titleTextInset
+		titleRight := win.x + win.width - (3*titleButtonSize + 2*titleButtonGap + titleButtonRightPad + 4)
+		if titleRight < titleX {
+			titleRight = titleX
+		}
+		if titleY < clip.Y+clip.H && titleY+titleFont.Height > clip.Y &&
+			titleX < clip.X+clip.W && titleRight > clip.X {
+			titleFont.DrawText(buf, title, titleX, titleY,
+				graphics.NewColorHex(0x2E3442), graphics.Color{})
+		}
 	}
 
 	minRect := minimizeButtonRect(win)
@@ -2899,9 +2956,9 @@ func (s *Server) handlePointerMotion(x, y int) {
 		s.dragWin.x = s.dragWinX + (x - s.dragStartX)
 		s.dragWin.y = s.dragWinY + (y - s.dragStartY)
 		s.dragWin.maximized = false
-		s.markDirty(oldRect)
-		s.markDirty(windowScreenRect(s.dragWin))
-		s.sendMoved(s.dragWin)
+		newRect := windowScreenRect(s.dragWin)
+		s.markDirty(oldRect.Union(newRect))
+		s.queueMoved(s.dragWin)
 		return
 	}
 
@@ -2922,8 +2979,7 @@ func (s *Server) handlePointerMotion(x, y int) {
 			win.height = newH
 			win.maximized = false
 			s.sendConfigure(win)
-			s.markDirty(oldRect)
-			s.markDirty(windowScreenRect(win))
+			s.markDirty(oldRect.Union(windowScreenRect(win)))
 		}
 		return
 	}
@@ -3043,6 +3099,7 @@ func (s *Server) handlePointerButton(button graphics.MouseButton, pressed bool) 
 		s.dragWin = nil
 		s.resizing = false
 		s.resizeWin = nil
+		s.flushQueuedMove()
 	}
 
 	if win != nil {
@@ -3241,6 +3298,22 @@ func (s *Server) sendMoved(win *window) {
 	})
 }
 
+func (s *Server) queueMoved(win *window) {
+	if win == nil {
+		return
+	}
+	s.pendingMovedWin = win
+}
+
+func (s *Server) flushQueuedMove() {
+	win := s.pendingMovedWin
+	if win == nil {
+		return
+	}
+	s.pendingMovedWin = nil
+	s.sendMoved(win)
+}
+
 // --- Cleanup ---
 
 func (s *Server) removeSession(sess *session) {
@@ -3308,6 +3381,9 @@ func (s *Server) removeWindowLocked(win *window) {
 	if s.resizeWin == win {
 		s.resizing = false
 		s.resizeWin = nil
+	}
+	if s.pendingMovedWin == win {
+		s.pendingMovedWin = nil
 	}
 }
 

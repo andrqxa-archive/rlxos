@@ -49,6 +49,43 @@ func NewBuffer(width, height int) *Buffer {
 	}
 }
 
+// Resize resizes the buffer, reusing the backing memory when capacity allows.
+func (b *Buffer) Resize(width, height int) {
+	if b == nil {
+		return
+	}
+	if width < 0 {
+		width = 0
+	}
+	if height < 0 {
+		height = 0
+	}
+
+	bytesPerPixel := 4
+	switch b.Format {
+	case PixelFormatRGB565:
+		bytesPerPixel = 2
+	case PixelFormatBGRA, PixelFormatRGBA:
+		bytesPerPixel = 4
+	}
+
+	stride := width * bytesPerPixel
+	size := stride * height
+	if size < 0 {
+		size = 0
+	}
+
+	if size > cap(b.Data) {
+		b.Data = make([]byte, size)
+	} else {
+		b.Data = b.Data[:size]
+	}
+	b.Width = width
+	b.Height = height
+	b.Stride = stride
+	b.ClearClip()
+}
+
 // SetClip restricts subsequent drawing operations to the given rectangle.
 // The clip is intersected with the buffer bounds.
 func (b *Buffer) SetClip(r Rect) {
