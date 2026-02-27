@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 	"time"
 
@@ -11,6 +12,8 @@ import (
 	gfxrenderer "avyos.dev/pkg/graphics/renderer"
 	gfxtheme "avyos.dev/pkg/graphics/theme"
 )
+
+var tableMultiSpaceSplit = regexp.MustCompile(`\s{2,}`)
 
 // drawElement renders an element to the buffer based on its attributes.
 func drawElement(e *Element, buf *graphics.Buffer) {
@@ -344,18 +347,21 @@ func drawElementShadow(e *Element, buf *graphics.Buffer, bounds graphics.Rect, r
 }
 
 func drawElementBackground(e *Element, buf *graphics.Buffer, bounds graphics.Rect, radius int) {
-	bg := effectiveBackground(e)
+	bg := e.AttrColor("background", graphics.Color{})
 	gradTop := e.AttrColor("gradientTop", graphics.Color{})
 	gradBottom := e.AttrColor("gradientBottom", graphics.Color{})
+	overlay := stateBackgroundOverlay(e)
 
 	if gradTop.A == 0 && gradBottom.A == 0 {
-		if bg.A == 0 {
-			return
+		if bg.A > 0 {
+			if radius > 0 {
+				buf.FillRoundedRect(bounds, radius, bg)
+			} else {
+				buf.FillRect(bounds, bg)
+			}
 		}
-		if radius > 0 {
-			buf.FillRoundedRect(bounds, radius, bg)
-		} else {
-			buf.FillRect(bounds, bg)
+		if overlay.A > 0 {
+			drawVerticalGradient(buf, bounds, radius, overlay, overlay)
 		}
 		return
 	}
@@ -367,6 +373,9 @@ func drawElementBackground(e *Element, buf *graphics.Buffer, bounds graphics.Rec
 		gradBottom = bg
 	}
 	drawVerticalGradient(buf, bounds, radius, gradTop, gradBottom)
+	if overlay.A > 0 {
+		drawVerticalGradient(buf, bounds, radius, overlay, overlay)
+	}
 }
 
 func drawVerticalGradient(buf *graphics.Buffer, r graphics.Rect, radius int, top, bottom graphics.Color) {
@@ -375,12 +384,27 @@ func drawVerticalGradient(buf *graphics.Buffer, r graphics.Rect, radius int, top
 	}
 	if r.H == 1 {
 		fill := top
-		if fill.A > 0 {
+		if fill.A == 0 {
+			return
+		}
+		endX := r.X + r.W
+		for x := r.X; x < endX; x++ {
 			if radius > 0 {
-				buf.FillRoundedRect(r, radius, fill)
-			} else {
-				buf.FillRect(r, fill)
+				cov := gfxrenderer.RoundedRectCoverage(x, r.Y, r, radius)
+				if cov <= 0.001 {
+					continue
+				}
+				alpha := uint8(float64(fill.A)*cov + 0.5)
+				if alpha == 0 {
+					continue
+				}
+				sc := graphics.NewColor(fill.R, fill.G, fill.B, alpha)
+				dst := buf.GetPixel(x, r.Y)
+				buf.SetPixel(x, r.Y, sc.Blend(dst))
+				continue
 			}
+			dst := buf.GetPixel(x, r.Y)
+			buf.SetPixel(x, r.Y, fill.Blend(dst))
 		}
 		return
 	}
@@ -864,7 +888,14 @@ func drawListView(e *Element, buf *graphics.Buffer) {
 	}
 	hoverColor := e.AttrColor("hoverBackground", graphics.NewColorHex(0x2F6BFF24))
 	selectColor := e.AttrColor("selectedBackground", graphics.NewColorHex(0x2F6BFF24))
+	baseColor := gfxtheme.DefaultTheme.SurfaceGlass
+	hoverGradTop := e.AttrColor("hoverGradientTop", graphics.Color{})
+	hoverGradBottom := e.AttrColor("hoverGradientBottom", graphics.Color{})
+	selectGradTop := e.AttrColor("selectedGradientTop", graphics.Color{})
+	selectGradBottom := e.AttrColor("selectedGradientBottom", graphics.Color{})
 	indicatorColor := e.AttrColor("selectedIndicatorColor", gfxtheme.DefaultTheme.Primary)
+	indicatorGradTop := e.AttrColor("selectedIndicatorGradientTop", graphics.Color{})
+	indicatorGradBottom := e.AttrColor("selectedIndicatorGradientBottom", graphics.Color{})
 	indicatorW := e.AttrInt("selectedIndicatorWidth", 3)
 	if indicatorW < 0 {
 		indicatorW = 0
@@ -885,12 +916,13 @@ func drawListView(e *Element, buf *graphics.Buffer) {
 		}
 		row := graphics.Rect{X: bounds.X + 1, Y: y, W: bounds.W - 2, H: rowH}
 		hovered := itemIdx == e.AttrInt("hoveredIndex", -1)
+		drawListRowFill(buf, row, rowRadius, baseColor, graphics.Color{}, graphics.Color{})
 		if hovered && itemIdx != selected {
-			buf.FillRoundedRect(row, rowRadius, hoverColor)
+			drawListRowFill(buf, row, rowRadius, hoverColor, hoverGradTop, hoverGradBottom)
 		}
 		textInset := 12
 		if itemIdx == selected {
-			buf.FillRoundedRect(row, rowRadius, selectColor)
+			drawListRowFill(buf, row, rowRadius, selectColor, selectGradTop, selectGradBottom)
 			if indicatorW > 0 {
 				iw := indicatorW
 				if iw > row.W-4 {
@@ -908,7 +940,7 @@ func drawListView(e *Element, buf *graphics.Buffer) {
 						indicatorRect.H = row.H - 2
 					}
 					if indicatorRect.H > 0 {
-						buf.FillRoundedRect(indicatorRect, iw, indicatorColor)
+						drawListRowFill(buf, indicatorRect, iw, indicatorColor, indicatorGradTop, indicatorGradBottom)
 					}
 					textInset += iw + 4
 				}
@@ -929,6 +961,33 @@ func drawListView(e *Element, buf *graphics.Buffer) {
 	if borderColor.A > 0 {
 		buf.DrawRoundedRect(bounds, e.AttrInt("borderRadius", 10), borderColor)
 	}
+}
+
+func drawListRowFill(buf *graphics.Buffer, row graphics.Rect, radius int, solid, top, bottom graphics.Color) {
+	if row.W <= 0 || row.H <= 0 {
+		return
+	}
+	if top.A == 0 && bottom.A == 0 {
+		if solid.A == 0 {
+			return
+		}
+		if radius > 0 {
+			buf.FillRoundedRect(row, radius, solid)
+		} else if solid.A == 255 {
+			buf.FillRect(row, solid)
+		} else {
+			// Keep translucent row fills as overlays instead of replacing alpha.
+			drawVerticalGradient(buf, row, 0, solid, solid)
+		}
+		return
+	}
+	if top.A == 0 {
+		top = solid
+	}
+	if bottom.A == 0 {
+		bottom = solid
+	}
+	drawVerticalGradient(buf, row, radius, top, bottom)
 }
 
 func mixColors(a, b graphics.Color, t float64) graphics.Color {
@@ -1600,13 +1659,13 @@ func drawTableArea(e *Element, buf *graphics.Buffer) {
 	rows := make([][]string, 0, len(lines))
 	maxCols := 0
 	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) == 0 {
+		cols := parseTableColumns(line)
+		if len(cols) == 0 {
 			continue
 		}
-		rows = append(rows, fields)
-		if len(fields) > maxCols {
-			maxCols = len(fields)
+		rows = append(rows, cols)
+		if len(cols) > maxCols {
+			maxCols = len(cols)
 		}
 	}
 	if len(rows) == 0 || maxCols == 0 {
@@ -1726,6 +1785,40 @@ func drawTableArea(e *Element, buf *graphics.Buffer) {
 			}
 		}
 	}
+}
+
+func parseTableColumns(line string) []string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return nil
+	}
+	if strings.Contains(line, "\t") {
+		parts := strings.Split(line, "\t")
+		cols := make([]string, 0, len(parts))
+		for _, part := range parts {
+			value := strings.TrimSpace(part)
+			if value == "" {
+				value = "-"
+			}
+			cols = append(cols, value)
+		}
+		return cols
+	}
+
+	parts := tableMultiSpaceSplit.Split(line, -1)
+	if len(parts) > 1 {
+		cols := make([]string, 0, len(parts))
+		for _, part := range parts {
+			value := strings.TrimSpace(part)
+			if value == "" {
+				value = "-"
+			}
+			cols = append(cols, value)
+		}
+		return cols
+	}
+
+	return strings.Fields(line)
 }
 
 func looksNumericCell(text string) bool {

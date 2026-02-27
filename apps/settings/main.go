@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
-	_ "embed"
+	"embed"
 	"encoding/binary"
 	"flag"
 	"fmt"
@@ -27,6 +27,7 @@ import (
 	"avyos.dev/pkg/fs"
 	gapp "avyos.dev/pkg/graphics/app"
 	declapp "avyos.dev/pkg/graphics/app/decl"
+	uidecl "avyos.dev/pkg/graphics/widget/decl"
 	ui "avyos.dev/pkg/graphics/widget/engine"
 	"avyos.dev/pkg/identity"
 	"avyos.dev/pkg/ini"
@@ -36,6 +37,24 @@ import (
 
 //go:embed ui/settingsmanager.ui
 var settingsManagerUI string
+
+//go:embed ui/pages/*.ui
+var settingsPageLayoutsFS embed.FS
+
+var settingsPageLayoutFiles = map[string]string{
+	"network":       "ui/pages/network.ui",
+	"appearance":    "ui/pages/appearance.ui",
+	"display":       "ui/pages/display.ui",
+	"sound":         "ui/pages/sound.ui",
+	"notifications": "ui/pages/notifications.ui",
+	"security":      "ui/pages/security.ui",
+	"user":          "ui/pages/user.ui",
+	"services":      "ui/pages/services.ui",
+	"distro":        "ui/pages/distro.ui",
+	"devices":       "ui/pages/devices.ui",
+	"configs":       "ui/pages/configs.ui",
+	"about":         "ui/pages/about.ui",
+}
 
 const (
 	defaultWallpaper       = "/avyos/data/backgrounds/default.png"
@@ -1000,7 +1019,7 @@ type settingsApp struct {
 	persisted   map[string]string
 
 	serviceTarget      string
-	distroInstallURL string
+	distroInstallURL   string
 	deviceTriggerScope string
 	configFilterPrefix string
 	configEditKey      string
@@ -1089,6 +1108,22 @@ func (a *settingsApp) RefreshPage() {
 	a.setStatus("Page refreshed")
 }
 
+func (a *settingsApp) loadPageLayout(pageName string) (*ui.Element, *ui.Element, error) {
+	path := strings.TrimSpace(settingsPageLayoutFiles[pageName])
+	if path == "" {
+		return nil, nil, nil
+	}
+	data, err := settingsPageLayoutsFS.ReadFile(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	root, err := uidecl.LoadString(string(data), a)
+	if err != nil {
+		return nil, nil, err
+	}
+	return root, uidecl.FindElement(root, "PageSectionsHost"), nil
+}
+
 func (a *settingsApp) renderPage() {
 	if a.currentPage < 0 || a.currentPage >= len(settingsPages) {
 		a.currentPage = 0
@@ -1103,56 +1138,285 @@ func (a *settingsApp) renderPage() {
 	}
 	host.ClearChildren()
 
+	sectionsHost := host
+	if pageRoot, dynamicHost, err := a.loadPageLayout(page.Name); err != nil {
+		log.Warn("settings: failed to load page layout %q: %v", page.Name, err)
+	} else if pageRoot != nil {
+		host.AddChild(pageRoot)
+		if dynamicHost != nil {
+			sectionsHost = dynamicHost
+		} else {
+			sectionsHost = nil
+		}
+	}
+	if sectionsHost == nil {
+		return
+	}
+	sectionsHost.ClearChildren()
+
 	switch page.Name {
 	case "network":
-		host.AddChild(a.buildNetworkWiredCard())
+		sectionsHost.AddChild(a.buildNetworkWiredCard())
 	case "appearance":
-		host.AddChild(a.buildWallpaperCard())
+		sectionsHost.AddChild(a.buildWallpaperCard())
 		for _, section := range page.Sections {
-			host.AddChild(a.buildSectionCard(section))
+			sectionsHost.AddChild(a.buildSectionCard(section))
 		}
 	case "display":
-		host.AddChild(a.buildDisplayInfoCard())
+		sectionsHost.AddChild(a.buildDisplayInfoCard())
 		for _, section := range page.Sections {
-			host.AddChild(a.buildSectionCard(section))
+			sectionsHost.AddChild(a.buildSectionCard(section))
 		}
 	case "sound":
-		host.AddChild(a.buildNotImplementedCard(
+		sectionsHost.AddChild(a.buildNotImplementedCard(
 			"Sound",
 			"Output and input settings are not yet implemented.",
 		))
 	case "notifications":
-		host.AddChild(a.buildNotImplementedCard(
+		sectionsHost.AddChild(a.buildNotImplementedCard(
 			"Notifications",
 			"Notification settings are not yet implemented.",
 		))
 	case "security":
-		host.AddChild(a.buildNotImplementedCard(
+		sectionsHost.AddChild(a.buildNotImplementedCard(
 			"Security",
 			"Security settings are not yet implemented.",
 		))
 	case "user":
-		host.AddChild(a.buildUserInfoCard())
-		host.AddChild(a.buildUserPasswordCard())
+		sectionsHost.AddChild(a.buildUserInfoCard())
+		sectionsHost.AddChild(a.buildUserPasswordCard())
 	case "services":
-		host.AddChild(a.buildServicesListCard())
-		host.AddChild(a.buildServicesActionCard())
+		sectionsHost.AddChild(a.buildServicesListCard())
+		sectionsHost.AddChild(a.buildServicesActionCard())
 	case "distro":
-		host.AddChild(a.buildDistroListCard())
-		host.AddChild(a.buildDistroManageCard())
+		sectionsHost.AddChild(a.buildDistroListCard())
+		sectionsHost.AddChild(a.buildDistroManageCard())
 	case "devices":
-		host.AddChild(a.buildDevicesListCard())
-		host.AddChild(a.buildDevicesManageCard())
+		sectionsHost.AddChild(a.buildDevicesListCard())
+		sectionsHost.AddChild(a.buildDevicesManageCard())
 	case "configs":
-		host.AddChild(a.buildConfigsListCard())
-		host.AddChild(a.buildConfigsManageCard())
+		sectionsHost.AddChild(a.buildConfigsListCard())
+		sectionsHost.AddChild(a.buildConfigsManageCard())
 	case "about":
-		host.AddChild(a.buildAboutSystemCard())
-		host.AddChild(a.buildAboutUpdatesCard())
+		sectionsHost.AddChild(a.buildAboutSystemCard())
+		sectionsHost.AddChild(a.buildAboutUpdatesCard())
 	default:
 		for _, section := range page.Sections {
-			host.AddChild(a.buildSectionCard(section))
+			sectionsHost.AddChild(a.buildSectionCard(section))
 		}
+	}
+}
+
+func newSettingsElement(tag string) *ui.Element {
+	e := ui.NewElement(tag)
+	applySettingsWidgetDefaults(e, tag)
+	return e
+}
+
+func applySettingsWidgetDefaults(e *ui.Element, tag string) {
+	switch tag {
+	case "HBox":
+		e.SetAttribute("direction", "row")
+		e.SetAttribute("spacing", 0)
+		e.SetAttribute("padding", "0")
+		e.SetAttribute("alignment", "stretch")
+	case "VBox":
+		e.SetAttribute("direction", "column")
+		e.SetAttribute("spacing", 0)
+		e.SetAttribute("padding", "0")
+		e.SetAttribute("alignment", "stretch")
+	case "Flow":
+		e.SetAttribute("layout", "flow")
+		e.SetAttribute("spacing", 12)
+		e.SetAttribute("colSpacing", 12)
+		e.SetAttribute("rowSpacing", 12)
+	case "Spacer":
+		e.SetAttribute("expand", true)
+	case "Label", "Paragraph":
+		e.SetAttribute("textColor", "theme.color.text.primary")
+		e.SetAttribute("textAlign", "left")
+		e.SetAttribute("textRole", "paragraph")
+	case "Subheading":
+		e.SetAttribute("textColor", "theme.color.text.primary")
+		e.SetAttribute("textAlign", "left")
+		e.SetAttribute("textRole", "subheading")
+	case "StatusBadge":
+		e.SetAttribute("expand", false)
+		e.SetAttribute("minHeight", 28)
+		e.SetAttribute("padding", "6 12")
+		e.SetAttribute("borderRadius", 999)
+		e.SetAttribute("background", "theme.color.accent.subtle")
+		e.SetAttribute("borderColor", "theme.color.stroke.hairline")
+		e.SetAttribute("textColor", "theme.color.accent")
+		e.SetAttribute("textRole", "subheading")
+		e.SetAttribute("textAlign", "center")
+	case "Card":
+		e.SetAttribute("background", "theme.color.surface.card")
+		e.SetAttribute("gradientTop", "transparent")
+		e.SetAttribute("gradientBottom", "transparent")
+		e.SetAttribute("borderColor", "theme.color.stroke.hairline")
+		e.SetAttribute("borderRadius", 20)
+		e.SetAttribute("padding", "18")
+		e.SetAttribute("shadow", true)
+		e.SetAttribute("shadowColor", "#101A2B17")
+		e.SetAttribute("shadowOffsetY", 8)
+		e.SetAttribute("shadowSpread", 24)
+	case "TextInput":
+		e.SetAttribute("editable", true)
+		e.SetAttribute("focusable", true)
+		e.SetAttribute("minHeight", 40)
+		e.SetAttribute("background", "theme.color.surface.card")
+		e.SetAttribute("gradientTop", "transparent")
+		e.SetAttribute("gradientBottom", "transparent")
+		e.SetAttribute("hoverBackground", "theme.color.control.hover")
+		e.SetAttribute("textColor", "theme.color.text.primary")
+		e.SetAttribute("placeholderColor", "theme.color.text.muted")
+		e.SetAttribute("borderColor", "theme.color.stroke.hairline")
+		e.SetAttribute("focusedBorderColor", "theme.color.stroke.hairline")
+		e.SetAttribute("focusRing", true)
+		e.SetAttribute("focusRingColor", "theme.color.stroke.focus")
+		e.SetAttribute("focusRingWidth", 3)
+		e.SetAttribute("focusRingOffset", 1)
+		e.SetAttribute("borderRadius", 14)
+		e.SetAttribute("padding", "10 12")
+		e.SetAttribute("shadow", false)
+	case "Toggle":
+		e.SetAttribute("toggleable", true)
+		e.SetAttribute("focusable", true)
+		e.SetAttribute("minHeight", 40)
+		e.SetAttribute("background", "transparent")
+		e.SetAttribute("onTrackColor", "theme.color.accent")
+		e.SetAttribute("offTrackColor", "theme.color.surface.card")
+		e.SetAttribute("thumbColor", "theme.color.surface.card")
+		e.SetAttribute("borderColor", "transparent")
+		e.SetAttribute("focusedBorderColor", "transparent")
+		e.SetAttribute("trackBorderColor", "theme.color.stroke.hairline")
+		e.SetAttribute("focusedTrackBorderColor", "theme.color.stroke.focus")
+		e.SetAttribute("textColor", "theme.color.text.primary")
+		e.SetAttribute("shadow", true)
+		e.SetAttribute("shadowColor", "#101A2B17")
+		e.SetAttribute("shadowOffsetY", 2)
+		e.SetAttribute("shadowSpread", 6)
+	case "Slider":
+		e.SetAttribute("slidable", true)
+		e.SetAttribute("focusable", true)
+		e.SetAttribute("borderColor", "theme.color.stroke.hairline")
+		e.SetAttribute("focusedBorderColor", "theme.color.stroke.hairline")
+		e.SetAttribute("focusRing", true)
+		e.SetAttribute("focusRingColor", "theme.color.stroke.focus")
+		e.SetAttribute("focusRingWidth", 2)
+		e.SetAttribute("focusRingOffset", 1)
+		e.SetAttribute("trackColor", "theme.color.control.fill")
+		e.SetAttribute("thumbColor", "theme.color.accent")
+		e.SetAttribute("thumbHoverColor", "theme.color.accent.hover")
+		e.SetAttribute("thumbActiveColor", "theme.primaryactive")
+		e.SetAttribute("shadow", true)
+		e.SetAttribute("shadowColor", "#101A2B17")
+		e.SetAttribute("shadowOffsetY", 2)
+		e.SetAttribute("shadowSpread", 4)
+	case "Chip":
+		e.SetAttribute("interactive", true)
+		e.SetAttribute("focusable", true)
+		e.SetAttribute("expand", false)
+		e.SetAttribute("minHeight", 30)
+		e.SetAttribute("padding", "6 12")
+		e.SetAttribute("borderRadius", 999)
+		e.SetAttribute("background", "theme.color.surface.glass")
+		e.SetAttribute("hoverBackground", "theme.color.control.hover")
+		e.SetAttribute("pressedBackground", "theme.color.control.pressed")
+		e.SetAttribute("borderColor", "theme.color.stroke.hairline")
+		e.SetAttribute("focusRing", true)
+		e.SetAttribute("focusRingColor", "theme.color.stroke.focus")
+		e.SetAttribute("focusRingWidth", 3)
+		e.SetAttribute("focusRingOffset", 1)
+		e.SetAttribute("textColor", "theme.color.text.primary")
+	case "Image":
+		e.SetAttribute("scaleMode", "contain")
+		e.SetAttribute("background", "transparent")
+		e.SetAttribute("intrinsicSize", false)
+		e.SetAttribute("expand", false)
+	case "Button":
+		e.SetAttribute("interactive", true)
+		e.SetAttribute("focusable", true)
+		e.SetAttribute("background", "theme.color.surface.glass")
+		e.SetAttribute("gradientTop", "transparent")
+		e.SetAttribute("gradientBottom", "transparent")
+		e.SetAttribute("hoverBackground", "theme.color.control.hover")
+		e.SetAttribute("pressedBackground", "theme.color.control.pressed")
+		e.SetAttribute("borderColor", "theme.color.stroke.hairline")
+		e.SetAttribute("focusedBorderColor", "theme.color.stroke.hairline")
+		e.SetAttribute("focusRing", true)
+		e.SetAttribute("focusRingColor", "theme.color.stroke.focus")
+		e.SetAttribute("focusRingWidth", 3)
+		e.SetAttribute("focusRingOffset", 1)
+		e.SetAttribute("borderRadius", 14)
+		e.SetAttribute("minHeight", 40)
+		e.SetAttribute("padding", "10 16")
+		e.SetAttribute("textColor", "theme.color.text.primary")
+		e.SetAttribute("textAlign", "center")
+		e.SetAttribute("shadow", true)
+		e.SetAttribute("shadowColor", "#101A2B1A")
+		e.SetAttribute("shadowOffsetY", 2)
+		e.SetAttribute("shadowSpread", 8)
+	case "PrimaryButton":
+		e.SetAttribute("interactive", true)
+		e.SetAttribute("focusable", true)
+		e.SetAttribute("gradientTop", "theme.color.accent")
+		e.SetAttribute("gradientBottom", "theme.color.accent.alt")
+		e.SetAttribute("hoverBackground", "theme.color.accent.hover")
+		e.SetAttribute("pressedBackground", "theme.primaryactive")
+		e.SetAttribute("borderColor", "theme.color.accent")
+		e.SetAttribute("textColor", "#FFFFFF")
+		e.SetAttribute("borderRadius", 14)
+		e.SetAttribute("minHeight", 40)
+		e.SetAttribute("padding", "10 16")
+		e.SetAttribute("textAlign", "center")
+		e.SetAttribute("shadow", true)
+		e.SetAttribute("shadowColor", "#0D63F34D")
+		e.SetAttribute("shadowOffsetY", 4)
+		e.SetAttribute("shadowSpread", 12)
+	case "DangerButton":
+		e.SetAttribute("interactive", true)
+		e.SetAttribute("focusable", true)
+		e.SetAttribute("minHeight", 40)
+		e.SetAttribute("padding", "10 16")
+		e.SetAttribute("background", "theme.color.semantic.danger")
+		e.SetAttribute("hoverBackground", "theme.color.semantic.danger")
+		e.SetAttribute("pressedBackground", "theme.color.semantic.danger")
+		e.SetAttribute("borderColor", "theme.color.semantic.danger")
+		e.SetAttribute("focusedBorderColor", "theme.color.stroke.focus")
+		e.SetAttribute("borderRadius", 14)
+		e.SetAttribute("textColor", "#FFFFFF")
+		e.SetAttribute("shadow", true)
+		e.SetAttribute("shadowColor", "#101A2B22")
+		e.SetAttribute("shadowOffsetY", 2)
+		e.SetAttribute("shadowSpread", 8)
+	case "TableView":
+		e.SetAttribute("editable", true)
+		e.SetAttribute("multiline", true)
+		e.SetAttribute("focusable", true)
+		e.SetAttribute("readOnly", true)
+		e.SetAttribute("lineNumbers", false)
+		e.SetAttribute("table", true)
+		e.SetAttribute("background", "theme.color.surface.card")
+		e.SetAttribute("gradientTop", "transparent")
+		e.SetAttribute("gradientBottom", "transparent")
+		e.SetAttribute("textColor", "theme.color.text.secondary")
+		e.SetAttribute("borderColor", "theme.color.stroke.hairline")
+		e.SetAttribute("focusedBorderColor", "theme.color.stroke.hairline")
+		e.SetAttribute("focusRing", true)
+		e.SetAttribute("focusRingColor", "theme.color.stroke.focus")
+		e.SetAttribute("focusRingWidth", 3)
+		e.SetAttribute("focusRingOffset", 1)
+		e.SetAttribute("headerBackground", "theme.color.surface.glass")
+		e.SetAttribute("dividerColor", "theme.color.stroke.divider")
+		e.SetAttribute("headerTextColor", "theme.color.text.primary")
+		e.SetAttribute("borderRadius", 14)
+		e.SetAttribute("padding", "10 12")
+		e.SetAttribute("shadow", true)
+		e.SetAttribute("shadowColor", "#101A2B17")
+		e.SetAttribute("shadowOffsetY", 2)
+		e.SetAttribute("shadowSpread", 8)
 	}
 }
 
@@ -1166,21 +1430,21 @@ func (a *settingsApp) buildSectionCard(section settingSection) *ui.Element {
 }
 
 func newSectionCard(titleText, description string) (*ui.Element, *ui.Element) {
-	card := ui.NewElement("Card")
+	card := newSettingsElement("Card")
 	card.SetAttribute("padding", "16")
 	card.SetAttribute("expand", false)
 
-	box := ui.NewElement("VBox")
+	box := newSettingsElement("VBox")
 	box.SetAttribute("direction", "column")
 	box.SetAttribute("spacing", 8)
 	box.SetAttribute("expand", false)
 
-	title := ui.NewElement("Subheading")
+	title := newSettingsElement("Subheading")
 	title.SetAttribute("text", titleText)
 	box.AddChild(title)
 
 	if strings.TrimSpace(description) != "" {
-		desc := ui.NewElement("Paragraph")
+		desc := newSettingsElement("Paragraph")
 		desc.SetAttribute("text", description)
 		box.AddChild(desc)
 	}
@@ -1190,31 +1454,31 @@ func newSectionCard(titleText, description string) (*ui.Element, *ui.Element) {
 }
 
 func (a *settingsApp) buildFieldRow(field settingField) *ui.Element {
-	row := ui.NewElement("HBox")
+	row := newSettingsElement("HBox")
 	row.SetAttribute("direction", "row")
 	row.SetAttribute("spacing", 12)
 	row.SetAttribute("expand", false)
 
-	meta := ui.NewElement("VBox")
+	meta := newSettingsElement("VBox")
 	meta.SetAttribute("direction", "column")
 	meta.SetAttribute("spacing", 2)
 	meta.SetAttribute("expand", true)
 	meta.SetAttribute("shrink", true)
 	meta.SetAttribute("shrinkMinWidth", 220)
 
-	label := ui.NewElement("Label")
+	label := newSettingsElement("Label")
 	label.SetAttribute("text", field.Label)
 	label.SetAttribute("textRole", "subheading")
 	meta.AddChild(label)
 
 	if strings.TrimSpace(field.Hint) != "" {
-		hint := ui.NewElement("Paragraph")
+		hint := newSettingsElement("Paragraph")
 		hint.SetAttribute("text", field.Hint)
 		hint.SetAttribute("maxWidth", 620)
 		meta.AddChild(hint)
 	}
 
-	controlWrap := ui.NewElement("VBox")
+	controlWrap := newSettingsElement("VBox")
 	controlWrap.SetAttribute("direction", "column")
 	controlWrap.SetAttribute("spacing", 0)
 	controlWrap.SetAttribute("expand", false)
@@ -1239,16 +1503,16 @@ func (a *settingsApp) buildFieldRow(field settingField) *ui.Element {
 }
 
 func (a *settingsApp) buildToggleField(field settingField) *ui.Element {
-	align := ui.NewElement("HBox")
+	align := newSettingsElement("HBox")
 	align.SetAttribute("direction", "row")
 	align.SetAttribute("spacing", 0)
 	align.SetAttribute("expand", false)
 
-	spacer := ui.NewElement("Spacer")
+	spacer := newSettingsElement("Spacer")
 	spacer.SetAttribute("expand", true)
 	align.AddChild(spacer)
 
-	toggle := ui.NewElement("Toggle")
+	toggle := newSettingsElement("Toggle")
 	toggle.SetAttribute("id", field.ID)
 	toggle.SetAttribute("checked", parseBool(a.values[field.Key], parseBool(field.Default, false)))
 	toggle.SetAttribute("text", "")
@@ -1271,7 +1535,7 @@ func (a *settingsApp) buildToggleField(field settingField) *ui.Element {
 }
 
 func (a *settingsApp) buildTextField(field settingField) *ui.Element {
-	input := ui.NewElement("TextInput")
+	input := newSettingsElement("TextInput")
 	input.SetAttribute("id", field.ID)
 	input.SetAttribute("text", a.values[field.Key])
 	if field.Placeholder != "" {
@@ -1300,7 +1564,7 @@ func (a *settingsApp) buildTextField(field settingField) *ui.Element {
 }
 
 func (a *settingsApp) buildChoiceField(field settingField) *ui.Element {
-	flow := ui.NewElement("Flow")
+	flow := newSettingsElement("Flow")
 	flow.SetAttribute("layout", "flow")
 	flow.SetAttribute("spacing", 8)
 	flow.SetAttribute("colSpacing", 8)
@@ -1330,7 +1594,7 @@ func (a *settingsApp) buildChoiceField(field settingField) *ui.Element {
 			label = value
 		}
 
-		chip := ui.NewElement("Chip")
+		chip := newSettingsElement("Chip")
 		chip.SetAttribute("text", label)
 		if field.ReadOnly {
 			chip.SetAttribute("interactive", false)
@@ -1356,7 +1620,7 @@ func (a *settingsApp) buildChoiceField(field settingField) *ui.Element {
 }
 
 func (a *settingsApp) buildSliderField(field settingField) *ui.Element {
-	container := ui.NewElement("VBox")
+	container := newSettingsElement("VBox")
 	container.SetAttribute("direction", "column")
 	container.SetAttribute("spacing", 6)
 	container.SetAttribute("expand", false)
@@ -1375,7 +1639,7 @@ func (a *settingsApp) buildSliderField(field settingField) *ui.Element {
 		current = field.Max
 	}
 
-	slider := ui.NewElement("Slider")
+	slider := newSettingsElement("Slider")
 	slider.SetAttribute("id", field.ID)
 	slider.SetAttribute("min", field.Min)
 	slider.SetAttribute("max", field.Max)
@@ -1385,7 +1649,7 @@ func (a *settingsApp) buildSliderField(field settingField) *ui.Element {
 		slider.SetAttribute("slidable", false)
 	}
 
-	valueInput := ui.NewElement("TextInput")
+	valueInput := newSettingsElement("TextInput")
 	valueInput.SetAttribute("text", strconv.Itoa(int(current+0.5)))
 	valueInput.SetAttribute("placeholder", strconv.Itoa(int(field.Min)))
 	valueInput.SetAttribute("maxWidth", 96)
@@ -1394,12 +1658,12 @@ func (a *settingsApp) buildSliderField(field settingField) *ui.Element {
 		valueInput.SetAttribute("readOnly", true)
 	}
 
-	suffix := ui.NewElement("Label")
+	suffix := newSettingsElement("Label")
 	suffix.SetAttribute("text", "%")
 	suffix.SetAttribute("textAlign", "left")
 	suffix.SetAttribute("minWidth", 24)
 
-	inputRow := ui.NewElement("HBox")
+	inputRow := newSettingsElement("HBox")
 	inputRow.SetAttribute("direction", "row")
 	inputRow.SetAttribute("spacing", 6)
 	inputRow.SetAttribute("expand", false)
@@ -1488,16 +1752,16 @@ func (a *settingsApp) buildWallpaperCard() *ui.Element {
 		selectedPath = defaultWallpaper
 	}
 
-	previewTitle := ui.NewElement("Subheading")
+	previewTitle := newSettingsElement("Subheading")
 	previewTitle.SetAttribute("text", "Preview")
 	box.AddChild(previewTitle)
 
-	previewWrap := ui.NewElement("VBox")
+	previewWrap := newSettingsElement("VBox")
 	previewWrap.SetAttribute("direction", "column")
 	previewWrap.SetAttribute("spacing", 6)
 	previewWrap.SetAttribute("padding", "8")
 
-	preview := ui.NewElement("Image")
+	preview := newSettingsElement("Image")
 	preview.SetAttribute("src", selectedPath)
 	preview.SetAttribute("scaleMode", "cover")
 	preview.SetAttribute("expand", true)
@@ -1506,7 +1770,7 @@ func (a *settingsApp) buildWallpaperCard() *ui.Element {
 	preview.SetAttribute("interactive", false)
 	previewWrap.AddChild(preview)
 
-	previewPath := ui.NewElement("Label")
+	previewPath := newSettingsElement("Label")
 	previewPath.SetAttribute("text", selectedPath)
 	previewPath.SetAttribute("textAlign", "left")
 	previewPath.SetAttribute("clipText", true)
@@ -1514,21 +1778,21 @@ func (a *settingsApp) buildWallpaperCard() *ui.Element {
 	previewWrap.AddChild(previewPath)
 	box.AddChild(previewWrap)
 
-	pathTitle := ui.NewElement("Subheading")
+	pathTitle := newSettingsElement("Subheading")
 	pathTitle.SetAttribute("text", "Image Path")
 	box.AddChild(pathTitle)
 
-	pathInput := ui.NewElement("TextInput")
+	pathInput := newSettingsElement("TextInput")
 	pathInput.SetAttribute("text", selectedPath)
 	pathInput.SetAttribute("placeholder", defaultWallpaper)
 	box.AddChild(pathInput)
 
-	galleryTitle := ui.NewElement("Subheading")
+	galleryTitle := newSettingsElement("Subheading")
 	galleryTitle.SetAttribute("text", "Gallery")
 	box.AddChild(galleryTitle)
 
 	wallpapers := discoverWallpaperOptions(selectedPath)
-	gallery := ui.NewElement("Flow")
+	gallery := newSettingsElement("Flow")
 	gallery.SetAttribute("layout", "flow")
 	gallery.SetAttribute("spacing", 10)
 	gallery.SetAttribute("colSpacing", 10)
@@ -1579,7 +1843,7 @@ func (a *settingsApp) buildWallpaperCard() *ui.Element {
 	})
 
 	for _, wallpaper := range wallpapers {
-		tile := ui.NewElement("Button")
+		tile := newSettingsElement("Button")
 		tile.SetAttribute("text", "")
 		tile.SetAttribute("padding", "6")
 		tile.SetAttribute("minWidth", 148)
@@ -1587,7 +1851,7 @@ func (a *settingsApp) buildWallpaperCard() *ui.Element {
 		tile.SetAttribute("minHeight", 114)
 		tile.SetAttribute("maxHeight", 114)
 
-		thumb := ui.NewElement("Image")
+		thumb := newSettingsElement("Image")
 		thumb.SetAttribute("src", wallpaper)
 		thumb.SetAttribute("scaleMode", "cover")
 		thumb.SetAttribute("minWidth", 134)
@@ -1596,7 +1860,7 @@ func (a *settingsApp) buildWallpaperCard() *ui.Element {
 		thumb.SetAttribute("maxHeight", 82)
 		thumb.SetAttribute("interactive", false)
 
-		name := ui.NewElement("Label")
+		name := newSettingsElement("Label")
 		name.SetAttribute("text", filepath.Base(wallpaper))
 		name.SetAttribute("textAlign", "center")
 		name.SetAttribute("clipText", true)
@@ -1604,7 +1868,7 @@ func (a *settingsApp) buildWallpaperCard() *ui.Element {
 		name.SetAttribute("maxWidth", 134)
 		name.SetAttribute("interactive", false)
 
-		content := ui.NewElement("VBox")
+		content := newSettingsElement("VBox")
 		content.SetAttribute("direction", "column")
 		content.SetAttribute("spacing", 6)
 		content.SetAttribute("alignment", "center")
@@ -1625,7 +1889,7 @@ func (a *settingsApp) buildWallpaperCard() *ui.Element {
 	}
 
 	if len(wallpapers) == 0 {
-		empty := ui.NewElement("Paragraph")
+		empty := newSettingsElement("Paragraph")
 		empty.SetAttribute("text", "No wallpaper images found in known folders.")
 		box.AddChild(empty)
 	} else {
@@ -1633,15 +1897,15 @@ func (a *settingsApp) buildWallpaperCard() *ui.Element {
 		box.AddChild(gallery)
 	}
 
-	colorTitle := ui.NewElement("Subheading")
+	colorTitle := newSettingsElement("Subheading")
 	colorTitle.SetAttribute("text", "Fallback Color")
 	box.AddChild(colorTitle)
 
-	colorHint := ui.NewElement("Paragraph")
+	colorHint := newSettingsElement("Paragraph")
 	colorHint.SetAttribute("text", "Fallback background color (used behind transparent or non-cover images).")
 	box.AddChild(colorHint)
 
-	colorFlow := ui.NewElement("Flow")
+	colorFlow := newSettingsElement("Flow")
 	colorFlow.SetAttribute("layout", "flow")
 	colorFlow.SetAttribute("spacing", 8)
 	colorFlow.SetAttribute("colSpacing", 8)
@@ -1649,7 +1913,7 @@ func (a *settingsApp) buildWallpaperCard() *ui.Element {
 	colorFlow.SetAttribute("expand", false)
 
 	currentColor := normalizeColor(a.values[keyBackgroundColor])
-	colorInput := ui.NewElement("TextInput")
+	colorInput := newSettingsElement("TextInput")
 	if currentColor != "" {
 		colorInput.SetAttribute("text", currentColor)
 	}
@@ -1683,7 +1947,7 @@ func (a *settingsApp) buildWallpaperCard() *ui.Element {
 	}
 
 	for _, preset := range backgroundColorChoices {
-		chip := ui.NewElement("Chip")
+		chip := newSettingsElement("Chip")
 		chip.SetAttribute("text", preset.Label)
 
 		valueCopy := preset.Value
@@ -1818,7 +2082,7 @@ type wiredNetworkSnapshot struct {
 
 func (a *settingsApp) buildNotImplementedCard(title, description string) *ui.Element {
 	card, box := newSectionCard(title, description)
-	msg := ui.NewElement("Paragraph")
+	msg := newSettingsElement("Paragraph")
 	msg.SetAttribute("text", "This section is planned and currently not yet implemented.")
 	box.AddChild(msg)
 	return card
@@ -1838,12 +2102,12 @@ func (a *settingsApp) buildNetworkWiredCard() *ui.Element {
 		{Label: "Route", Value: snap.Route},
 	})
 
-	actions := ui.NewElement("HBox")
+	actions := newSettingsElement("HBox")
 	actions.SetAttribute("direction", "row")
 	actions.SetAttribute("spacing", 8)
 	actions.SetAttribute("expand", false)
 
-	refresh := ui.NewElement("Button")
+	refresh := newSettingsElement("Button")
 	refresh.SetAttribute("text", "Refresh Network")
 	refresh.BindSignal("clicked", func() {
 		a.renderPage()
@@ -2094,7 +2358,7 @@ func (a *settingsApp) buildUserPasswordCard() *ui.Element {
 		"Update current account password using pkg/identity.",
 	)
 
-	currentInput := ui.NewElement("TextInput")
+	currentInput := newSettingsElement("TextInput")
 	currentInput.SetAttribute("text", a.passwordCurrent)
 	currentInput.SetAttribute("placeholder", "Current password")
 	currentInput.SetAttribute("password", true)
@@ -2102,7 +2366,7 @@ func (a *settingsApp) buildUserPasswordCard() *ui.Element {
 		a.passwordCurrent = text
 	})
 
-	newInput := ui.NewElement("TextInput")
+	newInput := newSettingsElement("TextInput")
 	newInput.SetAttribute("text", a.passwordNext)
 	newInput.SetAttribute("placeholder", "New password")
 	newInput.SetAttribute("password", true)
@@ -2110,7 +2374,7 @@ func (a *settingsApp) buildUserPasswordCard() *ui.Element {
 		a.passwordNext = text
 	})
 
-	confirmInput := ui.NewElement("TextInput")
+	confirmInput := newSettingsElement("TextInput")
 	confirmInput.SetAttribute("text", a.passwordConfirm)
 	confirmInput.SetAttribute("placeholder", "Confirm new password")
 	confirmInput.SetAttribute("password", true)
@@ -2118,12 +2382,12 @@ func (a *settingsApp) buildUserPasswordCard() *ui.Element {
 		a.passwordConfirm = text
 	})
 
-	buttons := ui.NewElement("HBox")
+	buttons := newSettingsElement("HBox")
 	buttons.SetAttribute("direction", "row")
 	buttons.SetAttribute("spacing", 8)
 	buttons.SetAttribute("expand", false)
 
-	updateBtn := ui.NewElement("PrimaryButton")
+	updateBtn := newSettingsElement("PrimaryButton")
 	updateBtn.SetAttribute("text", "Update Password")
 	updateBtn.BindSignal("clicked", func() {
 		username := a.currentUsername()
@@ -2152,7 +2416,7 @@ func (a *settingsApp) buildUserPasswordCard() *ui.Element {
 	})
 	buttons.AddChild(updateBtn)
 
-	clearBtn := ui.NewElement("Button")
+	clearBtn := newSettingsElement("Button")
 	clearBtn.SetAttribute("text", "Clear")
 	clearBtn.BindSignal("clicked", func() {
 		a.passwordCurrent = ""
@@ -2191,7 +2455,7 @@ func (a *settingsApp) buildServicesListCard() *ui.Element {
 
 	items, err := listServices()
 	if err != nil {
-		errMsg := ui.NewElement("Paragraph")
+		errMsg := newSettingsElement("Paragraph")
 		errMsg.SetAttribute("text", "Unable to list services: "+err.Error())
 		box.AddChild(errMsg)
 		return card
@@ -2223,7 +2487,7 @@ func (a *settingsApp) buildServicesActionCard() *ui.Element {
 		"Start, stop, restart, and refresh services.",
 	)
 
-	target := ui.NewElement("TextInput")
+	target := newSettingsElement("TextInput")
 	target.SetAttribute("text", a.serviceTarget)
 	target.SetAttribute("placeholder", "service name")
 	target.BindSignal("changed", func(text string) {
@@ -2231,27 +2495,27 @@ func (a *settingsApp) buildServicesActionCard() *ui.Element {
 	})
 	box.AddChild(target)
 
-	actions := ui.NewElement("HBox")
+	actions := newSettingsElement("HBox")
 	actions.SetAttribute("direction", "row")
 	actions.SetAttribute("spacing", 8)
 	actions.SetAttribute("expand", false)
 
-	startBtn := ui.NewElement("PrimaryButton")
+	startBtn := newSettingsElement("PrimaryButton")
 	startBtn.SetAttribute("text", "Start")
 	startBtn.BindSignal("clicked", func() { a.runServiceAction("start") })
 	actions.AddChild(startBtn)
 
-	stopBtn := ui.NewElement("Button")
+	stopBtn := newSettingsElement("Button")
 	stopBtn.SetAttribute("text", "Stop")
 	stopBtn.BindSignal("clicked", func() { a.runServiceAction("stop") })
 	actions.AddChild(stopBtn)
 
-	restartBtn := ui.NewElement("Button")
+	restartBtn := newSettingsElement("Button")
 	restartBtn.SetAttribute("text", "Restart")
 	restartBtn.BindSignal("clicked", func() { a.runServiceAction("restart") })
 	actions.AddChild(restartBtn)
 
-	refreshBtn := ui.NewElement("Button")
+	refreshBtn := newSettingsElement("Button")
 	refreshBtn.SetAttribute("text", "Refresh")
 	refreshBtn.BindSignal("clicked", func() { a.RefreshPage() })
 	actions.AddChild(refreshBtn)
@@ -2330,7 +2594,7 @@ func (a *settingsApp) buildDistroListCard() *ui.Element {
 
 	client, err := distroapi.Connect()
 	if err != nil {
-		msg := ui.NewElement("Paragraph")
+		msg := newSettingsElement("Paragraph")
 		msg.SetAttribute("text", "Distro API unavailable: "+err.Error())
 		box.AddChild(msg)
 		return card
@@ -2339,7 +2603,7 @@ func (a *settingsApp) buildDistroListCard() *ui.Element {
 
 	status, err := client.GetStatus()
 	if err != nil {
-		msg := ui.NewElement("Paragraph")
+		msg := newSettingsElement("Paragraph")
 		msg.SetAttribute("text", "Failed to get distro status: "+err.Error())
 		box.AddChild(msg)
 		return card
@@ -2356,7 +2620,7 @@ func (a *settingsApp) buildDistroListCard() *ui.Element {
 			180,
 		))
 	} else {
-		msg := ui.NewElement("Paragraph")
+		msg := newSettingsElement("Paragraph")
 		msg.SetAttribute("text", "Distro is not installed. Use the Install button below to set up the environment.")
 		box.AddChild(msg)
 	}
@@ -2386,7 +2650,7 @@ func (a *settingsApp) buildDistroManageCard() *ui.Element {
 		"Install or remove the Linux distro environment.",
 	)
 
-	urlInput := ui.NewElement("TextInput")
+	urlInput := newSettingsElement("TextInput")
 	urlInput.SetAttribute("text", a.distroInstallURL)
 	urlInput.SetAttribute("placeholder", "Optional source URL (leave empty for default)")
 	urlInput.BindSignal("changed", func(text string) {
@@ -2394,12 +2658,12 @@ func (a *settingsApp) buildDistroManageCard() *ui.Element {
 	})
 	box.AddChild(urlInput)
 
-	buttons := ui.NewElement("HBox")
+	buttons := newSettingsElement("HBox")
 	buttons.SetAttribute("direction", "row")
 	buttons.SetAttribute("spacing", 8)
 	buttons.SetAttribute("expand", false)
 
-	installBtn := ui.NewElement("PrimaryButton")
+	installBtn := newSettingsElement("PrimaryButton")
 	installBtn.SetAttribute("text", "Install")
 	installBtn.BindSignal("clicked", func() {
 		client, err := distroapi.Connect()
@@ -2417,7 +2681,7 @@ func (a *settingsApp) buildDistroManageCard() *ui.Element {
 	})
 	buttons.AddChild(installBtn)
 
-	removeBtn := ui.NewElement("Button")
+	removeBtn := newSettingsElement("Button")
 	removeBtn.SetAttribute("text", "Remove")
 	removeBtn.BindSignal("clicked", func() {
 		client, err := distroapi.Connect()
@@ -2435,7 +2699,7 @@ func (a *settingsApp) buildDistroManageCard() *ui.Element {
 	})
 	buttons.AddChild(removeBtn)
 
-	refreshBtn := ui.NewElement("Button")
+	refreshBtn := newSettingsElement("Button")
 	refreshBtn.SetAttribute("text", "Refresh")
 	refreshBtn.BindSignal("clicked", func() { a.RefreshPage() })
 	buttons.AddChild(refreshBtn)
@@ -2452,7 +2716,7 @@ func (a *settingsApp) buildDevicesListCard() *ui.Element {
 
 	devices, err := listDevices()
 	if err != nil {
-		msg := ui.NewElement("Paragraph")
+		msg := newSettingsElement("Paragraph")
 		msg.SetAttribute("text", "Failed to list devices: "+err.Error())
 		box.AddChild(msg)
 		return card
@@ -2486,7 +2750,7 @@ func (a *settingsApp) buildDevicesManageCard() *ui.Element {
 		"Trigger device scan/events using api/uevent.",
 	)
 
-	triggerInput := ui.NewElement("TextInput")
+	triggerInput := newSettingsElement("TextInput")
 	triggerInput.SetAttribute("text", a.deviceTriggerScope)
 	triggerInput.SetAttribute("placeholder", "Subsystem (example: net)")
 	triggerInput.BindSignal("changed", func(text string) {
@@ -2494,12 +2758,12 @@ func (a *settingsApp) buildDevicesManageCard() *ui.Element {
 	})
 	box.AddChild(triggerInput)
 
-	buttons := ui.NewElement("HBox")
+	buttons := newSettingsElement("HBox")
 	buttons.SetAttribute("direction", "row")
 	buttons.SetAttribute("spacing", 8)
 	buttons.SetAttribute("expand", false)
 
-	triggerBtn := ui.NewElement("PrimaryButton")
+	triggerBtn := newSettingsElement("PrimaryButton")
 	triggerBtn.SetAttribute("text", "Trigger")
 	triggerBtn.BindSignal("clicked", func() {
 		client, err := ueventapi.Connect()
@@ -2522,7 +2786,7 @@ func (a *settingsApp) buildDevicesManageCard() *ui.Element {
 	})
 	buttons.AddChild(triggerBtn)
 
-	refreshBtn := ui.NewElement("Button")
+	refreshBtn := newSettingsElement("Button")
 	refreshBtn.SetAttribute("text", "Refresh")
 	refreshBtn.BindSignal("clicked", func() { a.RefreshPage() })
 	buttons.AddChild(refreshBtn)
@@ -2557,7 +2821,7 @@ func (a *settingsApp) buildConfigsListCard() *ui.Element {
 		"Raw settings list from api/settings.",
 	)
 
-	filterInput := ui.NewElement("TextInput")
+	filterInput := newSettingsElement("TextInput")
 	filterInput.SetAttribute("text", a.configFilterPrefix)
 	filterInput.SetAttribute("placeholder", "Optional prefix (for example /dev/rlxos/display)")
 	filterInput.BindSignal("changed", func(text string) {
@@ -2565,12 +2829,12 @@ func (a *settingsApp) buildConfigsListCard() *ui.Element {
 	})
 	box.AddChild(filterInput)
 
-	filterButtons := ui.NewElement("HBox")
+	filterButtons := newSettingsElement("HBox")
 	filterButtons.SetAttribute("direction", "row")
 	filterButtons.SetAttribute("spacing", 8)
 	filterButtons.SetAttribute("expand", false)
 
-	applyFilter := ui.NewElement("PrimaryButton")
+	applyFilter := newSettingsElement("PrimaryButton")
 	applyFilter.SetAttribute("text", "Apply Filter")
 	applyFilter.BindSignal("clicked", func() {
 		a.renderPage()
@@ -2578,7 +2842,7 @@ func (a *settingsApp) buildConfigsListCard() *ui.Element {
 	})
 	filterButtons.AddChild(applyFilter)
 
-	clearFilter := ui.NewElement("Button")
+	clearFilter := newSettingsElement("Button")
 	clearFilter.SetAttribute("text", "Clear")
 	clearFilter.BindSignal("clicked", func() {
 		a.configFilterPrefix = ""
@@ -2590,7 +2854,7 @@ func (a *settingsApp) buildConfigsListCard() *ui.Element {
 
 	client, err := settingsapi.Connect()
 	if err != nil {
-		msg := ui.NewElement("Paragraph")
+		msg := newSettingsElement("Paragraph")
 		msg.SetAttribute("text", "Settings API unavailable: "+err.Error())
 		box.AddChild(msg)
 		return card
@@ -2599,7 +2863,7 @@ func (a *settingsApp) buildConfigsListCard() *ui.Element {
 
 	items, err := client.List(a.configFilterPrefix)
 	if err != nil {
-		msg := ui.NewElement("Paragraph")
+		msg := newSettingsElement("Paragraph")
 		msg.SetAttribute("text", "Failed to list settings: "+err.Error())
 		box.AddChild(msg)
 		return card
@@ -2626,7 +2890,7 @@ func (a *settingsApp) buildConfigsManageCard() *ui.Element {
 		"Set a raw setting key/value pair through api/settings.",
 	)
 
-	keyInput := ui.NewElement("TextInput")
+	keyInput := newSettingsElement("TextInput")
 	keyInput.SetAttribute("text", a.configEditKey)
 	keyInput.SetAttribute("placeholder", "/dev/rlxos/example/key")
 	keyInput.BindSignal("changed", func(text string) {
@@ -2634,7 +2898,7 @@ func (a *settingsApp) buildConfigsManageCard() *ui.Element {
 	})
 	box.AddChild(keyInput)
 
-	valueInput := ui.NewElement("TextInput")
+	valueInput := newSettingsElement("TextInput")
 	valueInput.SetAttribute("text", a.configEditValue)
 	valueInput.SetAttribute("placeholder", "value")
 	valueInput.BindSignal("changed", func(text string) {
@@ -2642,12 +2906,12 @@ func (a *settingsApp) buildConfigsManageCard() *ui.Element {
 	})
 	box.AddChild(valueInput)
 
-	buttons := ui.NewElement("HBox")
+	buttons := newSettingsElement("HBox")
 	buttons.SetAttribute("direction", "row")
 	buttons.SetAttribute("spacing", 8)
 	buttons.SetAttribute("expand", false)
 
-	saveBtn := ui.NewElement("PrimaryButton")
+	saveBtn := newSettingsElement("PrimaryButton")
 	saveBtn.SetAttribute("text", "Save")
 	saveBtn.BindSignal("clicked", func() {
 		key := strings.TrimSpace(a.configEditKey)
@@ -2679,7 +2943,7 @@ func (a *settingsApp) buildConfigsManageCard() *ui.Element {
 	})
 	buttons.AddChild(saveBtn)
 
-	refreshBtn := ui.NewElement("Button")
+	refreshBtn := newSettingsElement("Button")
 	refreshBtn.SetAttribute("text", "Refresh")
 	refreshBtn.BindSignal("clicked", func() { a.RefreshPage() })
 	buttons.AddChild(refreshBtn)
@@ -2710,11 +2974,11 @@ func (a *settingsApp) buildAboutUpdatesCard() *ui.Element {
 		"System update controls will be added in a later release.",
 	)
 
-	msg := ui.NewElement("Paragraph")
+	msg := newSettingsElement("Paragraph")
 	msg.SetAttribute("text", "Automatic update checks are currently disabled for this build.")
 	box.AddChild(msg)
 
-	checkBtn := ui.NewElement("PrimaryButton")
+	checkBtn := newSettingsElement("PrimaryButton")
 	checkBtn.SetAttribute("text", "Check for Updates")
 	checkBtn.SetAttribute("interactive", false)
 	box.AddChild(checkBtn)
@@ -2722,7 +2986,7 @@ func (a *settingsApp) buildAboutUpdatesCard() *ui.Element {
 }
 
 func buildTableView(headers []string, rows [][]string, minHeight int) *ui.Element {
-	table := ui.NewElement("TableView")
+	table := newSettingsElement("TableView")
 	table.SetAttribute("text", buildTableText(headers, rows))
 	table.SetAttribute("readOnly", true)
 	table.SetAttribute("minHeight", minHeight)
@@ -2737,7 +3001,7 @@ func buildTableText(headers []string, rows [][]string) string {
 
 	lines := make([]string, 0, len(rows)+1)
 	if len(cleanHeaders) > 0 {
-		lines = append(lines, strings.Join(cleanHeaders, " "))
+		lines = append(lines, strings.Join(cleanHeaders, "\t"))
 	}
 	for _, row := range rows {
 		cols := make([]string, 0, len(cleanHeaders))
@@ -2752,10 +3016,10 @@ func buildTableText(headers []string, rows [][]string) string {
 			}
 			cols = append(cols, value)
 		}
-		lines = append(lines, strings.Join(cols, " "))
+		lines = append(lines, strings.Join(cols, "\t"))
 	}
 	if len(lines) == 0 {
-		return "Key Value\n- -"
+		return "Key\tValue\n-\t-"
 	}
 	return strings.Join(lines, "\n")
 }
@@ -2765,7 +3029,8 @@ func sanitizeTableCell(value string) string {
 	if value == "" {
 		return "-"
 	}
-	value = strings.Join(strings.Fields(value), "_")
+	value = strings.ReplaceAll(value, "\t", " ")
+	value = strings.Join(strings.Fields(value), " ")
 	return value
 }
 

@@ -33,7 +33,11 @@ func (b *Buffer) FillRoundedRect(r Rect, radius int, c Color) {
 		for x := x0; x < x1; x++ {
 			cov := roundedRectCoverage(x, y, r, radius)
 			if cov >= 0.999 {
-				b.SetPixel(x, y, c)
+				if c.A == 255 {
+					b.SetPixel(x, y, c)
+				} else {
+					drawCoveragePixel(b, x, y, c, 1)
+				}
 				continue
 			}
 			if cov <= 0.001 {

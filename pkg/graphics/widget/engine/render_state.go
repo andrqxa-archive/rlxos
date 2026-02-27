@@ -11,6 +11,14 @@ func isImageElement(e *Element) bool {
 }
 
 func effectiveBackground(e *Element) graphics.Color {
+	base := e.AttrColor("background", graphics.Color{})
+	if overlay := stateBackgroundOverlay(e); overlay.A > 0 {
+		return overlay.Blend(base)
+	}
+	return base
+}
+
+func stateBackgroundOverlay(e *Element) graphics.Color {
 	if e.pressed {
 		if c := e.AttrColor("pressedBackground", graphics.Color{}); c.A > 0 {
 			return c
@@ -26,7 +34,7 @@ func effectiveBackground(e *Element) graphics.Color {
 			return c
 		}
 	}
-	return e.AttrColor("background", graphics.Color{})
+	return graphics.Color{}
 }
 
 func effectiveBorderColor(e *Element) graphics.Color {

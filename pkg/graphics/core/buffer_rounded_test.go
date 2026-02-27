@@ -24,3 +24,19 @@ func TestDrawRoundedRectBlendsTranslucentBorderOverFill(t *testing.T) {
 		t.Fatalf("translucent rounded border did not blend with fill: got %+v want %+v", got, want)
 	}
 }
+
+func TestFillRoundedRectBlendsTranslucentFillOverExistingPixels(t *testing.T) {
+	buf := NewBuffer(16, 16)
+	base := NewColor(230, 236, 246, 200)
+	overlay := NewColor(13, 99, 243, 31)
+	r := Rect{X: 2, Y: 2, W: 12, H: 12}
+
+	buf.FillRoundedRect(r, 4, base)
+	buf.FillRoundedRect(r, 4, overlay)
+
+	got := buf.GetPixel(8, 8)
+	want := overlay.Blend(base)
+	if got != want {
+		t.Fatalf("translucent rounded fill did not blend over base: got %+v want %+v", got, want)
+	}
+}

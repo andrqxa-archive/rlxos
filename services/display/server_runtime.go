@@ -3095,10 +3095,21 @@ func (s *Server) handlePointerButton(button graphics.MouseButton, pressed bool) 
 	}
 
 	if !pressed {
+		var finalize *window
+		if s.dragging && s.dragWin != nil {
+			finalize = s.dragWin
+		} else if s.resizing && s.resizeWin != nil {
+			finalize = s.resizeWin
+		}
 		s.dragging = false
 		s.dragWin = nil
 		s.resizing = false
 		s.resizeWin = nil
+		if finalize != nil {
+			// Drag/resize uses a shadow-free fast path; force one full repaint at release
+			// so rounded shadows are restored immediately at the final geometry.
+			s.markDirty(windowScreenRect(finalize))
+		}
 		s.flushQueuedMove()
 	}
 

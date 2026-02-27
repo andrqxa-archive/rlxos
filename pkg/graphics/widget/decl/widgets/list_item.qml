@@ -1,27 +1,23 @@
-component ListView {
-    property items: ""
+component ListItem {
+    property text: ""
     property textRole: "paragraph"
-    property selected: -1
-    signal changed
+    property selected: false
+    signal clicked
 
-    listView: true
+    interactive: true
     focusable: true
-    borderRadius: 14
-    rowRadius: 12
-    rowHeight: 40
-    background: "theme.color.surface.card"
+    minHeight: 40
+    padding: "8 12"
+    textAlign: "left"
+    borderRadius: 12
+
+    background: "theme.color.surface.glass"
     gradientTop: "transparent"
     gradientBottom: "transparent"
-    borderColor: "theme.color.stroke.hairline"
-    focusedBorderColor: "theme.color.stroke.hairline"
-    focusRing: true
-    focusRingColor: "theme.color.stroke.focus"
-    focusRingWidth: 3
-    focusRingOffset: 1
-    dividerColor: "theme.color.stroke.divider"
     hoverBackground: "theme.color.accent.subtle"
     hoverGradientTop: "#0D63F326"
     hoverGradientBottom: "#0D63F31A"
+    pressedBackground: "theme.color.control.pressed"
     selectedBackground: "theme.color.accent.subtle"
     selectedGradientTop: "#0D63F33D"
     selectedGradientBottom: "#0D63F32B"
@@ -29,9 +25,9 @@ component ListView {
     selectedIndicatorGradientTop: "theme.color.accent"
     selectedIndicatorGradientBottom: "theme.color.accent.alt"
     selectedIndicatorWidth: 3
+
+    borderColor: "transparent"
+    focusedBorderColor: "theme.color.stroke.hairline"
+    focusRing: false
     textColor: "theme.color.text.primary"
-    shadow: true
-    shadowColor: "#101A2B17"
-    shadowOffsetY: 2
-    shadowSpread: 8
 }

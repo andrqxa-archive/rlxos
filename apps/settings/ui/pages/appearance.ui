@@ -1,0 +1,12 @@
+VBox {
+    spacing: 10
+    expand: true
+    background: "transparent"
+
+    VBox {
+        id: PageSectionsHost
+        spacing: 10
+        expand: true
+        background: "transparent"
+    }
+}
