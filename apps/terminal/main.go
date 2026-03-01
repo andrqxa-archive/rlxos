@@ -3,6 +3,8 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"image"
+	"image/color"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,10 +14,10 @@ import (
 	"unicode"
 
 	gapp "avyos.dev/pkg/graphics/app"
-	declapp "avyos.dev/pkg/graphics/app/decl"
-	gfxfont "avyos.dev/pkg/graphics/font"
-	graphics "avyos.dev/pkg/graphics/input"
-	gfxtheme "avyos.dev/pkg/graphics/theme"
+	gfxfont "avyos.dev/pkg/graphics/fonts"
+	gfxinput "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
+	gfxtheme "avyos.dev/pkg/graphics/themes"
 	ui "avyos.dev/pkg/graphics/widget/engine"
 	"avyos.dev/pkg/pty"
 )
@@ -31,7 +33,7 @@ const (
 )
 
 type TerminalApp struct {
-	declapp.App
+	gapp.App
 
 	mu       sync.Mutex
 	term     *pty.Terminal
@@ -202,62 +204,62 @@ func (a *TerminalApp) HandleEscape() {
 	}
 }
 
-func encodeTTYKey(ev graphics.Event) ([]byte, bool) {
+func encodeTTYKey(ev gfxinput.Event) ([]byte, bool) {
 	switch ev.Key {
-	case graphics.KeyEnter:
+	case gfxinput.KeyEnter:
 		return []byte{'\r'}, true
-	case graphics.KeyTab:
+	case gfxinput.KeyTab:
 		if ev.IsShift() {
 			return []byte("\x1b[Z"), true
 		}
 		return []byte{'\t'}, true
-	case graphics.KeyBackspace:
+	case gfxinput.KeyBackspace:
 		return []byte{0x7f}, true
-	case graphics.KeyEscape:
+	case gfxinput.KeyEscape:
 		return []byte{0x1b}, true
-	case graphics.KeyUp:
+	case gfxinput.KeyUp:
 		return []byte("\x1b[A"), true
-	case graphics.KeyDown:
+	case gfxinput.KeyDown:
 		return []byte("\x1b[B"), true
-	case graphics.KeyRight:
+	case gfxinput.KeyRight:
 		return []byte("\x1b[C"), true
-	case graphics.KeyLeft:
+	case gfxinput.KeyLeft:
 		return []byte("\x1b[D"), true
-	case graphics.KeyHome:
+	case gfxinput.KeyHome:
 		return []byte("\x1b[H"), true
-	case graphics.KeyEnd:
+	case gfxinput.KeyEnd:
 		return []byte("\x1b[F"), true
-	case graphics.KeyPageUp:
+	case gfxinput.KeyPageUp:
 		return []byte("\x1b[5~"), true
-	case graphics.KeyPageDown:
+	case gfxinput.KeyPageDown:
 		return []byte("\x1b[6~"), true
-	case graphics.KeyInsert:
+	case gfxinput.KeyInsert:
 		return []byte("\x1b[2~"), true
-	case graphics.KeyDelete:
+	case gfxinput.KeyDelete:
 		return []byte("\x1b[3~"), true
-	case graphics.KeyF1:
+	case gfxinput.KeyF1:
 		return []byte("\x1bOP"), true
-	case graphics.KeyF2:
+	case gfxinput.KeyF2:
 		return []byte("\x1bOQ"), true
-	case graphics.KeyF3:
+	case gfxinput.KeyF3:
 		return []byte("\x1bOR"), true
-	case graphics.KeyF4:
+	case gfxinput.KeyF4:
 		return []byte("\x1bOS"), true
-	case graphics.KeyF5:
+	case gfxinput.KeyF5:
 		return []byte("\x1b[15~"), true
-	case graphics.KeyF6:
+	case gfxinput.KeyF6:
 		return []byte("\x1b[17~"), true
-	case graphics.KeyF7:
+	case gfxinput.KeyF7:
 		return []byte("\x1b[18~"), true
-	case graphics.KeyF8:
+	case gfxinput.KeyF8:
 		return []byte("\x1b[19~"), true
-	case graphics.KeyF9:
+	case gfxinput.KeyF9:
 		return []byte("\x1b[20~"), true
-	case graphics.KeyF10:
+	case gfxinput.KeyF10:
 		return []byte("\x1b[21~"), true
-	case graphics.KeyF11:
+	case gfxinput.KeyF11:
 		return []byte("\x1b[23~"), true
-	case graphics.KeyF12:
+	case gfxinput.KeyF12:
 		return []byte("\x1b[24~"), true
 	}
 
@@ -294,8 +296,8 @@ func encodeTTYKey(ev graphics.Event) ([]byte, bool) {
 	return nil, false
 }
 
-func (a *TerminalApp) TerminalKey(ev graphics.Event) {
-	if ev.Type != graphics.EventKeyPress {
+func (a *TerminalApp) TerminalKey(ev gfxinput.Event) {
+	if ev.Type != gfxinput.EventKeyPress {
 		return
 	}
 	data, ok := encodeTTYKey(ev)
@@ -332,15 +334,15 @@ func terminalCellSize(font *gfxfont.Font) (charW, charH int) {
 	return charW, charH
 }
 
-func estimateGrid(bounds graphics.Rect, font *gfxfont.Font) (rows, cols int) {
-	if bounds.W <= 0 || bounds.H <= 0 {
+func estimateGrid(bounds image.Rectangle, font *gfxfont.Font) (rows, cols int) {
+	if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
 		return defaultRows, defaultCols
 	}
 
 	charW, charH := terminalCellSize(font)
 
-	cols = bounds.W / charW
-	rows = bounds.H / charH
+	cols = bounds.Dx() / charW
+	rows = bounds.Dy() / charH
 	if cols < minCols {
 		cols = minCols
 	}
@@ -431,10 +433,10 @@ func clamp01f(v float64) float64 {
 	return v
 }
 
-func mixColor(a, b graphics.Color, t float64) graphics.Color {
+func mixColor(a, b color.NRGBA, t float64) color.NRGBA {
 	t = clamp01f(t)
 	inv := 1.0 - t
-	return graphics.NewColor(
+	return core.NewColor(
 		uint8(float64(a.R)*inv+float64(b.R)*t+0.5),
 		uint8(float64(a.G)*inv+float64(b.G)*t+0.5),
 		uint8(float64(a.B)*inv+float64(b.B)*t+0.5),
@@ -442,10 +444,10 @@ func mixColor(a, b graphics.Color, t float64) graphics.Color {
 	)
 }
 
-func themeANSIPalette(defaultFg, defaultBg graphics.Color) [16]graphics.Color {
+func themeANSIPalette(defaultFg, defaultBg color.NRGBA) [16]color.NRGBA {
 	t := gfxtheme.DefaultTheme
-	black := mixColor(defaultBg, graphics.ColorBlack, 0.58)
-	white := mixColor(defaultFg, graphics.ColorWhite, 0.18)
+	black := mixColor(defaultBg, core.ColorBlack, 0.58)
+	white := mixColor(defaultFg, core.ColorWhite, 0.18)
 	red := t.Danger
 	green := t.Success
 	yellow := t.Warning
@@ -453,7 +455,7 @@ func themeANSIPalette(defaultFg, defaultBg graphics.Color) [16]graphics.Color {
 	magenta := mixColor(t.Primary, t.Danger, 0.48)
 	cyan := mixColor(t.Primary, t.Success, 0.52)
 
-	return [16]graphics.Color{
+	return [16]color.NRGBA{
 		black,
 		red,
 		green,
@@ -469,13 +471,13 @@ func themeANSIPalette(defaultFg, defaultBg graphics.Color) [16]graphics.Color {
 		mixColor(blue, white, 0.24),
 		mixColor(magenta, white, 0.22),
 		mixColor(cyan, white, 0.20),
-		mixColor(white, graphics.ColorWhite, 0.28),
+		mixColor(white, core.ColorWhite, 0.28),
 	}
 }
 
-func colorFromXterm256(idx int, palette [16]graphics.Color) graphics.Color {
+func colorFromXterm256(idx int, palette [16]color.NRGBA) color.NRGBA {
 	if idx < 0 {
-		return graphics.ColorTransparent
+		return core.ColorTransparent
 	}
 	if idx < 16 {
 		return palette[idx]
@@ -486,16 +488,16 @@ func colorFromXterm256(idx int, palette [16]graphics.Color) graphics.Color {
 		g := (n % 36) / 6
 		b := n % 6
 		levels := [6]uint8{0, 95, 135, 175, 215, 255}
-		return graphics.NewColor(levels[r], levels[g], levels[b], 255)
+		return core.NewColor(levels[r], levels[g], levels[b], 255)
 	}
 	if idx >= 232 && idx <= 255 {
 		v := uint8(8 + (idx-232)*10)
-		return graphics.NewColor(v, v, v, 255)
+		return core.NewColor(v, v, v, 255)
 	}
 	return palette[7]
 }
 
-func resolvePTYColor(c pty.Color, def graphics.Color, palette [16]graphics.Color) (graphics.Color, bool) {
+func resolvePTYColor(c pty.Color, def color.NRGBA, palette [16]color.NRGBA) (color.NRGBA, bool) {
 	if c == pty.ColorDefault {
 		return def, false
 	}
@@ -506,7 +508,7 @@ func resolvePTYColor(c pty.Color, def graphics.Color, palette [16]graphics.Color
 		r := uint8((rgb >> 16) & 0xFF)
 		g := uint8((rgb >> 8) & 0xFF)
 		b := uint8(rgb & 0xFF)
-		return graphics.NewColor(r, g, b, 255), true
+		return core.NewColor(r, g, b, 255), true
 	}
 	if v >= 0 && v <= 255 {
 		return colorFromXterm256(v, palette), true
@@ -514,7 +516,7 @@ func resolvePTYColor(c pty.Color, def graphics.Color, palette [16]graphics.Color
 	return def, false
 }
 
-func convertTerminalCell(cell pty.Cell, defaultFg, defaultBg graphics.Color, palette [16]graphics.Color) ui.TerminalCell {
+func convertTerminalCell(cell pty.Cell, defaultFg, defaultBg color.NRGBA, palette [16]color.NRGBA) ui.TerminalCell {
 	style := cell.Style
 
 	fgColor, fgExplicit := resolvePTYColor(style.Fg, defaultFg, palette)
@@ -543,7 +545,7 @@ func convertTerminalCell(cell pty.Cell, defaultFg, defaultBg graphics.Color, pal
 		}
 	}
 	if !bgExplicit {
-		bgColor = graphics.ColorTransparent
+		bgColor = core.ColorTransparent
 	}
 
 	ch := cell.Char
@@ -561,8 +563,8 @@ func convertTerminalCell(cell pty.Cell, defaultFg, defaultBg graphics.Color, pal
 
 func convertTerminalSnapshot(
 	lines [][]pty.Cell,
-	defaultFg, defaultBg graphics.Color,
-	palette [16]graphics.Color,
+	defaultFg, defaultBg color.NRGBA,
+	palette [16]color.NRGBA,
 ) [][]ui.TerminalCell {
 	out := make([][]ui.TerminalCell, len(lines))
 	for y := range lines {

@@ -1,15 +1,15 @@
-package canvas
+package svg
 
 import (
 	"path/filepath"
 	"testing"
 )
 
-func BenchmarkDecodeSVGPureClock(b *testing.B) {
+func BenchmarkDecodeFileClock(b *testing.B) {
 	path := filepath.Join("..", "..", "data", "icons", "default", "clock.svg")
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		buf, err := DecodeSVGToBuffer(path, 64)
+		buf, err := DecodeFile(path, 64)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -19,7 +19,7 @@ func BenchmarkDecodeSVGPureClock(b *testing.B) {
 	}
 }
 
-func BenchmarkDecodeSVGPureIconSet64(b *testing.B) {
+func BenchmarkDecodeFileIconSet64(b *testing.B) {
 	icons := []string{
 		"notes.svg",
 		"arrow_up.svg",
@@ -50,7 +50,7 @@ func BenchmarkDecodeSVGPureIconSet64(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		for _, p := range paths {
-			buf, err := DecodeSVGToBuffer(p, 64)
+			buf, err := DecodeFile(p, 64)
 			if err != nil {
 				b.Fatal(err)
 			}

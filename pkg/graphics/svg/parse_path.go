@@ -1,9 +1,12 @@
 package svg
 
 import (
+	"image/color"
 	"math"
 	"strconv"
 	"strings"
+
+	core "avyos.dev/pkg/graphics/pixmap"
 
 	"golang.org/x/image/vector"
 )
@@ -111,10 +114,10 @@ func svgClamp01(v float64) float64 {
 	return v
 }
 
-func svgParseColor(s string) (Color, bool) {
+func svgParseColor(s string) (color.NRGBA, bool) {
 	s = strings.TrimSpace(strings.ToLower(s))
 	if s == "" || s == "none" {
-		return ColorTransparent, false
+		return core.ColorTransparent, false
 	}
 	if strings.HasPrefix(s, "#") {
 		h := strings.TrimPrefix(s, "#")
@@ -124,24 +127,24 @@ func svgParseColor(s string) (Color, bool) {
 			g, _ := strconv.ParseUint(strings.Repeat(string(h[1]), 2), 16, 8)
 			b, _ := strconv.ParseUint(strings.Repeat(string(h[2]), 2), 16, 8)
 			a, _ := strconv.ParseUint(strings.Repeat(string(h[3]), 2), 16, 8)
-			return Color{R: uint8(r), G: uint8(g), B: uint8(b), A: uint8(a)}, true
+			return color.NRGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: uint8(a)}, true
 		case 3:
 			r, _ := strconv.ParseUint(strings.Repeat(string(h[0]), 2), 16, 8)
 			g, _ := strconv.ParseUint(strings.Repeat(string(h[1]), 2), 16, 8)
 			b, _ := strconv.ParseUint(strings.Repeat(string(h[2]), 2), 16, 8)
-			return Color{R: uint8(r), G: uint8(g), B: uint8(b), A: 255}, true
+			return color.NRGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: 255}, true
 		case 8:
 			v, err := strconv.ParseUint(h, 16, 32)
 			if err != nil {
-				return ColorTransparent, false
+				return core.ColorTransparent, false
 			}
-			return Color{R: uint8(v >> 24), G: uint8((v >> 16) & 0xFF), B: uint8((v >> 8) & 0xFF), A: uint8(v & 0xFF)}, true
+			return color.NRGBA{R: uint8(v >> 24), G: uint8((v >> 16) & 0xFF), B: uint8((v >> 8) & 0xFF), A: uint8(v & 0xFF)}, true
 		case 6:
 			v, err := strconv.ParseUint(h, 16, 32)
 			if err != nil {
-				return ColorTransparent, false
+				return core.ColorTransparent, false
 			}
-			return Color{R: uint8(v >> 16), G: uint8((v >> 8) & 0xFF), B: uint8(v & 0xFF), A: 255}, true
+			return color.NRGBA{R: uint8(v >> 16), G: uint8((v >> 8) & 0xFF), B: uint8(v & 0xFF), A: 255}, true
 		}
 	}
 	if strings.HasPrefix(s, "rgb(") && strings.HasSuffix(s, ")") {
@@ -150,7 +153,7 @@ func svgParseColor(s string) (Color, bool) {
 			r := uint8(svgColorComp(parts[0]))
 			g := uint8(svgColorComp(parts[1]))
 			b := uint8(svgColorComp(parts[2]))
-			return Color{R: r, G: g, B: b, A: 255}, true
+			return color.NRGBA{R: r, G: g, B: b, A: 255}, true
 		}
 	}
 	if strings.HasPrefix(s, "rgba(") && strings.HasSuffix(s, ")") {
@@ -160,34 +163,34 @@ func svgParseColor(s string) (Color, bool) {
 			g := uint8(svgColorComp(parts[1]))
 			b := uint8(svgColorComp(parts[2]))
 			a := uint8(svgClamp01(svgParseNumber(parts[3], 1))*255 + 0.5)
-			return Color{R: r, G: g, B: b, A: a}, true
+			return color.NRGBA{R: r, G: g, B: b, A: a}, true
 		}
 	}
 	switch s {
 	case "black":
-		return Color{R: 0, G: 0, B: 0, A: 255}, true
+		return color.NRGBA{R: 0, G: 0, B: 0, A: 255}, true
 	case "white":
-		return Color{R: 255, G: 255, B: 255, A: 255}, true
+		return color.NRGBA{R: 255, G: 255, B: 255, A: 255}, true
 	case "red":
-		return Color{R: 255, G: 0, B: 0, A: 255}, true
+		return color.NRGBA{R: 255, G: 0, B: 0, A: 255}, true
 	case "green":
-		return Color{R: 0, G: 128, B: 0, A: 255}, true
+		return color.NRGBA{R: 0, G: 128, B: 0, A: 255}, true
 	case "blue":
-		return Color{R: 0, G: 0, B: 255, A: 255}, true
+		return color.NRGBA{R: 0, G: 0, B: 255, A: 255}, true
 	case "yellow":
-		return Color{R: 255, G: 255, B: 0, A: 255}, true
+		return color.NRGBA{R: 255, G: 255, B: 0, A: 255}, true
 	case "gray", "grey":
-		return Color{R: 128, G: 128, B: 128, A: 255}, true
+		return color.NRGBA{R: 128, G: 128, B: 128, A: 255}, true
 	case "silver":
-		return Color{R: 192, G: 192, B: 192, A: 255}, true
+		return color.NRGBA{R: 192, G: 192, B: 192, A: 255}, true
 	case "cyan", "aqua":
-		return Color{R: 0, G: 255, B: 255, A: 255}, true
+		return color.NRGBA{R: 0, G: 255, B: 255, A: 255}, true
 	case "magenta", "fuchsia":
-		return Color{R: 255, G: 0, B: 255, A: 255}, true
+		return color.NRGBA{R: 255, G: 0, B: 255, A: 255}, true
 	case "transparent":
-		return ColorTransparent, true
+		return core.ColorTransparent, true
 	}
-	return ColorTransparent, false
+	return core.ColorTransparent, false
 }
 
 func svgColorComp(s string) float64 {

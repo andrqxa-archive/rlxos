@@ -29,9 +29,8 @@ import (
 	loginapi "avyos.dev/api/login"
 	"avyos.dev/pkg/fs"
 	gapp "avyos.dev/pkg/graphics/app"
-	declapp "avyos.dev/pkg/graphics/app/decl"
 	displaybackend "avyos.dev/pkg/graphics/backend/display"
-	gfxtheme "avyos.dev/pkg/graphics/theme"
+	gfxtheme "avyos.dev/pkg/graphics/themes"
 	ui "avyos.dev/pkg/graphics/widget/engine"
 	"avyos.dev/pkg/identity"
 	"avyos.dev/pkg/logger"
@@ -322,7 +321,7 @@ func showLogin() (*identity.Identity, error) {
 }
 
 type loginApp struct {
-	declapp.App
+	gapp.App
 	result *identity.Identity
 }
 

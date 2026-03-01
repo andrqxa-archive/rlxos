@@ -2,19 +2,21 @@ package engine
 
 import (
 	"fmt"
+	"image"
+	"image/color"
 	"path/filepath"
 	"strings"
 
 	gfxcanvas "avyos.dev/pkg/graphics/canvas"
-	graphics "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
 type imageState struct {
 	srcPath string
-	source  *graphics.Buffer
-	opaque  *graphics.Buffer
+	source  *core.Buffer
+	opaque  *core.Buffer
 	opaqueK string
-	scaled  *graphics.Buffer
+	scaled  *core.Buffer
 	scaledK string
 }
 
@@ -27,7 +29,7 @@ func (e *Element) getImageState() *imageState {
 	return st
 }
 
-func drawImage(e *Element, buf *graphics.Buffer) {
+func drawImage(e *Element, buf *core.Buffer) {
 	srcPath := strings.TrimSpace(e.Attr("src", ""))
 	if srcPath == "" {
 		return
@@ -66,9 +68,9 @@ func drawImage(e *Element, buf *graphics.Buffer) {
 			key += "|bg:" + v
 		}
 		if st.opaque == nil || st.opaqueK != key {
-			bg := graphics.Color{}
+			bg := color.NRGBA{}
 			if _, ok := e.attrs["srcOpaqueBg"]; ok {
-				bg = e.AttrColor("srcOpaqueBg", graphics.Color{})
+				bg = e.AttrColor("srcOpaqueBg", color.NRGBA{})
 			}
 			st.opaque = makeOpaqueImage(st.source, bg)
 			st.opaqueK = key
@@ -79,7 +81,7 @@ func drawImage(e *Element, buf *graphics.Buffer) {
 	}
 
 	bounds := e.contentArea()
-	if bounds.W <= 0 || bounds.H <= 0 {
+	if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
 		return
 	}
 	srcW, srcH := src.Width, src.Height
@@ -88,7 +90,7 @@ func drawImage(e *Element, buf *graphics.Buffer) {
 	}
 
 	mode := strings.ToLower(strings.TrimSpace(e.Attr("scaleMode", "contain")))
-	fullSrc := graphics.Rect{X: 0, Y: 0, W: srcW, H: srcH}
+	fullSrc := core.RectXYWH(0, 0, srcW, srcH)
 	var srcVariant string
 	if opaque {
 		srcVariant = "opaque:" + st.opaqueK
@@ -96,7 +98,7 @@ func drawImage(e *Element, buf *graphics.Buffer) {
 		srcVariant = "source"
 	}
 
-	getScaled := func(key string, srcRect graphics.Rect, w, h int) *graphics.Buffer {
+	getScaled := func(key string, srcRect image.Rectangle, w, h int) *core.Buffer {
 		if w <= 0 || h <= 0 {
 			return nil
 		}
@@ -114,51 +116,51 @@ func drawImage(e *Element, buf *graphics.Buffer) {
 
 	switch mode {
 	case "none":
-		x := bounds.X + (bounds.W-srcW)/2
-		y := bounds.Y + (bounds.H-srcH)/2
+		x := bounds.Min.X + (bounds.Dx()-srcW)/2
+		y := bounds.Min.Y + (bounds.Dy()-srcH)/2
 		buf.Blit(src, x, y)
 	case "cover":
 		srcRect := coverSrcRect(srcW, srcH, bounds)
 		key := fmt.Sprintf("%s|%s|cover|%d:%d:%d:%d|%d:%d",
-			st.srcPath, srcVariant, srcRect.X, srcRect.Y, srcRect.W, srcRect.H, bounds.W, bounds.H)
-		scaled := getScaled(key, srcRect, bounds.W, bounds.H)
+			st.srcPath, srcVariant, srcRect.Min.X, srcRect.Min.Y, srcRect.Dx(), srcRect.Dy(), bounds.Dx(), bounds.Dy())
+		scaled := getScaled(key, srcRect, bounds.Dx(), bounds.Dy())
 		if scaled == nil {
 			return
 		}
-		buf.Blit(scaled, bounds.X, bounds.Y)
+		buf.Blit(scaled, bounds.Min.X, bounds.Min.Y)
 	case "stretch":
-		key := fmt.Sprintf("%s|%s|stretch|%d:%d", st.srcPath, srcVariant, bounds.W, bounds.H)
-		scaled := getScaled(key, fullSrc, bounds.W, bounds.H)
+		key := fmt.Sprintf("%s|%s|stretch|%d:%d", st.srcPath, srcVariant, bounds.Dx(), bounds.Dy())
+		scaled := getScaled(key, fullSrc, bounds.Dx(), bounds.Dy())
 		if scaled == nil {
 			return
 		}
-		buf.Blit(scaled, bounds.X, bounds.Y)
+		buf.Blit(scaled, bounds.Min.X, bounds.Min.Y)
 	default: // contain
 		dst := fitRect(srcW, srcH, bounds)
-		key := fmt.Sprintf("%s|%s|contain|%d:%d", st.srcPath, srcVariant, dst.W, dst.H)
-		scaled := getScaled(key, fullSrc, dst.W, dst.H)
+		key := fmt.Sprintf("%s|%s|contain|%d:%d", st.srcPath, srcVariant, dst.Dx(), dst.Dy())
+		scaled := getScaled(key, fullSrc, dst.Dx(), dst.Dy())
 		if scaled == nil {
 			return
 		}
-		buf.Blit(scaled, dst.X, dst.Y)
+		buf.Blit(scaled, dst.Min.X, dst.Min.Y)
 	}
 }
 
-func makeOpaqueImage(src *graphics.Buffer, bg graphics.Color) *graphics.Buffer {
+func makeOpaqueImage(src *core.Buffer, bg color.NRGBA) *core.Buffer {
 	if src == nil {
 		return nil
 	}
-	out := graphics.NewBuffer(src.Width, src.Height)
+	out := core.NewBuffer(src.Width, src.Height)
 	blendWithBG := bg.A > 0
 	for y := 0; y < src.Height; y++ {
 		for x := 0; x < src.Width; x++ {
 			c := src.GetPixel(x, y)
 			if c.A == 0 {
-				out.SetPixel(x, y, graphics.ColorTransparent)
+				out.SetPixel(x, y, core.ColorTransparent)
 				continue
 			}
 			if blendWithBG {
-				flat := c.Blend(bg)
+				flat := core.Blend(c, bg)
 				flat.A = 255
 				out.SetPixel(x, y, flat)
 				continue
@@ -171,7 +173,7 @@ func makeOpaqueImage(src *graphics.Buffer, bg graphics.Color) *graphics.Buffer {
 	return out
 }
 
-func loadImageFile(path string) (*graphics.Buffer, error) {
+func loadImageFile(path string) (*core.Buffer, error) {
 	reqSize := 0
 	if strings.EqualFold(filepath.Ext(path), ".svg") {
 		// Keep vector icons crisp when UI scales them up in controls.
@@ -184,68 +186,63 @@ func loadImageFile(path string) (*graphics.Buffer, error) {
 	return buf, nil
 }
 
-func fitRect(srcW, srcH int, bounds graphics.Rect) graphics.Rect {
-	scaleX := bounds.W * 1000 / srcW
-	scaleY := bounds.H * 1000 / srcH
+func fitRect(srcW, srcH int, bounds image.Rectangle) image.Rectangle {
+	scaleX := bounds.Dx() * 1000 / srcW
+	scaleY := bounds.Dy() * 1000 / srcH
 	scale := scaleX
 	if scaleY < scale {
 		scale = scaleY
 	}
 	w := srcW * scale / 1000
 	h := srcH * scale / 1000
-	return graphics.Rect{
-		X: bounds.X + (bounds.W-w)/2,
-		Y: bounds.Y + (bounds.H-h)/2,
-		W: w,
-		H: h,
-	}
+	return core.RectXYWH(bounds.Min.X+(bounds.Dx()-w)/2, bounds.Min.Y+(bounds.Dy()-h)/2, w, h)
 }
 
-func coverSrcRect(srcW, srcH int, bounds graphics.Rect) graphics.Rect {
+func coverSrcRect(srcW, srcH int, bounds image.Rectangle) image.Rectangle {
 	srcAspect := srcW * 1000 / srcH
-	dstAspect := bounds.W * 1000 / bounds.H
+	dstAspect := bounds.Dx() * 1000 / bounds.Dy()
 	if srcAspect > dstAspect {
-		newW := srcH * bounds.W / bounds.H
-		return graphics.Rect{X: (srcW - newW) / 2, Y: 0, W: newW, H: srcH}
+		newW := srcH * bounds.Dx() / bounds.Dy()
+		return core.RectXYWH((srcW-newW)/2, 0, newW, srcH)
 	}
-	newH := srcW * bounds.H / bounds.W
-	return graphics.Rect{X: 0, Y: (srcH - newH) / 2, W: srcW, H: newH}
+	newH := srcW * bounds.Dy() / bounds.Dx()
+	return core.RectXYWH(0, (srcH-newH)/2, srcW, newH)
 }
 
-func scaleImageSmooth(src *graphics.Buffer, srcRect graphics.Rect, w, h int) *graphics.Buffer {
-	if src == nil || w <= 0 || h <= 0 || srcRect.W <= 0 || srcRect.H <= 0 {
+func scaleImageSmooth(src *core.Buffer, srcRect image.Rectangle, w, h int) *core.Buffer {
+	if src == nil || w <= 0 || h <= 0 || srcRect.Dx() <= 0 || srcRect.Dy() <= 0 {
 		return nil
 	}
 
 	working := src
 	workRect := srcRect
-	if srcRect.X != 0 || srcRect.Y != 0 || srcRect.W != src.Width || srcRect.H != src.Height {
+	if srcRect.Min.X != 0 || srcRect.Min.Y != 0 || srcRect.Dx() != src.Width || srcRect.Dy() != src.Height {
 		working = src.SubBuffer(srcRect)
-		workRect = graphics.Rect{X: 0, Y: 0, W: working.Width, H: working.Height}
+		workRect = core.RectXYWH(0, 0, working.Width, working.Height)
 	}
 
 	// Progressive downscale reduces aliasing and makes icon edges smoother
 	// than a single large minification step.
-	for workRect.W > w*2 || workRect.H > h*2 {
-		nextW := workRect.W / 2
-		nextH := workRect.H / 2
+	for workRect.Dx() > w*2 || workRect.Dy() > h*2 {
+		nextW := workRect.Dx() / 2
+		nextH := workRect.Dy() / 2
 		if nextW < w {
 			nextW = w
 		}
 		if nextH < h {
 			nextH = h
 		}
-		if nextW == workRect.W && nextH == workRect.H {
+		if nextW == workRect.Dx() && nextH == workRect.Dy() {
 			break
 		}
 
-		next := graphics.NewBuffer(nextW, nextH)
-		next.BlitScaled(working, workRect, graphics.Rect{X: 0, Y: 0, W: nextW, H: nextH})
+		next := core.NewBuffer(nextW, nextH)
+		next.BlitScaled(working, workRect, core.RectXYWH(0, 0, nextW, nextH))
 		working = next
-		workRect = graphics.Rect{X: 0, Y: 0, W: nextW, H: nextH}
+		workRect = core.RectXYWH(0, 0, nextW, nextH)
 	}
 
-	out := graphics.NewBuffer(w, h)
-	out.BlitScaled(working, workRect, graphics.Rect{X: 0, Y: 0, W: w, H: h})
+	out := core.NewBuffer(w, h)
+	out.BlitScaled(working, workRect, core.RectXYWH(0, 0, w, h))
 	return out
 }

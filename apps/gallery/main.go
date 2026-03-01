@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	gapp "avyos.dev/pkg/graphics/app"
-	declapp "avyos.dev/pkg/graphics/app/decl"
 	gfxcanvas "avyos.dev/pkg/graphics/canvas"
 	ui "avyos.dev/pkg/graphics/widget/engine"
 )
@@ -18,7 +17,7 @@ import (
 var imageViewerUI string
 
 type ImageViewerApp struct {
-	declapp.App
+	gapp.App
 
 	currentPath string
 }

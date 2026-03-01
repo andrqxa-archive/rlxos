@@ -1,34 +1,38 @@
 package theme
 
-import "avyos.dev/pkg/graphics/core"
+import (
+	"image/color"
+
+	core "avyos.dev/pkg/graphics/pixmap"
+)
 
 // Theme holds the colors used for rendering widgets.
 type Theme struct {
-	Background      core.Color
-	Foreground      core.Color
-	Primary         core.Color
-	AccentAlt       core.Color
-	PrimaryHover    core.Color
-	PrimaryActive   core.Color
-	Secondary       core.Color
-	Border          core.Color
-	BorderFocused   core.Color
-	InputBackground core.Color
-	InputForeground core.Color
-	ButtonText      core.Color
-	SurfaceGlass    core.Color
-	SurfaceRaised   core.Color
-	SurfaceSidebar  core.Color
-	StrokeDivider   core.Color
-	TextSecondary   core.Color
-	TextMuted       core.Color
-	TextDisabled    core.Color
-	ControlHover    core.Color
-	ControlPressed  core.Color
-	AccentSubtle    core.Color
-	Success         core.Color
-	Warning         core.Color
-	Danger          core.Color
+	Background      color.NRGBA
+	Foreground      color.NRGBA
+	Primary         color.NRGBA
+	AccentAlt       color.NRGBA
+	PrimaryHover    color.NRGBA
+	PrimaryActive   color.NRGBA
+	Secondary       color.NRGBA
+	Border          color.NRGBA
+	BorderFocused   color.NRGBA
+	InputBackground color.NRGBA
+	InputForeground color.NRGBA
+	ButtonText      color.NRGBA
+	SurfaceGlass    color.NRGBA
+	SurfaceRaised   color.NRGBA
+	SurfaceSidebar  color.NRGBA
+	StrokeDivider   color.NRGBA
+	TextSecondary   color.NRGBA
+	TextMuted       color.NRGBA
+	TextDisabled    color.NRGBA
+	ControlHover    color.NRGBA
+	ControlPressed  color.NRGBA
+	AccentSubtle    color.NRGBA
+	Success         color.NRGBA
+	Warning         color.NRGBA
+	Danger          color.NRGBA
 	BorderRadius    int
 }
 
@@ -92,7 +96,3 @@ var AvyosDark = Theme{
 	Danger:          core.NewColorHex(0xFF5F3A),
 	BorderRadius:    14,
 }
-
-// Backwards-compatible aliases.
-var MayurLight = AvyosLight
-var MayurDark = AvyosDark

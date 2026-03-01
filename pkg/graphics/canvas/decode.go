@@ -11,25 +11,16 @@ import (
 	"strings"
 	"sync"
 
-	"avyos.dev/pkg/graphics/core"
+	core "avyos.dev/pkg/graphics/pixmap"
 	gfxsvg "avyos.dev/pkg/graphics/svg"
 )
 
-type Buffer = core.Buffer
-
-// TextFace provides bitmap glyph metrics used by SVG text fallback.
-type TextFace struct {
-	Width  int
-	Height int
-	Glyphs map[rune][]byte
-}
-
 // DecodeOptions controls image decode behavior.
 type DecodeOptions struct {
-	TextFace *TextFace
+	SVG gfxsvg.DecodeFileOptions
 }
 
-var decodedImageCache sync.Map // key: "<absPath>|<reqSize>|<textFace>" => *Buffer
+var decodedImageCache sync.Map // key: "<absPath>|<reqSize>|<svgOpts>" => *core.Buffer
 
 // DecodeFile decodes a raster image file into an image.Image.
 func DecodeFile(path string) (image.Image, error) {
@@ -46,9 +37,8 @@ func DecodeFile(path string) (image.Image, error) {
 	return img, nil
 }
 
-// DecodeImageToBuffer decodes raster formats directly and rasterizes SVG files.
-// reqSize is used for SVG rasterization. If <= 0, a size is inferred from SVG metadata.
-func DecodeImageToBuffer(path string, reqSize int, opts ...DecodeOptions) (*Buffer, error) {
+// DecodeImageToBuffer decodes raster formats and delegates SVG decoding to pkg/graphics/svg.
+func DecodeImageToBuffer(path string, reqSize int, opts ...DecodeOptions) (*core.Buffer, error) {
 	cfg := DecodeOptions{}
 	if len(opts) > 0 {
 		cfg = opts[0]
@@ -56,32 +46,23 @@ func DecodeImageToBuffer(path string, reqSize int, opts ...DecodeOptions) (*Buff
 	return decodeImageToBuffer(path, reqSize, cfg)
 }
 
-// DecodeSVGToBuffer rasterizes an SVG file using optional text-face settings.
-func DecodeSVGToBuffer(path string, reqSize int, opts ...DecodeOptions) (*Buffer, error) {
-	cfg := DecodeOptions{}
-	if len(opts) > 0 {
-		cfg = opts[0]
-	}
-	return decodeSVGPure(path, reqSize, cfg)
-}
-
-func decodeImageToBuffer(path string, reqSize int, opts DecodeOptions) (*Buffer, error) {
+func decodeImageToBuffer(path string, reqSize int, opts DecodeOptions) (*core.Buffer, error) {
 	cachePath := path
 	if abs, err := filepath.Abs(path); err == nil {
 		cachePath = abs
 	}
-	cacheKey := fmt.Sprintf("%s|%d|%s", cachePath, reqSize, textFaceCacheKey(opts.TextFace))
+	cacheKey := fmt.Sprintf("%s|%d|%s", cachePath, reqSize, svgDecodeCacheKey(opts))
 	if v, ok := decodedImageCache.Load(cacheKey); ok {
-		if b, ok := v.(*Buffer); ok && b != nil {
+		if b, ok := v.(*core.Buffer); ok && b != nil {
 			return b, nil
 		}
 	}
 
 	ext := strings.ToLower(filepath.Ext(path))
-	var out *Buffer
+	var out *core.Buffer
 	var err error
 	if ext == ".svg" {
-		out, err = decodeSVGPure(path, reqSize, opts)
+		out, err = gfxsvg.DecodeFile(path, reqSize, opts.SVG)
 	} else {
 		out, err = decodeRasterToBuffer(path)
 	}
@@ -92,46 +73,18 @@ func decodeImageToBuffer(path string, reqSize int, opts DecodeOptions) (*Buffer,
 	return out, nil
 }
 
-func decodeRasterToBuffer(path string) (*Buffer, error) {
+func decodeRasterToBuffer(path string) (*core.Buffer, error) {
 	img, err := DecodeFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return imageToBuffer(img), nil
+	return BufferFromImage(img), nil
 }
 
-func imageToBuffer(img image.Image) *Buffer {
-	b := img.Bounds()
-	out := core.NewBuffer(b.Dx(), b.Dy())
-	for y := 0; y < b.Dy(); y++ {
-		for x := 0; x < b.Dx(); x++ {
-			r, g, bb, a := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
-			out.SetPixel(x, y, core.NewColor(uint8(r>>8), uint8(g>>8), uint8(bb>>8), uint8(a>>8)))
-		}
-	}
-	return out
-}
-
-func decodeSVGPure(path string, reqSize int, opts DecodeOptions) (*Buffer, error) {
-	var tf *gfxsvg.TextFace
-	if opts.TextFace != nil {
-		tf = &gfxsvg.TextFace{
-			Width:  opts.TextFace.Width,
-			Height: opts.TextFace.Height,
-			Glyphs: opts.TextFace.Glyphs,
-		}
-	}
-	return gfxsvg.Decode(path, reqSize, gfxsvg.Options{
-		TextFace: tf,
-		DecodeImage: func(path string, reqSize int) (*Buffer, error) {
-			return decodeImageToBuffer(path, reqSize, opts)
-		},
-	})
-}
-
-func textFaceCacheKey(face *TextFace) string {
-	if face == nil {
+func svgDecodeCacheKey(opts DecodeOptions) string {
+	if opts.SVG.TextFace == nil {
 		return "nil"
 	}
+	face := opts.SVG.TextFace
 	return fmt.Sprintf("%dx%d:%d", face.Width, face.Height, len(face.Glyphs))
 }

@@ -13,7 +13,7 @@ import (
 // section.  All pointers refer directly into the mapped ELF image.
 type gnuHashTable struct {
 	nbuckets  uint32
-	symndx    uint32  // first symbol index covered by the hash
+	symndx    uint32 // first symbol index covered by the hash
 	maskwords uint32
 	shift2    uint32
 	bloom     uintptr // -> [maskwords]uint64

@@ -15,30 +15,23 @@
  *
  */
 
-package input
+package backend
 
-import "avyos.dev/pkg/graphics/core"
+import (
+	"image"
+
+	core "avyos.dev/pkg/graphics/pixmap"
+)
 
 // Backend is the display backend interface.
-// Implementations include framebuffer (Linux /dev/fb0) and Wayland.
+// Implementations include framebuffer (Linux /dev/fb0), DRM/KMS, and Wayland.
 type Backend interface {
 	Open() error
 	Close() error
 	Size() (width, height int)
 	Buffer() *core.Buffer
 	Flush() error
-	FlushRect(core.Rect) error
+	FlushRect(image.Rectangle) error
 	Info() string
 	HasSystemCursor() bool
-}
-
-// InputHandler is the input handler interface.
-// Implementations include evdev (Linux raw input) and Wayland seat.
-type InputHandler interface {
-	Open() error
-	Start()
-	Close() error
-	Poll() *Event
-	MousePosition() (x, y int)
-	SetScreenSize(width, height int)
 }

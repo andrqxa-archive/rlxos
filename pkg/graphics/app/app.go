@@ -20,6 +20,8 @@ package app
 import (
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
 	"os"
 	"os/signal"
 	"reflect"
@@ -27,16 +29,20 @@ import (
 	"syscall"
 	"time"
 
+	gfxdisplay "avyos.dev/pkg/graphics/backend"
 	displaybackend "avyos.dev/pkg/graphics/backend/display"
-	graphics "avyos.dev/pkg/graphics/input"
-	gfxtheme "avyos.dev/pkg/graphics/theme"
+	gfxfont "avyos.dev/pkg/graphics/fonts"
+	gfxinput "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
+	gfxtheme "avyos.dev/pkg/graphics/themes"
+	gfxwidget "avyos.dev/pkg/graphics/widget"
 )
 
 const cursorSize = 12
 
 // debugFlash represents a fading damage flash overlay.
 type debugFlash struct {
-	region    graphics.Rect
+	region    image.Rectangle
 	remaining int // frames left to display
 }
 
@@ -44,19 +50,19 @@ type shortcutBinding struct {
 	shortcutID uint32
 	windowID   uint32
 	scope      uint32
-	key        graphics.Key
+	key        gfxinput.Key
 	ch         rune
-	modifiers  graphics.Modifiers
-	handler    func(graphics.Event)
+	modifiers  gfxinput.Modifiers
+	handler    func(gfxinput.Event)
 }
 
 // Widget is the rendering/input contract expected by app.App.
 type Widget interface {
-	Draw(buf *graphics.Buffer)
-	Bounds() graphics.Rect
-	SetBounds(r graphics.Rect)
-	MinSize() graphics.Point
-	HandleEvent(ev graphics.Event) bool
+	Draw(buf *core.Buffer)
+	Bounds() image.Rectangle
+	SetBounds(r image.Rectangle)
+	MinSize() image.Point
+	HandleEvent(ev gfxinput.Event) bool
 	SetFocused(focused bool)
 	IsFocused() bool
 	IsDirty() bool
@@ -68,24 +74,28 @@ type Widget interface {
 // App represents the main application with a single root widget
 // that fills the entire screen.
 type App struct {
-	backend    graphics.Backend
-	input      graphics.InputHandler
-	root       Widget
-	focusables []Widget
-	focusIndex int
-	running    bool
-	background graphics.Color
-	title      string
-	fps        int
-	OnQuit     func()
-	OnEscape   func() // If set, called on Escape instead of quitting.
-	OnEvent    func(ev graphics.Event) bool
+	backend        gfxdisplay.Backend
+	input          gfxinput.Handler
+	root           Widget
+	rootElement    gfxwidget.Widget
+	focusables     []Widget
+	focusIndex     int
+	focusTarget    Widget
+	running        bool
+	background     color.NRGBA
+	backgroundSet  bool
+	backgroundAuto bool
+	title          string
+	fps            int
+	OnQuit         func()
+	OnEscape       func() // If set, called on Escape instead of quitting.
+	OnEvent        func(ev gfxinput.Event) bool
 
 	shortcuts map[uint32]shortcutBinding
 
 	// Damage tracking
-	prevBounds  map[Widget]graphics.Rect
-	damageList  []graphics.Rect
+	prevBounds  map[Widget]image.Rectangle
+	damageList  []image.Rectangle
 	fullRedraw  bool
 	frameSignal bool
 	prevCursorX int
@@ -95,11 +105,16 @@ type App struct {
 	debugDamage  bool
 	debugFlashes []debugFlash
 	debugFrames  int
-	debugColor   graphics.Color
+	debugColor   color.NRGBA
+
+	// Declarative integration.
+	menuPopup      *displaybackend.Popup
+	configure      []func(*App)
+	configureReady bool
 }
 
 type childProvider interface {
-	Children() []Widget
+	Children() []gfxwidget.Widget
 }
 
 type selfDirtyProvider interface {
@@ -107,7 +122,7 @@ type selfDirtyProvider interface {
 }
 
 type dirtyRectsProvider interface {
-	DirtyRects() []graphics.Rect
+	DirtyRects() []image.Rectangle
 }
 
 type titleSetter interface {
@@ -115,24 +130,24 @@ type titleSetter interface {
 }
 
 type rectBatchFlusher interface {
-	FlushRects([]graphics.Rect) error
+	FlushRects([]image.Rectangle) error
 }
 
 type shortcutRegistrar interface {
-	RegisterShortcutEx(shortcutID, windowID, scope uint32, key graphics.Key, ch rune, modifiers graphics.Modifiers) error
+	RegisterShortcutEx(shortcutID, windowID, scope uint32, key gfxinput.Key, ch rune, modifiers gfxinput.Modifiers) error
 	UnregisterShortcut(shortcutID uint32) error
 }
 
 // Options configures a new application.
 type Options struct {
-	Title         string                // Window title.
-	Width         int                   // Window width; 0 = default (800).
-	Height        int                   // Window height; 0 = default (600).
-	Backend       graphics.Backend      // Display backend (required).
-	Input         graphics.InputHandler // Input handler (required).
-	FPS           int                   // Target FPS; 0 = default (60).
-	Background    graphics.Color        // Background color.
-	BackgroundSet bool                  // When true, use Background even if it is transparent (0 alpha).
+	Title         string             // Window title.
+	Width         int                // Window width; 0 = default (800).
+	Height        int                // Window height; 0 = default (600).
+	Backend       gfxdisplay.Backend // Display backend (required).
+	Input         gfxinput.Handler   // Input handler (required).
+	FPS           int                // Target FPS; 0 = default (60).
+	Background    color.NRGBA        // Background color.
+	BackgroundSet bool               // When true, use Background even if it is transparent (0 alpha).
 }
 
 // New creates a new application with the given options.
@@ -141,21 +156,23 @@ func New(opts Options) *App {
 		opts.FPS = 60
 	}
 	bg := opts.Background
-	if !opts.BackgroundSet && bg == (graphics.Color{}) {
+	if !opts.BackgroundSet && bg == (color.NRGBA{}) {
 		bg = gfxtheme.DefaultTheme.Background
 	}
 	return &App{
-		backend:    opts.Backend,
-		input:      opts.Input,
-		title:      opts.Title,
-		focusIndex: -1,
-		background: bg,
-		fps:        opts.FPS,
-		fullRedraw: true,
-		prevBounds: make(map[Widget]graphics.Rect),
+		backend:        opts.Backend,
+		input:          opts.Input,
+		title:          opts.Title,
+		focusIndex:     -1,
+		background:     bg,
+		backgroundSet:  opts.BackgroundSet,
+		backgroundAuto: !opts.BackgroundSet && opts.Background == (color.NRGBA{}),
+		fps:            opts.FPS,
+		fullRedraw:     true,
+		prevBounds:     make(map[Widget]image.Rectangle),
 
 		debugFrames: 6,
-		debugColor:  graphics.NewColor(255, 0, 0, 80),
+		debugColor:  core.NewColor(255, 0, 0, 80),
 	}
 }
 
@@ -168,7 +185,7 @@ func (a *App) SetTitle(title string) {
 }
 
 // SetBackground sets the background color.
-func (a *App) SetBackground(c graphics.Color) {
+func (a *App) SetBackground(c color.NRGBA) {
 	a.background = c
 	a.fullRedraw = true
 }
@@ -196,7 +213,7 @@ func (a *App) SetDebugFlashFrames(frames int) {
 }
 
 // SetDebugFlashColor sets the flash overlay color (default semi-transparent red).
-func (a *App) SetDebugFlashColor(c graphics.Color) {
+func (a *App) SetDebugFlashColor(c color.NRGBA) {
 	a.debugColor = c
 }
 
@@ -204,7 +221,7 @@ func (a *App) SetDebugFlashColor(c graphics.Color) {
 // entire screen when Run() is called.
 func (a *App) SetRoot(widget Widget) {
 	a.root = widget
-	a.prevBounds = make(map[Widget]graphics.Rect)
+	a.prevBounds = make(map[Widget]image.Rectangle)
 	a.fullRedraw = true
 }
 
@@ -214,12 +231,12 @@ func (a *App) Root() Widget {
 }
 
 // RegisterShortcut registers a compositor shortcut callback.
-// If key is graphics.KeyNone, ch must be a printable rune.
-func (a *App) RegisterShortcut(shortcutID, windowID, scope uint32, key graphics.Key, ch rune, modifiers graphics.Modifiers, handler func(graphics.Event)) error {
+// If key is gfxinput.KeyNone, ch must be a printable rune.
+func (a *App) RegisterShortcut(shortcutID, windowID, scope uint32, key gfxinput.Key, ch rune, modifiers gfxinput.Modifiers, handler func(gfxinput.Event)) error {
 	if shortcutID == 0 {
 		return fmt.Errorf("shortcut id must be non-zero")
 	}
-	if key == graphics.KeyNone && ch == 0 {
+	if key == gfxinput.KeyNone && ch == 0 {
 		return fmt.Errorf("shortcut must specify key or rune")
 	}
 	if a.shortcuts == nil {
@@ -310,9 +327,12 @@ func (a *App) Focus(widget Widget) {
 		}
 		if w == widget {
 			a.setFocus(i)
+			a.focusTarget = widget
 			return
 		}
 	}
+	// Widget is not focusable yet (common before declarative tree init).
+	a.focusTarget = widget
 }
 
 // FocusNext moves focus to the next focusable widget.
@@ -371,11 +391,26 @@ func (a *App) RequestFrame() {
 // Run starts the main application loop. The root widget is resized
 // to fill the entire framebuffer.
 func (a *App) Run() error {
+	a.prepareDeclarativeRoot()
+
 	if a.root == nil {
 		return fmt.Errorf("no root widget set; call SetRoot() before Run()")
 	}
 
-	a.loadConfiguredDefaultFont()
+	if !a.configureReady {
+		for _, fn := range a.configure {
+			fn(a)
+		}
+		a.configureReady = true
+	}
+
+	if !isNilWidget(a.focusTarget) {
+		a.Focus(a.focusTarget)
+	}
+
+	if err := gfxfont.ApplyConfiguredDefaultFont(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to load configured font: %v (using internal bitmap font)\n", err)
+	}
 
 	if a.backend == nil {
 		backend := displaybackend.New()
@@ -399,7 +434,7 @@ func (a *App) Run() error {
 
 	// Size root widget to full screen
 	w, h := a.backend.Size()
-	a.root.SetBounds(graphics.Rect{W: w, H: h})
+	a.root.SetBounds(core.RectXYWH(0, 0, w, h))
 
 	if err := a.input.Open(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to open input devices: %v\n", err)
@@ -514,22 +549,22 @@ func (a *App) processEvents() bool {
 	return had
 }
 
-func (a *App) handleEvent(ev graphics.Event) {
-	if ev.Type == graphics.EventQuit {
+func (a *App) handleEvent(ev gfxinput.Event) {
+	if ev.Type == gfxinput.EventQuit {
 		a.running = false
 		return
 	}
 
-	if ev.Type == graphics.EventResize {
+	if ev.Type == gfxinput.EventResize {
 		w, h := ev.X, ev.Y
 		if a.root != nil && w > 0 && h > 0 {
-			a.root.SetBounds(graphics.Rect{W: w, H: h})
+			a.root.SetBounds(core.RectXYWH(0, 0, w, h))
 			a.fullRedraw = true
 		}
 		return
 	}
 
-	if ev.Type == graphics.EventShortcut {
+	if ev.Type == gfxinput.EventShortcut {
 		if binding, ok := a.shortcuts[ev.ShortcutID]; ok && binding.handler != nil {
 			binding.handler(ev)
 			return
@@ -540,7 +575,7 @@ func (a *App) handleEvent(ev graphics.Event) {
 		return
 	}
 
-	if ev.Type == graphics.EventKeyPress && ev.Key == graphics.KeyEscape {
+	if ev.Type == gfxinput.EventKeyPress && ev.Key == gfxinput.KeyEscape {
 		if a.OnEscape != nil {
 			a.OnEscape()
 		} else {
@@ -550,7 +585,7 @@ func (a *App) handleEvent(ev graphics.Event) {
 	}
 
 	// Tab navigation through focusables
-	if ev.Type == graphics.EventKeyPress && ev.Key == graphics.KeyTab {
+	if ev.Type == gfxinput.EventKeyPress && ev.Key == gfxinput.KeyTab {
 		if ev.IsShift() {
 			a.FocusPrevious()
 		} else {
@@ -560,12 +595,12 @@ func (a *App) handleEvent(ev graphics.Event) {
 	}
 
 	// Click to focus: find which focusable was clicked
-	if ev.Type == graphics.EventMouseButtonPress && ev.MouseButton == graphics.MouseButtonLeft {
+	if ev.Type == gfxinput.EventMouseButtonPress && ev.MouseButton == gfxinput.MouseButtonLeft {
 		for i, w := range a.focusables {
 			if isNilWidget(w) {
 				continue
 			}
-			if w.Bounds().ContainsXY(ev.X, ev.Y) {
+			if core.RectContainsXY(w.Bounds(), ev.X, ev.Y) {
 				a.setFocus(i)
 				break
 			}
@@ -573,7 +608,7 @@ func (a *App) handleEvent(ev graphics.Event) {
 	}
 
 	// Keyboard events go to the focused widget first.
-	if (ev.Type == graphics.EventKeyPress || ev.Type == graphics.EventKeyRelease) &&
+	if (ev.Type == gfxinput.EventKeyPress || ev.Type == gfxinput.EventKeyRelease) &&
 		a.focusIndex >= 0 && a.focusIndex < len(a.focusables) {
 		w := a.focusables[a.focusIndex]
 		if isNilWidget(w) {
@@ -650,7 +685,7 @@ func (a *App) frame() {
 	}
 
 	sw, sh := a.backend.Size()
-	screen := graphics.Rect{W: sw, H: sh}
+	screen := core.RectXYWH(0, 0, sw, sh)
 	damageRects := normalizeDamageRects(a.damageList, screen, 24)
 	if len(damageRects) == 0 {
 		return
@@ -668,7 +703,7 @@ func (a *App) frame() {
 		})
 		// Keep debug mode simple: merged redraw with flash overlay.
 		buf.FillRect(merged, a.background)
-		if a.root != nil && a.root.IsVisible() && a.root.Bounds().Intersects(merged) {
+		if a.root != nil && a.root.IsVisible() && a.root.Bounds().Overlaps(merged) {
 			buf.SetClip(merged)
 			a.root.Draw(buf)
 			buf.ClearClip()
@@ -690,7 +725,7 @@ func (a *App) frame() {
 	}
 
 	mx, my := 0, 0
-	cursorNow := graphics.Rect{}
+	cursorNow := image.Rectangle{}
 	drawCursor := !a.backend.HasSystemCursor()
 	if drawCursor {
 		mx, my = a.input.MousePosition()
@@ -699,12 +734,12 @@ func (a *App) frame() {
 
 	for _, r := range damageRects {
 		buf.FillRect(r, a.background)
-		if a.root != nil && a.root.IsVisible() && a.root.Bounds().Intersects(r) {
+		if a.root != nil && a.root.IsVisible() && a.root.Bounds().Overlaps(r) {
 			buf.SetClip(r)
 			a.root.Draw(buf)
 			buf.ClearClip()
 		}
-		if drawCursor && cursorNow.Intersects(r) {
+		if drawCursor && cursorNow.Overlaps(r) {
 			buf.SetClip(r)
 			a.drawCursor(buf, mx, my)
 			buf.ClearClip()
@@ -720,7 +755,7 @@ func (a *App) frame() {
 	}
 }
 
-func (a *App) flushDamageRects(rects []graphics.Rect) {
+func (a *App) flushDamageRects(rects []image.Rectangle) {
 	if len(rects) == 0 {
 		return
 	}
@@ -735,7 +770,7 @@ func (a *App) flushDamageRects(rects []graphics.Rect) {
 }
 
 // renderFull does a complete repaint of the entire screen.
-func (a *App) renderFull(buf *graphics.Buffer) {
+func (a *App) renderFull(buf *core.Buffer) {
 	buf.ClearClip()
 	buf.Clear(a.background)
 
@@ -744,7 +779,7 @@ func (a *App) renderFull(buf *graphics.Buffer) {
 			a.root.Draw(buf)
 		}
 		a.root.MarkClean()
-		a.prevBounds = make(map[Widget]graphics.Rect)
+		a.prevBounds = make(map[Widget]image.Rectangle)
 		a.syncPrevBounds(a.root)
 	}
 
@@ -758,7 +793,7 @@ func (a *App) renderFull(buf *graphics.Buffer) {
 
 	if a.debugDamage {
 		sw, sh := a.backend.Size()
-		screen := graphics.Rect{W: sw, H: sh}
+		screen := core.RectXYWH(0, 0, sw, sh)
 		a.debugFlashes = append(a.debugFlashes, debugFlash{
 			region:    screen,
 			remaining: a.debugFrames,
@@ -770,17 +805,17 @@ func (a *App) renderFull(buf *graphics.Buffer) {
 	a.fullRedraw = false
 }
 
-func normalizeDamageRects(rects []graphics.Rect, bounds graphics.Rect, maxRects int) []graphics.Rect {
+func normalizeDamageRects(rects []image.Rectangle, bounds image.Rectangle, maxRects int) []image.Rectangle {
 	if len(rects) == 0 {
 		return nil
 	}
 	if maxRects < 1 {
 		maxRects = 1
 	}
-	out := make([]graphics.Rect, 0, len(rects))
+	out := make([]image.Rectangle, 0, len(rects))
 	for _, r := range rects {
-		r = r.Intersection(bounds)
-		if r.IsEmpty() {
+		r = r.Intersect(bounds)
+		if r.Empty() {
 			continue
 		}
 		merged := false
@@ -822,21 +857,21 @@ func normalizeDamageRects(rects []graphics.Rect, bounds graphics.Rect, maxRects 
 	return out
 }
 
-func rectsTouchOrOverlap(a, b graphics.Rect) bool {
+func rectsTouchOrOverlap(a, b image.Rectangle) bool {
 	// Expand A by 1px to treat edge-touching regions as mergeable.
-	ax0 := a.X - 1
-	ay0 := a.Y - 1
-	ax1 := a.X + a.W + 1
-	ay1 := a.Y + a.H + 1
-	bx0 := b.X
-	by0 := b.Y
-	bx1 := b.X + b.W
-	by1 := b.Y + b.H
+	ax0 := a.Min.X - 1
+	ay0 := a.Min.Y - 1
+	ax1 := a.Max.X + 1
+	ay1 := a.Max.Y + 1
+	bx0 := b.Min.X
+	by0 := b.Min.Y
+	bx1 := b.Max.X
+	by1 := b.Max.Y
 	return ax0 < bx1 && ax1 > bx0 && ay0 < by1 && ay1 > by0
 }
 
-func (a *App) addDamage(r graphics.Rect) {
-	if r.IsEmpty() {
+func (a *App) addDamage(r image.Rectangle) {
+	if r.Empty() {
 		return
 	}
 	a.damageList = append(a.damageList, r)
@@ -859,8 +894,8 @@ func (a *App) collectDamage(w Widget, visited map[Widget]struct{}) {
 		addedRect := false
 		if dr, ok := w.(dirtyRectsProvider); ok {
 			for _, rect := range dr.DirtyRects() {
-				clipped := rect.Intersection(w.Bounds())
-				if clipped.IsEmpty() {
+				clipped := rect.Intersect(w.Bounds())
+				if clipped.Empty() {
 					continue
 				}
 				a.addDamage(clipped)
@@ -906,21 +941,21 @@ func (a *App) prunePrevBounds(visited map[Widget]struct{}) {
 
 // renderFlashes draws and ages all active debug flash overlays
 // within the given clip region.
-func (a *App) renderFlashes(buf *graphics.Buffer, clip graphics.Rect) {
+func (a *App) renderFlashes(buf *core.Buffer, clip image.Rectangle) {
 	alive := a.debugFlashes[:0]
 
 	for i := range a.debugFlashes {
 		f := &a.debugFlashes[i]
 
-		visible := f.region.Intersection(clip)
-		if !visible.IsEmpty() {
+		visible := f.region.Intersect(clip)
+		if !visible.Empty() {
 			alpha := uint8(int(a.debugColor.A) * f.remaining / a.debugFrames)
-			c := graphics.NewColor(a.debugColor.R, a.debugColor.G, a.debugColor.B, alpha)
+			c := core.NewColor(a.debugColor.R, a.debugColor.G, a.debugColor.B, alpha)
 
-			for y := visible.Y; y < visible.Y+visible.H; y++ {
-				for x := visible.X; x < visible.X+visible.W; x++ {
+			for y := visible.Min.Y; y < visible.Max.Y; y++ {
+				for x := visible.Min.X; x < visible.Max.X; x++ {
 					bg := buf.GetPixel(x, y)
-					buf.SetPixel(x, y, c.Blend(bg))
+					buf.SetPixel(x, y, core.Blend(c, bg))
 				}
 			}
 		}
@@ -938,11 +973,11 @@ func (a *App) renderFlashes(buf *graphics.Buffer, clip graphics.Rect) {
 // Cursor
 // ---------------------------------------------------------------------------
 
-func cursorRect(x, y int) graphics.Rect {
-	return graphics.Rect{X: x, Y: y, W: cursorSize, H: cursorSize}
+func cursorRect(x, y int) image.Rectangle {
+	return core.RectXYWH(x, y, cursorSize, cursorSize)
 }
 
-func (a *App) drawCursor(buf *graphics.Buffer, x, y int) {
+func (a *App) drawCursor(buf *core.Buffer, x, y int) {
 	fill := []struct{ dx, dy int }{
 		{0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4}, {0, 5}, {0, 6}, {0, 7},
 		{0, 8}, {0, 9}, {0, 10}, {0, 11},
@@ -954,13 +989,13 @@ func (a *App) drawCursor(buf *graphics.Buffer, x, y int) {
 		{5, 5}, {5, 6},
 	}
 	for _, p := range fill {
-		buf.SetPixel(x+p.dx, y+p.dy, graphics.ColorWhite)
+		buf.SetPixel(x+p.dx, y+p.dy, core.ColorWhite)
 	}
 	outline := []struct{ dx, dy int }{
 		{1, 11}, {2, 10}, {3, 9}, {4, 8}, {5, 7}, {6, 6}, {6, 5},
 	}
 	for _, p := range outline {
-		buf.SetPixel(x+p.dx, y+p.dy, graphics.ColorBlack)
+		buf.SetPixel(x+p.dx, y+p.dy, core.ColorBlack)
 	}
 }
 
@@ -969,11 +1004,11 @@ func (a *App) drawCursor(buf *graphics.Buffer, x, y int) {
 // ---------------------------------------------------------------------------
 
 // Backend returns the display backend.
-func (a *App) Backend() graphics.Backend {
+func (a *App) Backend() gfxdisplay.Backend {
 	return a.backend
 }
 
 // Input returns the input handler.
-func (a *App) Input() graphics.InputHandler {
+func (a *App) Input() gfxinput.Handler {
 	return a.input
 }

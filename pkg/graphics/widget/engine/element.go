@@ -1,13 +1,16 @@
 package engine
 
 import (
+	"image"
+	"image/color"
 	"reflect"
 	"strings"
 	"time"
 
-	gapp "avyos.dev/pkg/graphics/app"
-	gfxfont "avyos.dev/pkg/graphics/font"
-	graphics "avyos.dev/pkg/graphics/input"
+	gfxfont "avyos.dev/pkg/graphics/fonts"
+	gfxinput "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
+	gfxwidget "avyos.dev/pkg/graphics/widget"
 )
 
 // Element is the universal DOM-like node. Every UI element is an Element.
@@ -31,8 +34,8 @@ type Element struct {
 	focused      bool
 	visible      bool
 	dirty        bool
-	dirtyRects   []graphics.Rect
-	bounds       graphics.Rect
+	dirtyRects   []image.Rectangle
+	bounds       image.Rectangle
 	minW         int
 	minH         int
 
@@ -184,17 +187,17 @@ func (e *Element) AttrBool(name string, def bool) bool {
 }
 
 // AttrColor returns a color attribute or default.
-func (e *Element) AttrColor(name string, def graphics.Color) graphics.Color {
+func (e *Element) AttrColor(name string, def color.NRGBA) color.NRGBA {
 	if v, ok := e.attrs[name]; ok && v != "" {
 		value := strings.TrimSpace(v)
 		if strings.EqualFold(value, "transparent") {
-			return graphics.ColorTransparent
+			return core.ColorTransparent
 		}
 		if looksHexColorLiteral(value) {
 			return parseColorStr(value)
 		}
 		c := parseColorStr(value)
-		if c != (graphics.Color{}) {
+		if c != (color.NRGBA{}) {
 			return c
 		}
 	}
@@ -280,7 +283,7 @@ func (e *Element) AddChild(child *Element) {
 	e.children = append(e.children, child)
 	e.clearDirtyRects()
 	e.dirty = true
-	if e.bounds.W > 0 && e.bounds.H > 0 {
+	if e.bounds.Dx() > 0 && e.bounds.Dy() > 0 {
 		e.layoutChildren()
 	}
 }
@@ -296,7 +299,7 @@ func (e *Element) ClearChildren() {
 	e.children = nil
 	e.clearDirtyRects()
 	e.dirty = true
-	if e.bounds.W > 0 && e.bounds.H > 0 {
+	if e.bounds.Dx() > 0 && e.bounds.Dy() > 0 {
 		e.layoutChildren()
 	}
 }
@@ -347,18 +350,18 @@ func (e *Element) EmitSignal(name string, args ...interface{}) {
 
 // --- widget.Widget interface ---
 
-func (e *Element) Draw(buf *graphics.Buffer) {
+func (e *Element) Draw(buf *core.Buffer) {
 	if !e.visible {
 		return
 	}
 	drawElement(e, buf)
 }
 
-func (e *Element) Bounds() graphics.Rect {
+func (e *Element) Bounds() image.Rectangle {
 	return e.bounds
 }
 
-func (e *Element) SetBounds(r graphics.Rect) {
+func (e *Element) SetBounds(r image.Rectangle) {
 	if e.bounds != r {
 		e.bounds = r
 		e.clearDirtyRects()
@@ -367,7 +370,7 @@ func (e *Element) SetBounds(r graphics.Rect) {
 	}
 }
 
-func (e *Element) MinSize() graphics.Point {
+func (e *Element) MinSize() image.Point {
 	w := e.minW
 	h := e.minH
 	if mw := e.AttrInt("width", 0); mw > w {
@@ -500,7 +503,7 @@ func (e *Element) MinSize() graphics.Point {
 		h = mh
 	}
 
-	return graphics.Point{X: w, Y: h}
+	return image.Point{X: w, Y: h}
 }
 
 // childrenCrossMinSize returns only cross-axis constraints for scrollable containers.
@@ -535,16 +538,16 @@ func (e *Element) childrenCrossMinSize() (w, h int) {
 	return maxW, 0
 }
 
-func (e *Element) HandleEvent(ev graphics.Event) bool {
+func (e *Element) HandleEvent(ev gfxinput.Event) bool {
 	if !e.visible {
 		return false
 	}
 
 	// Wheel events should target deepest child under pointer, then bubble to scrollable parents.
-	if ev.Type == graphics.EventMouseButtonPress && isWheelButton(ev.MouseButton) {
+	if ev.Type == gfxinput.EventMouseButtonPress && isWheelButton(ev.MouseButton) {
 		for i := len(e.children) - 1; i >= 0; i-- {
 			child := e.children[i]
-			if !child.visible || !child.Bounds().ContainsXY(ev.X, ev.Y) {
+			if !child.visible || !core.RectContainsXY(child.Bounds(), ev.X, ev.Y) {
 				continue
 			}
 			if child.HandleEvent(ev) {
@@ -573,9 +576,9 @@ func (e *Element) HandleEvent(ev graphics.Event) bool {
 	return false
 }
 
-func isWheelButton(btn graphics.MouseButton) bool {
+func isWheelButton(btn gfxinput.MouseButton) bool {
 	switch btn {
-	case graphics.MouseButtonWheelUp, graphics.MouseButtonWheelDown, graphics.MouseButtonWheelLeft, graphics.MouseButtonWheelRight:
+	case gfxinput.MouseButtonWheelUp, gfxinput.MouseButtonWheelDown, gfxinput.MouseButtonWheelLeft, gfxinput.MouseButtonWheelRight:
 		return true
 	default:
 		return false
@@ -608,11 +611,11 @@ func (e *Element) SelfDirty() bool { return e.dirty }
 
 // DirtyRects returns optional subregions that should be redrawn for this widget.
 // Nil means repaint the full widget bounds.
-func (e *Element) DirtyRects() []graphics.Rect {
+func (e *Element) DirtyRects() []image.Rectangle {
 	if len(e.dirtyRects) == 0 {
 		return nil
 	}
-	out := make([]graphics.Rect, len(e.dirtyRects))
+	out := make([]image.Rectangle, len(e.dirtyRects))
 	copy(out, e.dirtyRects)
 	return out
 }
@@ -637,7 +640,7 @@ func (e *Element) SetVisible(visible bool) {
 		e.dirty = true
 		if e.parent != nil {
 			e.parent.dirty = true
-			if e.parent.bounds.W > 0 && e.parent.bounds.H > 0 {
+			if e.parent.bounds.Dx() > 0 && e.parent.bounds.Dy() > 0 {
 				e.parent.layoutChildren()
 			}
 		}
@@ -647,8 +650,8 @@ func (e *Element) SetVisible(visible bool) {
 func (e *Element) IsVisible() bool { return e.visible }
 
 // Children returns child widgets (for app.App damage tracking).
-func (e *Element) Children() []gapp.Widget {
-	out := make([]gapp.Widget, len(e.children))
+func (e *Element) Children() []gfxwidget.Widget {
+	out := make([]gfxwidget.Widget, len(e.children))
 	for i, c := range e.children {
 		out[i] = c
 	}
@@ -659,9 +662,9 @@ func (e *Element) clearDirtyRects() {
 	e.dirtyRects = e.dirtyRects[:0]
 }
 
-func (e *Element) addDirtyRect(r graphics.Rect) {
-	r = r.Intersection(e.bounds)
-	if r.IsEmpty() {
+func (e *Element) addDirtyRect(r image.Rectangle) {
+	r = r.Intersect(e.bounds)
+	if r.Empty() {
 		return
 	}
 	e.dirty = true
@@ -685,21 +688,9 @@ func (e *Element) padding() (top, right, bottom, left int) {
 	return 0, 0, 0, 0
 }
 
-func (e *Element) contentArea() graphics.Rect {
+func (e *Element) contentArea() image.Rectangle {
 	pt, pr, pb, pl := e.padding()
-	content := graphics.Rect{
-		X: e.bounds.X + pl,
-		Y: e.bounds.Y + pt,
-		W: e.bounds.W - pl - pr,
-		H: e.bounds.H - pt - pb,
-	}
-	if content.W < 0 {
-		content.W = 0
-	}
-	if content.H < 0 {
-		content.H = 0
-	}
-	return content
+	return core.RectXYWH(e.bounds.Min.X+pl, e.bounds.Min.Y+pt, e.bounds.Dx()-pl-pr, e.bounds.Dy()-pt-pb)
 }
 
 func (e *Element) isRow() bool {

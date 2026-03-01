@@ -19,14 +19,16 @@ package main
 
 import (
 	"fmt"
+	"image"
 	"os"
 	"strings"
 
-	"avyos.dev/pkg/graphics/app"
+	gfxdisplay "avyos.dev/pkg/graphics/backend"
 	"avyos.dev/pkg/graphics/backend/drm"
 	"avyos.dev/pkg/graphics/backend/framebuffer"
-	"avyos.dev/pkg/graphics/input"
+	gfxfont "avyos.dev/pkg/graphics/fonts"
 	"avyos.dev/pkg/graphics/input/evdev"
+	core "avyos.dev/pkg/graphics/pixmap"
 	"avyos.dev/pkg/logger"
 )
 
@@ -37,7 +39,7 @@ func main() {
 		serviceLog.Error("failed to setup system log: %v", err)
 	}
 	serviceLog.SetLevel(logger.INFO)
-	if err := app.ApplyConfiguredDefaultFont(); err != nil {
+	if err := gfxfont.ApplyConfiguredDefaultFont(); err != nil {
 		serviceLog.Error("failed to load configured fonts: %v", err)
 	}
 
@@ -61,13 +63,13 @@ func main() {
 	serviceLog.Info("display service stopped")
 }
 
-func selectBackend() (input.Backend, error) {
+func selectBackend() (gfxdisplay.Backend, error) {
 	mode := strings.ToLower(strings.TrimSpace(os.Getenv("AVYOS_DISPLAY_BACKEND")))
 	serviceLog.Info("graphics backend requested: %s", modeOrAuto(mode))
 	switch mode {
 	case "", "auto":
 		return &fallbackBackend{
-			order: []input.Backend{
+			order: []gfxdisplay.Backend{
 				drm.New(),
 				framebuffer.New(),
 			},
@@ -89,8 +91,8 @@ func modeOrAuto(mode string) string {
 }
 
 type fallbackBackend struct {
-	order  []input.Backend
-	active input.Backend
+	order  []gfxdisplay.Backend
+	active gfxdisplay.Backend
 }
 
 func (b *fallbackBackend) Open() error {
@@ -127,7 +129,7 @@ func (b *fallbackBackend) Size() (int, int) {
 	return b.active.Size()
 }
 
-func (b *fallbackBackend) Buffer() *input.Buffer {
+func (b *fallbackBackend) Buffer() *core.Buffer {
 	if b.active == nil {
 		return nil
 	}
@@ -141,7 +143,7 @@ func (b *fallbackBackend) Flush() error {
 	return b.active.Flush()
 }
 
-func (b *fallbackBackend) FlushRect(r input.Rect) error {
+func (b *fallbackBackend) FlushRect(r image.Rectangle) error {
 	if b.active == nil {
 		return fmt.Errorf("backend not open")
 	}
@@ -149,10 +151,10 @@ func (b *fallbackBackend) FlushRect(r input.Rect) error {
 }
 
 type batchRectFlusher interface {
-	FlushRects([]input.Rect) error
+	FlushRects([]image.Rectangle) error
 }
 
-func (b *fallbackBackend) FlushRects(rects []input.Rect) error {
+func (b *fallbackBackend) FlushRects(rects []image.Rectangle) error {
 	if b.active == nil {
 		return fmt.Errorf("backend not open")
 	}

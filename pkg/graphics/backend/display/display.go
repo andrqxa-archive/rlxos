@@ -19,6 +19,7 @@ package displaybackend
 
 import (
 	"fmt"
+	"image"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -26,15 +27,16 @@ import (
 
 	display "avyos.dev/api/display"
 
-	graphics "avyos.dev/pkg/graphics/input"
+	gfxinput "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
 type popupWidget interface {
-	Draw(buf *graphics.Buffer)
-	Bounds() graphics.Rect
-	SetBounds(r graphics.Rect)
-	MinSize() graphics.Point
-	HandleEvent(ev graphics.Event) bool
+	Draw(buf *core.Buffer)
+	Bounds() image.Rectangle
+	SetBounds(r image.Rectangle)
+	MinSize() image.Point
+	HandleEvent(ev gfxinput.Event) bool
 	SetFocused(focused bool)
 	IsFocused() bool
 	IsDirty() bool
@@ -70,18 +72,18 @@ func (p *Popup) Redraw() {
 	// Popups frequently use translucent backgrounds and shadows; clear first
 	// to avoid cumulative darkening across hover-triggered redraws.
 	buf.ClearClip()
-	buf.Clear(graphics.ColorTransparent)
+	buf.Clear(core.ColorTransparent)
 	p.widget.Draw(buf)
 	p.widget.MarkClean()
 	p.win.DamageAll()
 }
 
-// Backend implements graphics.Backend and graphics.InputHandler
+// Backend implements the display backend and input handler interfaces
 // using the custom display protocol client.
 type Backend struct {
 	client *display.DisplayClient
 	window *display.ClientWindow
-	events chan graphics.Event
+	events chan gfxinput.Event
 	width  int
 	height int
 	title  string
@@ -99,7 +101,7 @@ type Backend struct {
 
 	mouseX    int
 	mouseY    int
-	modifiers graphics.Modifiers
+	modifiers gfxinput.Modifiers
 	capsLock  bool
 	pendingW  int
 	pendingH  int
@@ -116,7 +118,7 @@ func New() *Backend {
 	return &Backend{
 		width:  800,
 		height: 600,
-		events: make(chan graphics.Event, 256),
+		events: make(chan gfxinput.Event, 256),
 		quit:   make(chan struct{}),
 		popups: make(map[uint32]*Popup),
 	}
@@ -163,8 +165,8 @@ func (b *Backend) Resize(width, height int) error {
 	}
 
 	// Notify the app loop to relayout immediately.
-	b.emit(graphics.Event{
-		Type: graphics.EventResize,
+	b.emit(gfxinput.Event{
+		Type: gfxinput.EventResize,
 		X:    width,
 		Y:    height,
 	})
@@ -196,13 +198,13 @@ func (b *Backend) SetWindowState(windowID, action uint32) error {
 // RegisterShortcut registers a compositor shortcut for this client.
 // Use ShortcutScopeGlobal for compositor-wide shortcuts and ShortcutScopeClient
 // for shortcuts scoped to this client (optionally a specific window ID).
-func (b *Backend) RegisterShortcut(shortcutID, windowID, scope uint32, key graphics.Key, modifiers graphics.Modifiers) error {
+func (b *Backend) RegisterShortcut(shortcutID, windowID, scope uint32, key gfxinput.Key, modifiers gfxinput.Modifiers) error {
 	return b.RegisterShortcutEx(shortcutID, windowID, scope, key, 0, modifiers)
 }
 
-// RegisterShortcutEx registers a shortcut keyed either by graphics.Key,
-// or by a printable rune when key is graphics.KeyNone.
-func (b *Backend) RegisterShortcutEx(shortcutID, windowID, scope uint32, key graphics.Key, ch rune, modifiers graphics.Modifiers) error {
+// RegisterShortcutEx registers a shortcut keyed either by gfxinput.Key,
+// or by a printable rune when key is gfxinput.KeyNone.
+func (b *Backend) RegisterShortcutEx(shortcutID, windowID, scope uint32, key gfxinput.Key, ch rune, modifiers gfxinput.Modifiers) error {
 	b.mu.Lock()
 	cl := b.client
 	b.mu.Unlock()
@@ -289,8 +291,8 @@ func (b *Backend) ReconfigureLayer(anchor uint32, exclusive int) error {
 
 	_ = oldWin.Destroy()
 
-	b.emit(graphics.Event{
-		Type: graphics.EventResize,
+	b.emit(gfxinput.Event{
+		Type: gfxinput.EventResize,
 		X:    newWin.Width,
 		Y:    newWin.Height,
 	})
@@ -379,7 +381,7 @@ func (b *Backend) Size() (int, int) {
 }
 
 // Buffer returns the shared memory pixel buffer.
-func (b *Backend) Buffer() *graphics.Buffer {
+func (b *Backend) Buffer() *core.Buffer {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.window == nil {
@@ -407,7 +409,7 @@ func (b *Backend) Flush() error {
 }
 
 // FlushRect marks a region as damaged.
-func (b *Backend) FlushRect(r graphics.Rect) error {
+func (b *Backend) FlushRect(r image.Rectangle) error {
 	b.mu.Lock()
 	win := b.window
 	b.mu.Unlock()
@@ -458,7 +460,7 @@ func (b *Backend) OpenPopup(x, y, w, h int, content popupWidget, onClose func())
 	}
 
 	// Set widget bounds and do initial render.
-	content.SetBounds(graphics.Rect{W: w, H: h})
+	content.SetBounds(core.RectXYWH(0, 0, w, h))
 	p.Redraw()
 
 	b.popupMu.Lock()
@@ -507,7 +509,7 @@ func (b *Backend) Start() {
 }
 
 // Poll returns the next event or nil.
-func (b *Backend) Poll() *graphics.Event {
+func (b *Backend) Poll() *gfxinput.Event {
 	select {
 	case ev := <-b.events:
 		return &ev
@@ -570,7 +572,7 @@ func (b *Backend) handlePopupEvent(p *Popup, ev *display.Event) {
 	case display.ClientEventPointerMotion, display.ClientEventPointerEnter:
 		p.mouseX = ev.X
 		p.mouseY = ev.Y
-		gev := graphics.Event{Type: graphics.EventMouseMove, X: ev.X, Y: ev.Y}
+		gev := gfxinput.Event{Type: gfxinput.EventMouseMove, X: ev.X, Y: ev.Y}
 		if p.widget.HandleEvent(gev) {
 			if p.widget.IsDirty() {
 				p.Redraw()
@@ -580,7 +582,7 @@ func (b *Backend) handlePopupEvent(p *Popup, ev *display.Event) {
 	case display.ClientEventPointerLeave:
 		p.mouseX = -1
 		p.mouseY = -1
-		gev := graphics.Event{Type: graphics.EventMouseMove, X: -1, Y: -1}
+		gev := gfxinput.Event{Type: gfxinput.EventMouseMove, X: -1, Y: -1}
 		if p.widget.HandleEvent(gev) {
 			if p.widget.IsDirty() {
 				p.Redraw()
@@ -589,8 +591,8 @@ func (b *Backend) handlePopupEvent(p *Popup, ev *display.Event) {
 
 	case display.ClientEventPointerButton:
 		if btn, ok := translateScrollButton(ev.Button); ok && ev.Pressed {
-			gev := graphics.Event{
-				Type:        graphics.EventMouseButtonPress,
+			gev := gfxinput.Event{
+				Type:        gfxinput.EventMouseButtonPress,
 				X:           p.mouseX,
 				Y:           p.mouseY,
 				MouseButton: btn,
@@ -602,12 +604,12 @@ func (b *Backend) handlePopupEvent(p *Popup, ev *display.Event) {
 			return
 		}
 		btn := translateButton(ev.Button)
-		evType := graphics.EventMouseButtonRelease
+		evType := gfxinput.EventMouseButtonRelease
 		if ev.Pressed {
-			evType = graphics.EventMouseButtonPress
+			evType = gfxinput.EventMouseButtonPress
 		}
 		// EvtPointerButton has no X/Y; use last known position from motion events.
-		gev := graphics.Event{Type: evType, X: p.mouseX, Y: p.mouseY, MouseButton: btn}
+		gev := gfxinput.Event{Type: evType, X: p.mouseX, Y: p.mouseY, MouseButton: btn}
 		p.widget.HandleEvent(gev)
 		if p.widget.IsDirty() {
 			p.Redraw()
@@ -645,8 +647,8 @@ func (b *Backend) translateEvent(ev *display.Event) {
 		b.mouseX = ev.X
 		b.mouseY = ev.Y
 		b.mu.Unlock()
-		b.emit(graphics.Event{
-			Type: graphics.EventMouseMove,
+		b.emit(gfxinput.Event{
+			Type: gfxinput.EventMouseMove,
 			X:    ev.X,
 			Y:    ev.Y,
 		})
@@ -656,8 +658,8 @@ func (b *Backend) translateEvent(ev *display.Event) {
 			b.mu.Lock()
 			mx, my := b.mouseX, b.mouseY
 			b.mu.Unlock()
-			b.emit(graphics.Event{
-				Type:        graphics.EventMouseButtonPress,
+			b.emit(gfxinput.Event{
+				Type:        gfxinput.EventMouseButtonPress,
 				X:           mx,
 				Y:           my,
 				MouseButton: btn,
@@ -665,14 +667,14 @@ func (b *Backend) translateEvent(ev *display.Event) {
 			return
 		}
 		btn := translateButton(ev.Button)
-		evType := graphics.EventMouseButtonRelease
+		evType := gfxinput.EventMouseButtonRelease
 		if ev.Pressed {
-			evType = graphics.EventMouseButtonPress
+			evType = gfxinput.EventMouseButtonPress
 		}
 		b.mu.Lock()
 		mx, my := b.mouseX, b.mouseY
 		b.mu.Unlock()
-		b.emit(graphics.Event{
+		b.emit(gfxinput.Event{
 			Type:        evType,
 			X:           mx,
 			Y:           my,
@@ -681,14 +683,14 @@ func (b *Backend) translateEvent(ev *display.Event) {
 
 	case display.ClientEventKey:
 		b.updateModifiers(ev.Key, ev.Pressed)
-		evType := graphics.EventKeyRelease
+		evType := gfxinput.EventKeyRelease
 		if ev.Pressed {
-			evType = graphics.EventKeyPress
+			evType = gfxinput.EventKeyPress
 		}
 		b.mu.Lock()
 		mods := b.modifiers
 		b.mu.Unlock()
-		b.emit(graphics.Event{
+		b.emit(gfxinput.Event{
 			Type:      evType,
 			Key:       ev.Key,
 			Rune:      ev.Char,
@@ -696,8 +698,8 @@ func (b *Backend) translateEvent(ev *display.Event) {
 		})
 
 	case display.ClientEventShortcut:
-		b.emit(graphics.Event{
-			Type:       graphics.EventShortcut,
+		b.emit(gfxinput.Event{
+			Type:       gfxinput.EventShortcut,
 			ShortcutID: ev.ShortcutID,
 			WindowID:   ev.WindowID,
 			Scope:      ev.Scope,
@@ -708,9 +710,9 @@ func (b *Backend) translateEvent(ev *display.Event) {
 
 	case display.ClientEventFocus:
 		if ev.Focused {
-			b.emit(graphics.Event{Type: graphics.EventFocusIn})
+			b.emit(gfxinput.Event{Type: gfxinput.EventFocusIn})
 		} else {
-			b.emit(graphics.Event{Type: graphics.EventFocusOut})
+			b.emit(gfxinput.Event{Type: gfxinput.EventFocusOut})
 		}
 
 	case display.ClientEventConfigure:
@@ -728,8 +730,8 @@ func (b *Backend) translateEvent(ev *display.Event) {
 		// Apply layout resize now; backing shm resize is deferred to Buffer()
 		// so rendering and buffer remap stay on the render thread.
 		if ev.Width != oldW || ev.Height != oldH {
-			b.emit(graphics.Event{
-				Type: graphics.EventResize,
+			b.emit(gfxinput.Event{
+				Type: gfxinput.EventResize,
 				X:    ev.Width,
 				Y:    ev.Height,
 			})
@@ -741,46 +743,46 @@ func (b *Backend) translateEvent(ev *display.Event) {
 		isMain := b.window != nil && ev.WindowID == b.window.ID
 		b.mu.Unlock()
 		if isMain {
-			b.emit(graphics.Event{Type: graphics.EventQuit})
+			b.emit(gfxinput.Event{Type: gfxinput.EventQuit})
 		}
 	}
 }
 
-func (b *Backend) updateModifiers(key graphics.Key, pressed bool) {
+func (b *Backend) updateModifiers(key gfxinput.Key, pressed bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	switch key {
-	case graphics.KeyLeftShift, graphics.KeyRightShift:
+	case gfxinput.KeyLeftShift, gfxinput.KeyRightShift:
 		if pressed {
-			b.modifiers |= graphics.ModShift
+			b.modifiers |= gfxinput.ModShift
 		} else {
-			b.modifiers &^= graphics.ModShift
+			b.modifiers &^= gfxinput.ModShift
 		}
-	case graphics.KeyLeftCtrl, graphics.KeyRightCtrl:
+	case gfxinput.KeyLeftCtrl, gfxinput.KeyRightCtrl:
 		if pressed {
-			b.modifiers |= graphics.ModCtrl
+			b.modifiers |= gfxinput.ModCtrl
 		} else {
-			b.modifiers &^= graphics.ModCtrl
+			b.modifiers &^= gfxinput.ModCtrl
 		}
-	case graphics.KeyLeftAlt, graphics.KeyRightAlt:
+	case gfxinput.KeyLeftAlt, gfxinput.KeyRightAlt:
 		if pressed {
-			b.modifiers |= graphics.ModAlt
+			b.modifiers |= gfxinput.ModAlt
 		} else {
-			b.modifiers &^= graphics.ModAlt
+			b.modifiers &^= gfxinput.ModAlt
 		}
-	case graphics.KeyCapsLock:
+	case gfxinput.KeyCapsLock:
 		if pressed {
 			b.capsLock = !b.capsLock
 			if b.capsLock {
-				b.modifiers |= graphics.ModCapsLock
+				b.modifiers |= gfxinput.ModCapsLock
 			} else {
-				b.modifiers &^= graphics.ModCapsLock
+				b.modifiers &^= gfxinput.ModCapsLock
 			}
 		}
 	}
 }
 
-func (b *Backend) emit(ev graphics.Event) {
+func (b *Backend) emit(ev gfxinput.Event) {
 	select {
 	case b.events <- ev:
 	default:
@@ -788,30 +790,30 @@ func (b *Backend) emit(ev graphics.Event) {
 	}
 }
 
-func translateButton(code int) graphics.MouseButton {
+func translateButton(code int) gfxinput.MouseButton {
 	switch code {
 	case 0x110:
-		return graphics.MouseButtonLeft
+		return gfxinput.MouseButtonLeft
 	case 0x111:
-		return graphics.MouseButtonRight
+		return gfxinput.MouseButtonRight
 	case 0x112:
-		return graphics.MouseButtonMiddle
+		return gfxinput.MouseButtonMiddle
 	default:
-		return graphics.MouseButtonNone
+		return gfxinput.MouseButtonNone
 	}
 }
 
-func translateScrollButton(code int) (graphics.MouseButton, bool) {
+func translateScrollButton(code int) (gfxinput.MouseButton, bool) {
 	switch code {
 	case 4, 0x113:
-		return graphics.MouseButtonWheelUp, true
+		return gfxinput.MouseButtonWheelUp, true
 	case 5, 0x114:
-		return graphics.MouseButtonWheelDown, true
+		return gfxinput.MouseButtonWheelDown, true
 	case 6:
-		return graphics.MouseButtonWheelLeft, true
+		return gfxinput.MouseButtonWheelLeft, true
 	case 7:
-		return graphics.MouseButtonWheelRight, true
+		return gfxinput.MouseButtonWheelRight, true
 	default:
-		return graphics.MouseButtonNone, false
+		return gfxinput.MouseButtonNone, false
 	}
 }

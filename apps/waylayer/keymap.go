@@ -23,7 +23,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	graphics "avyos.dev/pkg/graphics/input"
+	gfxinput "avyos.dev/pkg/graphics/input"
 )
 
 // minimalXKBKeymap is a minimal but valid XKB keymap that maps evdev keycodes
@@ -239,45 +239,45 @@ func createKeymapFD() (int, int, error) {
 	return fd, len(data), nil
 }
 
-// keyToEvdev converts a graphics.Key to an evdev keycode.
-var keyToEvdevMap = map[graphics.Key]int{
-	graphics.KeyEscape:     1,
-	graphics.KeyBackspace:  14,
-	graphics.KeyTab:        15,
-	graphics.KeyEnter:      28,
-	graphics.KeySpace:      57,
-	graphics.KeyLeft:       105,
-	graphics.KeyRight:      106,
-	graphics.KeyUp:         103,
-	graphics.KeyDown:       108,
-	graphics.KeyHome:       102,
-	graphics.KeyEnd:        107,
-	graphics.KeyPageUp:     104,
-	graphics.KeyPageDown:   109,
-	graphics.KeyInsert:     110,
-	graphics.KeyDelete:     111,
-	graphics.KeyF1:         59,
-	graphics.KeyF2:         60,
-	graphics.KeyF3:         61,
-	graphics.KeyF4:         62,
-	graphics.KeyF5:         63,
-	graphics.KeyF6:         64,
-	graphics.KeyF7:         65,
-	graphics.KeyF8:         66,
-	graphics.KeyF9:         67,
-	graphics.KeyF10:        68,
-	graphics.KeyF11:        87,
-	graphics.KeyF12:        88,
-	graphics.KeyLeftShift:  42,
-	graphics.KeyRightShift: 54,
-	graphics.KeyLeftCtrl:   29,
-	graphics.KeyRightCtrl:  97,
-	graphics.KeyLeftAlt:    56,
-	graphics.KeyRightAlt:   100,
-	graphics.KeyCapsLock:   58,
+// keyToEvdev converts a gfxinput.Key to an evdev keycode.
+var keyToEvdevMap = map[gfxinput.Key]int{
+	gfxinput.KeyEscape:     1,
+	gfxinput.KeyBackspace:  14,
+	gfxinput.KeyTab:        15,
+	gfxinput.KeyEnter:      28,
+	gfxinput.KeySpace:      57,
+	gfxinput.KeyLeft:       105,
+	gfxinput.KeyRight:      106,
+	gfxinput.KeyUp:         103,
+	gfxinput.KeyDown:       108,
+	gfxinput.KeyHome:       102,
+	gfxinput.KeyEnd:        107,
+	gfxinput.KeyPageUp:     104,
+	gfxinput.KeyPageDown:   109,
+	gfxinput.KeyInsert:     110,
+	gfxinput.KeyDelete:     111,
+	gfxinput.KeyF1:         59,
+	gfxinput.KeyF2:         60,
+	gfxinput.KeyF3:         61,
+	gfxinput.KeyF4:         62,
+	gfxinput.KeyF5:         63,
+	gfxinput.KeyF6:         64,
+	gfxinput.KeyF7:         65,
+	gfxinput.KeyF8:         66,
+	gfxinput.KeyF9:         67,
+	gfxinput.KeyF10:        68,
+	gfxinput.KeyF11:        87,
+	gfxinput.KeyF12:        88,
+	gfxinput.KeyLeftShift:  42,
+	gfxinput.KeyRightShift: 54,
+	gfxinput.KeyLeftCtrl:   29,
+	gfxinput.KeyRightCtrl:  97,
+	gfxinput.KeyLeftAlt:    56,
+	gfxinput.KeyRightAlt:   100,
+	gfxinput.KeyCapsLock:   58,
 }
 
-func keyToEvdev(key graphics.Key) int {
+func keyToEvdev(key gfxinput.Key) int {
 	if code, ok := keyToEvdevMap[key]; ok {
 		return code
 	}

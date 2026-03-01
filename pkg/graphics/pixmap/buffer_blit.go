@@ -1,30 +1,39 @@
-package core
+package pixmap
 
 import (
+	"image"
+	"image/color"
 	"math"
 
 	"avyos.dev/pkg/simd"
 )
 
-// Blit copies a source buffer onto this buffer at the given position.
+// Blit copies src onto b at x,y with alpha blending.
 func (b *Buffer) Blit(src *Buffer, x, y int) {
+	if b == nil || src == nil {
+		return
+	}
 	for sy := 0; sy < src.Height; sy++ {
 		for sx := 0; sx < src.Width; sx++ {
 			c := src.GetPixel(sx, sy)
-			if c.A > 0 {
-				if c.A == 255 {
-					b.SetPixel(x+sx, y+sy, c)
-				} else {
-					bg := b.GetPixel(x+sx, y+sy)
-					b.SetPixel(x+sx, y+sy, c.Blend(bg))
-				}
+			if c.A == 0 {
+				continue
 			}
+			if c.A == 255 {
+				b.SetPixel(x+sx, y+sy, c)
+				continue
+			}
+			bg := b.GetPixel(x+sx, y+sy)
+			b.SetPixel(x+sx, y+sy, Blend(c, bg))
 		}
 	}
 }
 
-// BlitOpaque copies a source buffer onto this buffer, treating all pixels as fully opaque.
+// BlitOpaque copies src onto b and forces source alpha to 255.
 func (b *Buffer) BlitOpaque(src *Buffer, x, y int) {
+	if b == nil || src == nil {
+		return
+	}
 	if b.Format == src.Format && b.Format == PixelFormatBGRA {
 		for sy := 0; sy < src.Height; sy++ {
 			dy := y + sy
@@ -62,29 +71,37 @@ func (b *Buffer) BlitOpaque(src *Buffer, x, y int) {
 	}
 }
 
-// BlitRect copies a region of a source buffer onto this buffer.
-func (b *Buffer) BlitRect(src *Buffer, srcRect Rect, x, y int) {
-	for sy := 0; sy < srcRect.H; sy++ {
-		for sx := 0; sx < srcRect.W; sx++ {
-			c := src.GetPixel(srcRect.X+sx, srcRect.Y+sy)
-			if c.A > 0 {
-				if c.A == 255 {
-					b.SetPixel(x+sx, y+sy, c)
-				} else {
-					bg := b.GetPixel(x+sx, y+sy)
-					b.SetPixel(x+sx, y+sy, c.Blend(bg))
-				}
+// BlitRect copies srcRect from src onto b at x,y with alpha blending.
+func (b *Buffer) BlitRect(src *Buffer, srcRect image.Rectangle, x, y int) {
+	if b == nil || src == nil {
+		return
+	}
+	for sy := srcRect.Min.Y; sy < srcRect.Max.Y; sy++ {
+		for sx := srcRect.Min.X; sx < srcRect.Max.X; sx++ {
+			c := src.GetPixel(sx, sy)
+			if c.A == 0 {
+				continue
 			}
+			dx := x + (sx - srcRect.Min.X)
+			dy := y + (sy - srcRect.Min.Y)
+			if c.A == 255 {
+				b.SetPixel(dx, dy, c)
+				continue
+			}
+			bg := b.GetPixel(dx, dy)
+			b.SetPixel(dx, dy, Blend(c, bg))
 		}
 	}
 }
 
-// BlitOpaqueRect copies a region of a source buffer onto this buffer,
-// treating all source pixels as fully opaque.
-func (b *Buffer) BlitOpaqueRect(src *Buffer, srcRect Rect, x, y int) {
-	sx0, sy0 := srcRect.X, srcRect.Y
+// BlitOpaqueRect copies srcRect from src onto b at x,y and forces alpha to 255.
+func (b *Buffer) BlitOpaqueRect(src *Buffer, srcRect image.Rectangle, x, y int) {
+	if b == nil || src == nil || srcRect.Empty() {
+		return
+	}
+	sx0, sy0 := srcRect.Min.X, srcRect.Min.Y
 	dx0, dy0 := x, y
-	w, h := srcRect.W, srcRect.H
+	w, h := srcRect.Dx(), srcRect.Dy()
 
 	if sx0 < 0 {
 		dx0 -= sx0
@@ -146,33 +163,35 @@ func (b *Buffer) BlitOpaqueRect(src *Buffer, srcRect Rect, x, y int) {
 	}
 }
 
-// SubBuffer returns a new buffer that is a copy of a region of this buffer.
-func (b *Buffer) SubBuffer(r Rect) *Buffer {
-	sub := NewBuffer(r.W, r.H)
-	for y := 0; y < r.H; y++ {
-		for x := 0; x < r.W; x++ {
-			sub.SetPixel(x, y, b.GetPixel(r.X+x, r.Y+y))
+// SubBuffer copies r region into a new buffer.
+func (b *Buffer) SubBuffer(r image.Rectangle) *Buffer {
+	if b == nil || r.Empty() {
+		return NewBuffer(0, 0)
+	}
+	out := NewBuffer(r.Dx(), r.Dy())
+	for y := 0; y < r.Dy(); y++ {
+		for x := 0; x < r.Dx(); x++ {
+			out.SetPixel(x, y, b.GetPixel(r.Min.X+x, r.Min.Y+y))
 		}
 	}
-	return sub
+	return out
 }
 
-// BlitScaled copies a rectangular region of a source buffer onto this buffer,
-// scaling to fit the destination rectangle using bilinear sampling.
-func (b *Buffer) BlitScaled(src *Buffer, srcRect, dstRect Rect) {
-	if dstRect.W <= 0 || dstRect.H <= 0 || srcRect.W <= 0 || srcRect.H <= 0 {
+// BlitScaled copies srcRect from src to dstRect on b using bilinear sampling.
+func (b *Buffer) BlitScaled(src *Buffer, srcRect, dstRect image.Rectangle) {
+	if b == nil || src == nil || dstRect.Empty() || srcRect.Empty() {
 		return
 	}
-	srcMinX := srcRect.X
-	srcMinY := srcRect.Y
-	srcMaxX := srcRect.X + srcRect.W - 1
-	srcMaxY := srcRect.Y + srcRect.H - 1
+	srcMinX := srcRect.Min.X
+	srcMinY := srcRect.Min.Y
+	srcMaxX := srcRect.Max.X - 1
+	srcMaxY := srcRect.Max.Y - 1
 
-	scaleX := float64(srcRect.W) / float64(dstRect.W)
-	scaleY := float64(srcRect.H) / float64(dstRect.H)
+	scaleX := float64(srcRect.Dx()) / float64(dstRect.Dx())
+	scaleY := float64(srcRect.Dy()) / float64(dstRect.Dy())
 
-	for dy := 0; dy < dstRect.H; dy++ {
-		syF := float64(srcRect.Y) + (float64(dy)+0.5)*scaleY - 0.5
+	for dy := 0; dy < dstRect.Dy(); dy++ {
+		syF := float64(srcRect.Min.Y) + (float64(dy)+0.5)*scaleY - 0.5
 		y0 := int(math.Floor(syF))
 		ty := syF - float64(y0)
 		if y0 < srcMinY {
@@ -187,8 +206,8 @@ func (b *Buffer) BlitScaled(src *Buffer, srcRect, dstRect Rect) {
 			y1 = srcMaxY
 		}
 
-		for dx := 0; dx < dstRect.W; dx++ {
-			sxF := float64(srcRect.X) + (float64(dx)+0.5)*scaleX - 0.5
+		for dx := 0; dx < dstRect.Dx(); dx++ {
+			sxF := float64(srcRect.Min.X) + (float64(dx)+0.5)*scaleX - 0.5
 			x0 := int(math.Floor(sxF))
 			tx := sxF - float64(x0)
 			if x0 < srcMinX {
@@ -208,20 +227,21 @@ func (b *Buffer) BlitScaled(src *Buffer, srcRect, dstRect Rect) {
 			c01 := src.GetPixel(x0, y1)
 			c11 := src.GetPixel(x1, y1)
 			c := lerpColor2D(c00, c10, c01, c11, tx, ty)
-			if c.A > 0 {
-				px, py := dstRect.X+dx, dstRect.Y+dy
-				if c.A == 255 {
-					b.SetPixel(px, py, c)
-				} else {
-					bg := b.GetPixel(px, py)
-					b.SetPixel(px, py, c.Blend(bg))
-				}
+			if c.A == 0 {
+				continue
+			}
+			px, py := dstRect.Min.X+dx, dstRect.Min.Y+dy
+			if c.A == 255 {
+				b.SetPixel(px, py, c)
+			} else {
+				bg := b.GetPixel(px, py)
+				b.SetPixel(px, py, Blend(c, bg))
 			}
 		}
 	}
 }
 
-func lerpColor2D(c00, c10, c01, c11 Color, tx, ty float64) Color {
+func lerpColor2D(c00, c10, c01, c11 color.NRGBA, tx, ty float64) color.NRGBA {
 	w00 := (1 - tx) * (1 - ty)
 	w10 := tx * (1 - ty)
 	w01 := (1 - tx) * ty
@@ -229,7 +249,7 @@ func lerpColor2D(c00, c10, c01, c11 Color, tx, ty float64) Color {
 
 	a := float64(c00.A)*w00 + float64(c10.A)*w10 + float64(c01.A)*w01 + float64(c11.A)*w11
 	if a <= 0.5 {
-		return ColorTransparent
+		return color.NRGBA{}
 	}
 
 	rPM := (float64(c00.R)*float64(c00.A))*w00 +
@@ -246,7 +266,7 @@ func lerpColor2D(c00, c10, c01, c11 Color, tx, ty float64) Color {
 		(float64(c11.B)*float64(c11.A))*w11
 
 	invA := 1.0 / a
-	return Color{
+	return color.NRGBA{
 		R: uint8(rPM*invA + 0.5),
 		G: uint8(gPM*invA + 0.5),
 		B: uint8(bPM*invA + 0.5),

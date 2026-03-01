@@ -1,18 +1,19 @@
 package renderer
 
 import (
+	"image"
 	"math"
 
-	"avyos.dev/pkg/graphics/core"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
-func RoundedRectOutsideDistance(px, py float64, r core.Rect, radius int) float64 {
-	if r.W <= 0 || r.H <= 0 {
+func RoundedRectOutsideDistance(px, py float64, r image.Rectangle, radius int) float64 {
+	if r.Dx() <= 0 || r.Dy() <= 0 {
 		return 0
 	}
 	rr := float64(radius)
-	halfW := float64(r.W) / 2.0
-	halfH := float64(r.H) / 2.0
+	halfW := float64(r.Dx()) / 2.0
+	halfH := float64(r.Dy()) / 2.0
 	if rr < 0 {
 		rr = 0
 	}
@@ -23,8 +24,8 @@ func RoundedRectOutsideDistance(px, py float64, r core.Rect, radius int) float64
 		rr = halfH
 	}
 
-	cx := float64(r.X) + halfW
-	cy := float64(r.Y) + halfH
+	cx := float64(r.Min.X) + halfW
+	cy := float64(r.Min.Y) + halfH
 	x := math.Abs(px-cx) - (halfW - rr)
 	y := math.Abs(py-cy) - (halfH - rr)
 
@@ -39,13 +40,13 @@ func RoundedRectOutsideDistance(px, py float64, r core.Rect, radius int) float64
 	return sdf
 }
 
-func PointInRoundedRect(x, y int, r core.Rect, radius int) bool {
+func PointInRoundedRect(x, y int, r image.Rectangle, radius int) bool {
 	return PointInRoundedRectAt(float64(x)+0.5, float64(y)+0.5, r, radius)
 }
 
-func PointInRoundedRectAt(px, py float64, r core.Rect, radius int) bool {
+func PointInRoundedRectAt(px, py float64, r image.Rectangle, radius int) bool {
 	if radius <= 0 {
-		if px < float64(r.X) || px >= float64(r.X+r.W) || py < float64(r.Y) || py >= float64(r.Y+r.H) {
+		if px < float64(r.Min.X) || px >= float64(r.Min.X+r.Dx()) || py < float64(r.Min.Y) || py >= float64(r.Min.Y+r.Dy()) {
 			return false
 		}
 		return true
@@ -53,8 +54,8 @@ func PointInRoundedRectAt(px, py float64, r core.Rect, radius int) bool {
 	return PointInRoundedRectAtClamped(px, py, r, ClampRoundedRadius(r, radius))
 }
 
-func PointInRoundedRectAtClamped(px, py float64, r core.Rect, radius int) bool {
-	if px < float64(r.X) || px >= float64(r.X+r.W) || py < float64(r.Y) || py >= float64(r.Y+r.H) {
+func PointInRoundedRectAtClamped(px, py float64, r image.Rectangle, radius int) bool {
+	if px < float64(r.Min.X) || px >= float64(r.Min.X+r.Dx()) || py < float64(r.Min.Y) || py >= float64(r.Min.Y+r.Dy()) {
 		return false
 	}
 	if radius <= 0 {
@@ -62,8 +63,8 @@ func PointInRoundedRectAtClamped(px, py float64, r core.Rect, radius int) bool {
 	}
 
 	rr := float64(radius)
-	halfW := float64(r.W) / 2.0
-	halfH := float64(r.H) / 2.0
+	halfW := float64(r.Dx()) / 2.0
+	halfH := float64(r.Dy()) / 2.0
 	if rr > halfW {
 		rr = halfW
 	}
@@ -71,8 +72,8 @@ func PointInRoundedRectAtClamped(px, py float64, r core.Rect, radius int) bool {
 		rr = halfH
 	}
 
-	cx := float64(r.X) + halfW
-	cy := float64(r.Y) + halfH
+	cx := float64(r.Min.X) + halfW
+	cy := float64(r.Min.Y) + halfH
 	qx := math.Abs(px-cx) - (halfW - rr)
 	qy := math.Abs(py-cy) - (halfH - rr)
 	if qx < 0 {
@@ -84,16 +85,16 @@ func PointInRoundedRectAtClamped(px, py float64, r core.Rect, radius int) bool {
 	return (qx*qx + qy*qy) <= (rr * rr)
 }
 
-func RoundedRectCoverage(x, y int, r core.Rect, radius int) float64 {
+func RoundedRectCoverage(x, y int, r image.Rectangle, radius int) float64 {
 	if radius <= 0 {
-		if r.ContainsXY(x, y) {
+		if core.RectContainsXY(r, x, y) {
 			return 1
 		}
 		return 0
 	}
 	radius = ClampRoundedRadius(r, radius)
 	if radius <= 0 {
-		if r.ContainsXY(x, y) {
+		if core.RectContainsXY(r, x, y) {
 			return 1
 		}
 		return 0
@@ -126,39 +127,39 @@ func RoundedRectCoverage(x, y int, r core.Rect, radius int) float64 {
 	return float64(inside) / float64(samples*samples)
 }
 
-func ClampRoundedRadius(r core.Rect, radius int) int {
+func ClampRoundedRadius(r image.Rectangle, radius int) int {
 	if radius < 0 {
 		return 0
 	}
-	if radius > r.W/2 {
-		radius = r.W / 2
+	if radius > r.Dx()/2 {
+		radius = r.Dx() / 2
 	}
-	if radius > r.H/2 {
-		radius = r.H / 2
+	if radius > r.Dy()/2 {
+		radius = r.Dy() / 2
 	}
 	return radius
 }
 
-func RoundedRectSignedDistance(px, py float64, r core.Rect, radius int) float64 {
-	if r.W <= 0 || r.H <= 0 {
+func RoundedRectSignedDistance(px, py float64, r image.Rectangle, radius int) float64 {
+	if r.Dx() <= 0 || r.Dy() <= 0 {
 		return 1
 	}
 	if radius <= 0 {
-		dx := math.Max(math.Max(float64(r.X)-px, 0), px-float64(r.X+r.W))
-		dy := math.Max(math.Max(float64(r.Y)-py, 0), py-float64(r.Y+r.H))
+		dx := math.Max(math.Max(float64(r.Min.X)-px, 0), px-float64(r.Min.X+r.Dx()))
+		dy := math.Max(math.Max(float64(r.Min.Y)-py, 0), py-float64(r.Min.Y+r.Dy()))
 		if dx > 0 || dy > 0 {
 			return math.Hypot(dx, dy)
 		}
-		inside := math.Min(px-float64(r.X), float64(r.X+r.W)-px)
-		insideY := math.Min(py-float64(r.Y), float64(r.Y+r.H)-py)
+		inside := math.Min(px-float64(r.Min.X), float64(r.Min.X+r.Dx())-px)
+		insideY := math.Min(py-float64(r.Min.Y), float64(r.Min.Y+r.Dy())-py)
 		if insideY < inside {
 			inside = insideY
 		}
 		return -inside
 	}
 
-	halfW := float64(r.W) / 2.0
-	halfH := float64(r.H) / 2.0
+	halfW := float64(r.Dx()) / 2.0
+	halfH := float64(r.Dy()) / 2.0
 	rr := float64(radius)
 	if rr > halfW {
 		rr = halfW
@@ -167,8 +168,8 @@ func RoundedRectSignedDistance(px, py float64, r core.Rect, radius int) float64 
 		rr = halfH
 	}
 
-	cx := float64(r.X) + halfW
-	cy := float64(r.Y) + halfH
+	cx := float64(r.Min.X) + halfW
+	cy := float64(r.Min.Y) + halfH
 	qx := math.Abs(px-cx) - (halfW - rr)
 	qy := math.Abs(py-cy) - (halfH - rr)
 	ox := math.Max(qx, 0)

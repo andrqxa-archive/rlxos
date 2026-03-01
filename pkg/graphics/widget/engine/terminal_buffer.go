@@ -1,17 +1,19 @@
 package engine
 
 import (
+	"image"
+	"image/color"
 	"time"
 
-	gfxfont "avyos.dev/pkg/graphics/font"
-	graphics "avyos.dev/pkg/graphics/input"
+	gfxfont "avyos.dev/pkg/graphics/fonts"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
 // TerminalCell holds one terminal glyph with resolved foreground/background colors.
 type TerminalCell struct {
 	Char      rune
-	Fg        graphics.Color
-	Bg        graphics.Color
+	Fg        color.NRGBA
+	Bg        color.NRGBA
 	Underline bool
 }
 
@@ -136,18 +138,18 @@ func terminalNormalizeCell(cell TerminalCell) TerminalCell {
 		cell.Char = ' '
 	}
 	if cell.Bg.A == 0 {
-		cell.Bg = graphics.ColorTransparent
+		cell.Bg = core.ColorTransparent
 	}
 	return cell
 }
 
 func terminalCellAt(lines [][]TerminalCell, row, col int) TerminalCell {
 	if row < 0 || row >= len(lines) {
-		return TerminalCell{Char: ' ', Bg: graphics.ColorTransparent}
+		return TerminalCell{Char: ' ', Bg: core.ColorTransparent}
 	}
 	line := lines[row]
 	if col < 0 || col >= len(line) {
-		return TerminalCell{Char: ' ', Bg: graphics.ColorTransparent}
+		return TerminalCell{Char: ' ', Bg: core.ColorTransparent}
 	}
 	return terminalNormalizeCell(line[col])
 }
@@ -170,13 +172,13 @@ func terminalMaxScroll(totalRows, visRows int) int {
 	return maxScroll
 }
 
-func terminalTextWidth(e *Element, content graphics.Rect, maxScroll int) (int, graphics.Rect) {
-	textW := content.W
+func terminalTextWidth(e *Element, content image.Rectangle, maxScroll int) (int, image.Rectangle) {
+	textW := content.Dx()
 	if textW <= 0 {
-		return 0, graphics.Rect{}
+		return 0, image.Rectangle{}
 	}
 
-	var trackRect graphics.Rect
+	var trackRect image.Rectangle
 	if e.AttrBool("showScrollbar", false) && maxScroll > 0 {
 		barW := e.AttrInt("scrollbarWidth", 6)
 		if barW < 4 {
@@ -189,19 +191,14 @@ func terminalTextWidth(e *Element, content graphics.Rect, maxScroll int) (int, g
 		if margin < 0 {
 			margin = 0
 		}
-		trackRect = graphics.Rect{
-			X: content.X + content.W - barW - margin,
-			Y: content.Y + margin,
-			W: barW,
-			H: content.H - margin*2,
-		}
-		if trackRect.X > content.X && trackRect.H >= 8 {
-			textW = trackRect.X - content.X - 1
+		trackRect = core.RectXYWH(content.Min.X+content.Dx()-barW-margin, content.Min.Y+margin, barW, content.Dy()-margin*2)
+		if trackRect.Min.X > content.Min.X && trackRect.Dy() >= 8 {
+			textW = trackRect.Min.X - content.Min.X - 1
 			if textW < 1 {
 				textW = 1
 			}
 		} else {
-			trackRect = graphics.Rect{}
+			trackRect = image.Rectangle{}
 		}
 	}
 
@@ -209,25 +206,25 @@ func terminalTextWidth(e *Element, content graphics.Rect, maxScroll int) (int, g
 }
 
 func terminalCursorRect(
-	textArea graphics.Rect,
-	textRect graphics.Rect,
+	textArea image.Rectangle,
+	textRect image.Rectangle,
 	cellW, cellH, scrollCol, scrollRow, cursorCol, cursorRow int,
-) graphics.Rect {
+) image.Rectangle {
 	if cursorRow < scrollRow {
-		return graphics.Rect{}
+		return image.Rectangle{}
 	}
 	relRow := cursorRow - scrollRow
 	if relRow < 0 {
-		return graphics.Rect{}
+		return image.Rectangle{}
 	}
 	relCol := cursorCol - scrollCol
 	if relCol < 0 {
-		return graphics.Rect{}
+		return image.Rectangle{}
 	}
-	cx := textArea.X + relCol*cellW
-	cy := textArea.Y + relRow*cellH
-	rect := graphics.Rect{X: cx, Y: cy, W: 2, H: cellH}
-	return rect.Intersection(textRect)
+	cx := textArea.Min.X + relCol*cellW
+	cy := textArea.Min.Y + relRow*cellH
+	rect := core.RectXYWH(cx, cy, 2, cellH)
+	return rect.Intersect(textRect)
 }
 
 func (e *Element) terminalDirtyRects(
@@ -240,7 +237,7 @@ func (e *Element) terminalDirtyRects(
 	oldScrollRow, oldScrollCol int,
 	newScrollRow, newScrollCol int,
 	oldMaxCols int,
-) ([]graphics.Rect, bool) {
+) ([]image.Rectangle, bool) {
 	if e.AttrBool("wrap", false) {
 		return nil, true
 	}
@@ -266,10 +263,10 @@ func (e *Element) terminalDirtyRects(
 	}
 
 	textArea := e.contentArea()
-	if textArea.W <= 0 || textArea.H <= 0 {
+	if textArea.Dx() <= 0 || textArea.Dy() <= 0 {
 		return nil, true
 	}
-	visRows := textArea.H / cellH
+	visRows := textArea.Dy() / cellH
 	if visRows <= 0 {
 		return nil, true
 	}
@@ -294,20 +291,20 @@ func (e *Element) terminalDirtyRects(
 	}
 
 	textH := visRows * cellH
-	if textH > textArea.H {
-		textH = textArea.H
+	if textH > textArea.Dy() {
+		textH = textArea.Dy()
 	}
-	textRect := graphics.Rect{X: textArea.X, Y: textArea.Y, W: newTextW, H: textH}
+	textRect := core.RectXYWH(textArea.Min.X, textArea.Min.Y, newTextW, textH)
 
 	if len(oldLines) == 0 || oldMaxCols == 0 {
-		dirty := []graphics.Rect{textRect}
-		if !oldScrollTrack.IsEmpty() || !newScrollTrack.IsEmpty() {
+		dirty := []image.Rectangle{textRect}
+		if !oldScrollTrack.Empty() || !newScrollTrack.Empty() {
 			dirty = append(dirty, oldScrollTrack, newScrollTrack)
 		}
 		return dirty, false
 	}
 
-	dirty := make([]graphics.Rect, 0, 24)
+	dirty := make([]image.Rectangle, 0, 24)
 	for row := 0; row < visRows; row++ {
 		lineIdx := newScrollRow + row
 		segStart := -1
@@ -322,45 +319,35 @@ func (e *Element) terminalDirtyRects(
 				continue
 			}
 			if segStart >= 0 {
-				dirty = append(dirty, graphics.Rect{
-					X: textArea.X + segStart*cellW,
-					Y: textArea.Y + row*cellH,
-					W: (col - segStart) * cellW,
-					H: cellH,
-				}.Intersection(textRect))
+				dirty = append(dirty, core.RectXYWH(textArea.Min.X+segStart*cellW, textArea.Min.Y+row*cellH, (col-segStart)*cellW, cellH).Intersect(textRect))
 				segStart = -1
 			}
 		}
 		if segStart >= 0 {
-			dirty = append(dirty, graphics.Rect{
-				X: textArea.X + segStart*cellW,
-				Y: textArea.Y + row*cellH,
-				W: (visCols - segStart) * cellW,
-				H: cellH,
-			}.Intersection(textRect))
+			dirty = append(dirty, core.RectXYWH(textArea.Min.X+segStart*cellW, textArea.Min.Y+row*cellH, (visCols-segStart)*cellW, cellH).Intersect(textRect))
 		}
 	}
 
 	if oldShowCursor {
-		if r := terminalCursorRect(textArea, textRect, cellW, cellH, oldScrollCol, oldScrollRow, oldCursorCol, oldCursorRow); !r.IsEmpty() {
+		if r := terminalCursorRect(textArea, textRect, cellW, cellH, oldScrollCol, oldScrollRow, oldCursorCol, oldCursorRow); !r.Empty() {
 			dirty = append(dirty, r)
 		}
 	}
 	if newShowCursor {
-		if r := terminalCursorRect(textArea, textRect, cellW, cellH, newScrollCol, newScrollRow, newCursorCol, newCursorRow); !r.IsEmpty() {
+		if r := terminalCursorRect(textArea, textRect, cellW, cellH, newScrollCol, newScrollRow, newCursorCol, newCursorRow); !r.Empty() {
 			dirty = append(dirty, r)
 		}
 	}
 
-	if !oldScrollTrack.IsEmpty() || !newScrollTrack.IsEmpty() {
+	if !oldScrollTrack.Empty() || !newScrollTrack.Empty() {
 		if oldMaxScroll != newMaxScroll {
 			dirty = append(dirty, oldScrollTrack, newScrollTrack)
 		}
 	}
 
-	out := make([]graphics.Rect, 0, len(dirty))
+	out := make([]image.Rectangle, 0, len(dirty))
 	for _, rect := range dirty {
-		if !rect.IsEmpty() {
+		if !rect.Empty() {
 			out = append(out, rect)
 		}
 	}

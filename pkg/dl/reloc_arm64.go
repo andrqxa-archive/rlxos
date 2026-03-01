@@ -6,16 +6,16 @@ import "fmt"
 
 // AArch64 relocation types.
 const (
-	r_AARCH64_NONE          = 0
-	r_AARCH64_ABS64         = 257 // S + A
-	r_AARCH64_GLOB_DAT      = 1025 // S + A
-	r_AARCH64_JUMP_SLOT     = 1026 // S
-	r_AARCH64_RELATIVE      = 1027 // Delta(S) + A  (= B + A)
-	r_AARCH64_TLS_DTPMOD64  = 1028 // TLS module ID
-	r_AARCH64_TLS_DTPREL64  = 1029 // TLS offset in module
-	r_AARCH64_TLS_TPREL64   = 1030 // TP-relative offset
-	r_AARCH64_TLSDESC       = 1031 // TLS descriptor
-	r_AARCH64_IRELATIVE     = 1032 // indirect (IFUNC) relative
+	r_AARCH64_NONE         = 0
+	r_AARCH64_ABS64        = 257  // S + A
+	r_AARCH64_GLOB_DAT     = 1025 // S + A
+	r_AARCH64_JUMP_SLOT    = 1026 // S
+	r_AARCH64_RELATIVE     = 1027 // Delta(S) + A  (= B + A)
+	r_AARCH64_TLS_DTPMOD64 = 1028 // TLS module ID
+	r_AARCH64_TLS_DTPREL64 = 1029 // TLS offset in module
+	r_AARCH64_TLS_TPREL64  = 1030 // TP-relative offset
+	r_AARCH64_TLSDESC      = 1031 // TLS descriptor
+	r_AARCH64_IRELATIVE    = 1032 // indirect (IFUNC) relative
 )
 
 // applyRelocation dispatches a single RELA relocation on arm64.

@@ -15,11 +15,10 @@ import (
 	settingsapi "avyos.dev/api/settings"
 	"avyos.dev/pkg/appcatalog"
 	gapp "avyos.dev/pkg/graphics/app"
-	declapp "avyos.dev/pkg/graphics/app/decl"
 	displaybackend "avyos.dev/pkg/graphics/backend/display"
 	gfxicons "avyos.dev/pkg/graphics/icons"
-	graphics "avyos.dev/pkg/graphics/input"
-	gfxtheme "avyos.dev/pkg/graphics/theme"
+	core "avyos.dev/pkg/graphics/pixmap"
+	gfxtheme "avyos.dev/pkg/graphics/themes"
 	ui "avyos.dev/pkg/graphics/widget/engine"
 	"avyos.dev/pkg/logger"
 )
@@ -89,7 +88,7 @@ type menuItem struct {
 }
 
 type TaskbarApp struct {
-	declapp.App
+	gapp.App
 
 	home       string
 	catalog    []appcatalog.Entry
@@ -510,8 +509,8 @@ func (a *TaskbarApp) openGroupMenu(key string, anchor *ui.Element) {
 	content := buildContextMenu(menuW, menuH, items)
 
 	b := anchor.Bounds()
-	x := b.X + (b.W-menuW)/2
-	y := b.Y - menuH - menuOffset
+	x := b.Min.X + (b.Dx()-menuW)/2
+	y := b.Min.Y - menuH - menuOffset
 
 	var popup *displaybackend.Popup
 	popup = db.OpenPopup(x, y, menuW, menuH, content, func() {
@@ -747,7 +746,7 @@ func run() error {
 		Height:     taskbarHeight,
 		Backend:    db,
 		Input:      db,
-		Background: graphics.ColorTransparent,
+		Background: core.ColorTransparent,
 	})
 	if err := a.LoadString(taskbarUI, a); err != nil {
 		log.Error("failed to load dock ui: %v", err)

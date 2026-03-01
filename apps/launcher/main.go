@@ -11,9 +11,8 @@ import (
 	display "avyos.dev/api/display"
 	"avyos.dev/pkg/appcatalog"
 	gapp "avyos.dev/pkg/graphics/app"
-	declapp "avyos.dev/pkg/graphics/app/decl"
 	displaybackend "avyos.dev/pkg/graphics/backend/display"
-	graphics "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 	ui "avyos.dev/pkg/graphics/widget/engine"
 	"avyos.dev/pkg/logger"
 )
@@ -30,7 +29,7 @@ const (
 var log = logger.New(appMenuID)
 
 type AppMenu struct {
-	declapp.App
+	gapp.App
 
 	home      string
 	catalog   []appcatalog.Entry
@@ -285,7 +284,7 @@ func main() {
 		Title:      "App Menu",
 		Backend:    backend,
 		Input:      backend,
-		Background: graphics.ColorTransparent,
+		Background: core.ColorTransparent,
 	})
 	if err := app.LoadString(appMenuUI, app); err != nil {
 		log.Error("failed to load appmenu ui: %v", err)

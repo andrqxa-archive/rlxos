@@ -2,8 +2,9 @@ package engine
 
 import (
 	"fmt"
+	"image"
 
-	graphics "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
 type flowItem struct {
@@ -35,7 +36,7 @@ func (e *Element) layoutChildren() {
 // layoutFlex arranges children in a row or column (CSS flexbox-like).
 func (e *Element) layoutFlex() {
 	content := e.contentArea()
-	if content.W <= 0 || content.H <= 0 {
+	if content.Dx() <= 0 || content.Dy() <= 0 {
 		return
 	}
 
@@ -56,11 +57,11 @@ func (e *Element) layoutFlex() {
 
 	var mainAvail, crossAvail int
 	if isRow {
-		mainAvail = content.W
-		crossAvail = content.H
+		mainAvail = content.Dx()
+		crossAvail = content.Dy()
 	} else {
-		mainAvail = content.H
-		crossAvail = content.W
+		mainAvail = content.Dy()
+		crossAvail = content.Dx()
 	}
 
 	mainSizes := make([]int, len(visible))
@@ -180,19 +181,9 @@ func (e *Element) layoutFlex() {
 
 		crossPos := alignCrossPos(alignment, crossAvail, crossSize)
 		if isRow {
-			child.SetBounds(graphics.Rect{
-				X: content.X + pos,
-				Y: content.Y + crossPos,
-				W: mainSize,
-				H: crossSize,
-			})
+			child.SetBounds(core.RectXYWH(content.Min.X+pos, content.Min.Y+crossPos, mainSize, crossSize))
 		} else {
-			child.SetBounds(graphics.Rect{
-				X: content.X + crossPos,
-				Y: content.Y + pos,
-				W: crossSize,
-				H: mainSize,
-			})
+			child.SetBounds(core.RectXYWH(content.Min.X+crossPos, content.Min.Y+pos, crossSize, mainSize))
 		}
 		pos += mainSize + spacing
 	}
@@ -222,7 +213,7 @@ func alignCrossPos(alignment string, available, size int) int {
 // layoutFlow arranges children left-to-right and wraps into rows as needed.
 func (e *Element) layoutFlow() {
 	content := e.contentArea()
-	if content.W <= 0 || content.H <= 0 {
+	if content.Dx() <= 0 || content.Dy() <= 0 {
 		return
 	}
 
@@ -230,10 +221,10 @@ func (e *Element) layoutFlow() {
 	rowSpacing := e.AttrInt("rowSpacing", e.AttrInt("spacing", 0))
 
 	items := make([]flowItem, 0, len(e.children))
-	x := content.X
-	y := content.Y
+	x := content.Min.X
+	y := content.Min.Y
 	rowHeight := 0
-	lineRight := content.X + content.W
+	lineRight := content.Min.X + content.Dx()
 
 	for _, child := range e.children {
 		if !child.visible {
@@ -250,8 +241,8 @@ func (e *Element) layoutFlow() {
 			h = 1
 		}
 
-		if x > content.X && x+w > lineRight {
-			x = content.X
+		if x > content.Min.X && x+w > lineRight {
+			x = content.Min.X
 			y += rowHeight + rowSpacing
 			rowHeight = 0
 		}
@@ -272,12 +263,12 @@ func (e *Element) layoutFlow() {
 
 	contentMain := 0
 	if len(items) > 0 {
-		contentMain = (y - content.Y) + rowHeight
+		contentMain = (y - content.Min.Y) + rowHeight
 	}
 
 	scrollY := 0
 	if e.overflowScrollable() {
-		maxScroll := contentMain - content.H
+		maxScroll := contentMain - content.Dy()
 		if maxScroll < 0 {
 			maxScroll = 0
 		}
@@ -294,19 +285,14 @@ func (e *Element) layoutFlow() {
 	}
 
 	for _, item := range items {
-		item.child.SetBounds(graphics.Rect{
-			X: item.x,
-			Y: item.y - scrollY,
-			W: item.w,
-			H: item.h,
-		})
+		item.child.SetBounds(core.RectXYWH(item.x, item.y-scrollY, item.w, item.h))
 	}
 }
 
 // layoutGrid arranges children in a grid based on row/col attributes.
 func (e *Element) layoutGrid() {
 	content := e.contentArea()
-	if content.W <= 0 || content.H <= 0 {
+	if content.Dx() <= 0 || content.Dy() <= 0 {
 		return
 	}
 
@@ -331,8 +317,8 @@ func (e *Element) layoutGrid() {
 		return
 	}
 
-	cellW := (content.W - colSpacing*(maxCol-1)) / maxCol
-	cellH := (content.H - rowSpacing*(maxRow-1)) / maxRow
+	cellW := (content.Dx() - colSpacing*(maxCol-1)) / maxCol
+	cellH := (content.Dy() - rowSpacing*(maxRow-1)) / maxRow
 
 	for _, child := range e.children {
 		if !child.visible {
@@ -343,12 +329,12 @@ func (e *Element) layoutGrid() {
 		rs := child.AttrInt("rowSpan", 1)
 		cs := child.AttrInt("colSpan", 1)
 
-		x := content.X + c*(cellW+colSpacing)
-		y := content.Y + r*(cellH+rowSpacing)
+		x := content.Min.X + c*(cellW+colSpacing)
+		y := content.Min.Y + r*(cellH+rowSpacing)
 		w := cellW*cs + colSpacing*(cs-1)
 		h := cellH*rs + rowSpacing*(rs-1)
 
-		child.SetBounds(graphics.Rect{X: x, Y: y, W: w, H: h})
+		child.SetBounds(core.RectXYWH(x, y, w, h))
 	}
 }
 
@@ -404,14 +390,14 @@ func (e *Element) childrenMinSize() (w, h int) {
 	return maxW, totalH
 }
 
-func axisSize(ms graphics.Point, isRow bool) int {
+func axisSize(ms image.Point, isRow bool) int {
 	if isRow {
 		return ms.X
 	}
 	return ms.Y
 }
 
-func crossAxisSize(ms graphics.Point, isRow bool) int {
+func crossAxisSize(ms image.Point, isRow bool) int {
 	if isRow {
 		return ms.Y
 	}

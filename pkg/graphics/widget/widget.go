@@ -1,8 +1,10 @@
 package widget
 
 import (
-	"avyos.dev/pkg/graphics/core"
+	"image"
+
 	"avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
 // TextAlign represents text alignment.
@@ -17,9 +19,9 @@ const (
 // Widget is the interface that all widgets must implement.
 type Widget interface {
 	Draw(buf *core.Buffer)
-	Bounds() core.Rect
-	SetBounds(r core.Rect)
-	MinSize() core.Point
+	Bounds() image.Rectangle
+	SetBounds(r image.Rectangle)
+	MinSize() image.Point
 	HandleEvent(ev input.Event) bool
 	SetFocused(focused bool)
 	IsFocused() bool
@@ -31,11 +33,11 @@ type Widget interface {
 
 // BaseWidget provides common functionality for widgets.
 type BaseWidget struct {
-	bounds  core.Rect
+	bounds  image.Rectangle
 	focused bool
 	dirty   bool
 	visible bool
-	minSize core.Point
+	minSize image.Point
 }
 
 // NewBaseWidget creates a new base widget.
@@ -47,12 +49,12 @@ func NewBaseWidget() BaseWidget {
 }
 
 // Bounds returns the widget's bounds.
-func (w *BaseWidget) Bounds() core.Rect {
+func (w *BaseWidget) Bounds() image.Rectangle {
 	return w.bounds
 }
 
 // SetBounds sets the widget's bounds.
-func (w *BaseWidget) SetBounds(r core.Rect) {
+func (w *BaseWidget) SetBounds(r image.Rectangle) {
 	if w.bounds != r {
 		w.bounds = r
 		w.dirty = true
@@ -60,12 +62,12 @@ func (w *BaseWidget) SetBounds(r core.Rect) {
 }
 
 // MinSize returns the minimum size the widget needs.
-func (w *BaseWidget) MinSize() core.Point {
+func (w *BaseWidget) MinSize() image.Point {
 	return w.minSize
 }
 
 // SetMinSize sets the minimum size for the widget.
-func (w *BaseWidget) SetMinSize(size core.Point) {
+func (w *BaseWidget) SetMinSize(size image.Point) {
 	w.minSize = size
 }
 

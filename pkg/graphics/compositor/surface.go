@@ -19,10 +19,11 @@ package compositor
 
 import (
 	"fmt"
+	"image"
 	"sync"
 	"syscall"
 
-	graphics "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
 // surfaceState represents a wl_surface created by a client.
@@ -37,14 +38,14 @@ type surfaceState struct {
 	// Rendered content (pixel data copied from client's shm buffer)
 	// Protected by bufMu — commitSurface writes, compositor reads.
 	bufMu  sync.Mutex
-	buffer *graphics.Buffer
+	buffer *core.Buffer
 
 	// Frame callbacks to fire on next commit
 	frameCallbacks []uint32
 }
 
 // getBuffer returns the current rendered buffer (thread-safe).
-func (s *surfaceState) getBuffer() *graphics.Buffer {
+func (s *surfaceState) getBuffer() *core.Buffer {
 	s.bufMu.Lock()
 	b := s.buffer
 	s.bufMu.Unlock()
@@ -56,7 +57,7 @@ type surfacePending struct {
 	bufferID  uint32
 	bufferX   int32
 	bufferY   int32
-	damage    []graphics.Rect
+	damage    []image.Rectangle
 	hasBuffer bool
 }
 
@@ -106,7 +107,7 @@ func (s *clientSession) handleSurfaceRequest(id uint32, opcode uint16, payload [
 			y := int(getInt32(payload, 4))
 			w := int(getInt32(payload, 8))
 			h := int(getInt32(payload, 12))
-			surf.pending.damage = append(surf.pending.damage, graphics.Rect{X: x, Y: y, W: w, H: h})
+			surf.pending.damage = append(surf.pending.damage, core.RectXYWH(x, y, w, h))
 		}
 
 	case surfaceFrameOp:
@@ -137,12 +138,12 @@ func (s *clientSession) commitSurface(surf *surfaceState) {
 	if surf.current.hasBuffer {
 		buf, ok := s.buffers[surf.current.bufferID]
 		if ok {
-			// Copy pixel data from shm buffer into a NEW graphics.Buffer.
+			// Copy pixel data from shm buffer into a NEW core.Buffer.
 			// Always create a new buffer to avoid data races with the
 			// compositor goroutine reading the old buffer during compositing.
 			pool := buf.pool
 			if pool.data != nil && buf.offset+buf.stride*buf.height <= len(pool.data) {
-				newBuf := graphics.NewBuffer(buf.width, buf.height)
+				newBuf := core.NewBuffer(buf.width, buf.height)
 				src := pool.data[buf.offset:]
 				for y := 0; y < buf.height; y++ {
 					srcRow := src[y*buf.stride : y*buf.stride+buf.width*4]

@@ -1,4 +1,4 @@
-package canvas
+package svg
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestDecodeSVGPureEvenOddFillRule(t *testing.T) {
+func TestDecodeFileEvenOddFillRule(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "evenodd.svg")
 	svg := `<svg viewBox="0 0 10 10" fill-rule="evenodd" xmlns="http://www.w3.org/2000/svg">
@@ -16,12 +16,12 @@ func TestDecodeSVGPureEvenOddFillRule(t *testing.T) {
 		t.Fatalf("write temp svg: %v", err)
 	}
 
-	buf, err := DecodeSVGToBuffer(path, 10)
+	buf, err := DecodeFile(path, 10)
 	if err != nil {
-		t.Fatalf("DecodeSVGToBuffer(): %v", err)
+		t.Fatalf("DecodeFile(): %v", err)
 	}
 	if buf == nil {
-		t.Fatalf("DecodeSVGToBuffer() returned nil buffer")
+		t.Fatalf("DecodeFile() returned nil buffer")
 	}
 
 	ring := buf.GetPixel(2, 5)

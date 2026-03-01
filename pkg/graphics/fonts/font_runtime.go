@@ -17,11 +17,15 @@
 
 package font
 
-import "avyos.dev/pkg/graphics/core"
+import (
+	"image/color"
+
+	core "avyos.dev/pkg/graphics/pixmap"
+)
 
 type (
 	Buffer = core.Buffer
-	Color  = core.Color
+	Color  = color.NRGBA
 )
 
 var (

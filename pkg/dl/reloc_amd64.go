@@ -132,7 +132,7 @@ func (ld *Loader) applyRelocation(obj *Object, rela elf64Rela, localScope []*Obj
 			val := int64(sym.Value) + rela.Addend - int64(defObj.tlsOffset)
 			// Write [resolver_func, argument].  We write a zero resolver
 			// (caller must handle) and the offset as argument.
-			writePtr(target, 0)          // resolver — 0 means "use argument directly"
+			writePtr(target, 0) // resolver — 0 means "use argument directly"
 			writePtr(target+8, uint64(val))
 		} else {
 			val := rela.Addend - int64(obj.tlsOffset)

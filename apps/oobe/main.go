@@ -11,9 +11,8 @@ import (
 
 	display "avyos.dev/api/display"
 	gapp "avyos.dev/pkg/graphics/app"
-	declapp "avyos.dev/pkg/graphics/app/decl"
 	displaybackend "avyos.dev/pkg/graphics/backend/display"
-	graphics "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 	ui "avyos.dev/pkg/graphics/widget/engine"
 	"avyos.dev/pkg/identity"
 )
@@ -21,7 +20,7 @@ import (
 //go:embed ui/oobe.ui
 var oobeUI string
 
-type OobeApp struct{ declapp.App }
+type OobeApp struct{ gapp.App }
 
 func (a *OobeApp) e(id string) *ui.Element { return a.FindElement(id) }
 
@@ -69,20 +68,16 @@ func (a *OobeApp) showStage(stage int) {
 }
 
 func (a *OobeApp) relayoutRoot() {
-	root := a.Root()
+	root := a.UIRoot()
 	if root == nil {
 		return
 	}
-	core := a.InternalApp()
-	if core == nil {
-		return
-	}
-	w, h := core.Size()
+	w, h := a.App.Size()
 	if w < 2 || h < 1 {
 		return
 	}
-	root.SetBounds(graphics.Rect{W: w - 1, H: h})
-	root.SetBounds(graphics.Rect{W: w, H: h})
+	root.SetBounds(core.RectXYWH(0, 0, w-1, h))
+	root.SetBounds(core.RectXYWH(0, 0, w, h))
 }
 
 func (a *OobeApp) setCreateStatus(msg string) {

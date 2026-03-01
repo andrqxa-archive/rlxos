@@ -2,21 +2,26 @@ package icons
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 
-	"avyos.dev/pkg/graphics/assets"
 	"avyos.dev/pkg/graphics/canvas"
-	"avyos.dev/pkg/graphics/core"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
-type Buffer = core.Buffer
+var iconCache sync.Map // key: "<size>:<name>" => *core.Buffer
+var pathCache sync.Map // key: "<name>:<size>" => string
 
-var iconCache sync.Map // key: "<size>:<name>" => *Buffer
+const fallbackIconName = "help"
 
 // ResolvePath returns the best icon file path for name+size.
 // Falls back to help.{svg,png} if the requested icon is missing.
 func ResolvePath(name string, size int) string {
-	return assets.ResolveIconPath(name, size)
+	if p := resolvePathByName(name, size); p != "" {
+		return p
+	}
+	return resolvePathByName(fallbackIconName, size)
 }
 
 // ResolveIconPath returns the best icon file path for name+size.
@@ -25,10 +30,10 @@ func ResolveIconPath(name string, size int) string {
 }
 
 // Load loads an icon by name and size as a Buffer.
-func Load(name string, size int) (*Buffer, error) {
+func Load(name string, size int) (*core.Buffer, error) {
 	key := fmt.Sprintf("%d:%s", size, name)
 	if v, ok := iconCache.Load(key); ok {
-		if buf, ok := v.(*Buffer); ok {
+		if buf, ok := v.(*core.Buffer); ok {
 			return buf, nil
 		}
 	}
@@ -47,6 +52,44 @@ func Load(name string, size int) (*Buffer, error) {
 }
 
 // LoadIcon loads an icon by name and size as a Buffer.
-func LoadIcon(name string, size int) (*Buffer, error) {
+func LoadIcon(name string, size int) (*core.Buffer, error) {
 	return Load(name, size)
+}
+
+func resolvePathByName(name string, size int) string {
+	if name == "" {
+		return ""
+	}
+
+	key := fmt.Sprintf("%s:%d", name, size)
+	if v, ok := pathCache.Load(key); ok {
+		if s, ok2 := v.(string); ok2 {
+			return s
+		}
+	}
+
+	for _, root := range []string{
+		"/data/icons/default",
+		"/avyos/data/icons/default",
+		"data/icons/default",
+	} {
+		for _, rel := range []string{name + ".svg", name + ".png"} {
+			p := filepath.Join(root, rel)
+			if fileExists(p) {
+				pathCache.Store(key, p)
+				return p
+			}
+		}
+	}
+
+	pathCache.Store(key, "")
+	return ""
+}
+
+func fileExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	st, err := os.Stat(path)
+	return err == nil && !st.IsDir()
 }

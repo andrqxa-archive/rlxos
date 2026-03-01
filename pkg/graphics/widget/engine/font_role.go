@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	gfxfont "avyos.dev/pkg/graphics/font"
+	gfxfont "avyos.dev/pkg/graphics/fonts"
 )
 
 var (

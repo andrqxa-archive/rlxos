@@ -17,30 +17,30 @@ type dynamicInfo struct {
 	hashVaddr    uint64
 	gnuHashVaddr uint64
 
-	relaVaddr    uint64
-	relaSz       uint64
-	relaEnt      uint64
+	relaVaddr uint64
+	relaSz    uint64
+	relaEnt   uint64
 
-	relVaddr     uint64
-	relSz        uint64
-	relEnt       uint64
+	relVaddr uint64
+	relSz    uint64
+	relEnt   uint64
 
-	pltRel       uint64 // 7 (RELA) or 17 (REL)
-	jmprelVaddr  uint64
-	jmprelSz     uint64
-	pltgotVaddr  uint64
+	pltRel      uint64 // 7 (RELA) or 17 (REL)
+	jmprelVaddr uint64
+	jmprelSz    uint64
+	pltgotVaddr uint64
 
-	initVaddr    uint64
-	finiVaddr    uint64
-	initArrayVaddr uint64
-	initArraySz  uint64
-	finiArrayVaddr uint64
-	finiArraySz  uint64
+	initVaddr         uint64
+	finiVaddr         uint64
+	initArrayVaddr    uint64
+	initArraySz       uint64
+	finiArrayVaddr    uint64
+	finiArraySz       uint64
 	preinitArrayVaddr uint64
 	preinitArraySz    uint64
 
-	strsz        uint64
-	syment       uint64
+	strsz  uint64
+	syment uint64
 
 	versymVaddr  uint64
 	verdefVaddr  uint64
@@ -48,24 +48,24 @@ type dynamicInfo struct {
 	verneedVaddr uint64
 	verneedNum   uint64
 
-	soname       uint32 // strtab offset
-	rpath        uint32 // strtab offset
-	runpath      uint32 // strtab offset
+	soname  uint32 // strtab offset
+	rpath   uint32 // strtab offset
+	runpath uint32 // strtab offset
 
-	flags        uint64
-	flags1       uint64
+	flags  uint64
+	flags1 uint64
 
-	bindNow      bool
-	symbolic     bool
-	textrel      bool
-	staticTLS    bool
+	bindNow   bool
+	symbolic  bool
+	textrel   bool
+	staticTLS bool
 
-	pltrelSz     uint64 // DT_PLTRELSZ
+	pltrelSz uint64 // DT_PLTRELSZ
 
-	relaCount    uint64 // DT_RELACOUNT (hint for RELATIVE relocs)
+	relaCount uint64 // DT_RELACOUNT (hint for RELATIVE relocs)
 
-	tlsdescPLT   uint64
-	tlsdescGOT   uint64
+	tlsdescPLT uint64
+	tlsdescGOT uint64
 
 	needed []uint32 // strtab offsets for DT_NEEDED entries
 }

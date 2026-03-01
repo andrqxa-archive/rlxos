@@ -20,12 +20,13 @@ package framebuffer
 import (
 	"encoding/binary"
 	"fmt"
+	"image"
 	"os"
 	"syscall"
 	"unsafe"
 
 	"avyos.dev/pkg/fs"
-	graphics "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 	"avyos.dev/pkg/simd"
 )
 
@@ -106,8 +107,8 @@ type Backend struct {
 	data       []byte
 	varInfo    fbVarScreenInfo
 	fixInfo    fbFixScreenInfo
-	buffer     *graphics.Buffer
-	backBuffer *graphics.Buffer
+	buffer     *core.Buffer
+	backBuffer *core.Buffer
 }
 
 // New creates a new framebuffer backend.
@@ -159,7 +160,7 @@ func (b *Backend) OpenDevice(device string) error {
 
 	// Create buffers
 	b.buffer = b.createBuffer()
-	b.backBuffer = graphics.NewBuffer(int(b.varInfo.XRes), int(b.varInfo.YRes))
+	b.backBuffer = core.NewBuffer(int(b.varInfo.XRes), int(b.varInfo.YRes))
 
 	return nil
 }
@@ -183,23 +184,23 @@ func (b *Backend) Size() (width, height int) {
 }
 
 // Buffer returns the back buffer for drawing.
-func (b *Backend) Buffer() *graphics.Buffer {
+func (b *Backend) Buffer() *core.Buffer {
 	return b.backBuffer
 }
 
 // Flush copies the entire back buffer to the screen.
 func (b *Backend) Flush() error {
 	w, h := int(b.varInfo.XRes), int(b.varInfo.YRes)
-	return b.FlushRects([]graphics.Rect{{X: 0, Y: 0, W: w, H: h}})
+	return b.FlushRects([]image.Rectangle{core.RectXYWH(0, 0, w, h)})
 }
 
 // FlushRect copies only the given rectangle from the back buffer to the screen.
-func (b *Backend) FlushRect(r graphics.Rect) error {
-	return b.FlushRects([]graphics.Rect{r})
+func (b *Backend) FlushRect(r image.Rectangle) error {
+	return b.FlushRects([]image.Rectangle{r})
 }
 
 // FlushRects copies multiple rectangles from the back buffer to the screen.
-func (b *Backend) FlushRects(rects []graphics.Rect) error {
+func (b *Backend) FlushRects(rects []image.Rectangle) error {
 	if b.data == nil || b.backBuffer == nil {
 		return fmt.Errorf("framebuffer not initialized")
 	}
@@ -214,10 +215,10 @@ func (b *Backend) FlushRects(rects []graphics.Rect) error {
 
 	for _, r := range rects {
 		// Clamp rect to screen bounds
-		x0 := r.X
-		y0 := r.Y
-		x1 := r.X + r.W
-		y1 := r.Y + r.H
+		x0 := r.Min.X
+		y0 := r.Min.Y
+		x1 := r.Max.X
+		y1 := r.Max.Y
 		if x0 < 0 {
 			x0 = 0
 		}
@@ -252,7 +253,7 @@ func (b *Backend) FlushRects(rects []graphics.Rect) error {
 func (b *Backend) flushRect32(x0, y0, x1, y1, stride int) {
 	// Fast path: if fb pixel layout matches backBuffer BGRA, bulk copy rows.
 	// Strides may differ (fb may have alignment padding) — we use per-row offsets.
-	if b.backBuffer.Format == graphics.PixelFormatBGRA &&
+	if b.backBuffer.Format == core.PixelFormatBGRA &&
 		b.varInfo.Blue.Offset == 0 && b.varInfo.Green.Offset == 8 &&
 		b.varInfo.Red.Offset == 16 {
 		// Row-by-row copy — pixel formats match, only strides may differ
@@ -311,17 +312,17 @@ func (b *Backend) flushRect16(x0, y0, x1, y1, stride int) {
 		for x := x0; x < x1; x++ {
 			c := b.backBuffer.GetPixel(x, y)
 			off := y*stride + x*2
-			binary.LittleEndian.PutUint16(b.data[off:], c.RGB565())
+			binary.LittleEndian.PutUint16(b.data[off:], core.RGB565(c))
 		}
 	}
 }
 
-func (b *Backend) createBuffer() *graphics.Buffer {
+func (b *Backend) createBuffer() *core.Buffer {
 	width := int(b.varInfo.XRes)
 	height := int(b.varInfo.YRes)
 	stride := int(b.fixInfo.LineLength)
 
-	buf := &graphics.Buffer{
+	buf := &core.Buffer{
 		Width:  width,
 		Height: height,
 		Stride: stride,
@@ -331,12 +332,12 @@ func (b *Backend) createBuffer() *graphics.Buffer {
 	// Determine format based on bit layout
 	switch b.varInfo.BitsPerPixel {
 	case 16:
-		buf.Format = graphics.PixelFormatRGB565
+		buf.Format = core.PixelFormatRGB565
 	case 24, 32:
 		if b.varInfo.Red.Offset > b.varInfo.Blue.Offset {
-			buf.Format = graphics.PixelFormatRGBA
+			buf.Format = core.PixelFormatRGBA
 		} else {
-			buf.Format = graphics.PixelFormatBGRA
+			buf.Format = core.PixelFormatBGRA
 		}
 	}
 
@@ -357,7 +358,7 @@ func (b *Backend) ioctl(request uint, arg unsafe.Pointer) error {
 }
 
 // PixelFormat returns the detected pixel format.
-func (b *Backend) PixelFormat() graphics.PixelFormat {
+func (b *Backend) PixelFormat() core.PixelFormat {
 	return b.buffer.Format
 }
 

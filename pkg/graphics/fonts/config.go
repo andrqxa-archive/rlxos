@@ -15,7 +15,7 @@
  *
  */
 
-package app
+package font
 
 import (
 	"errors"
@@ -26,7 +26,6 @@ import (
 	"strings"
 
 	"avyos.dev/pkg/fs"
-	gfxfont "avyos.dev/pkg/graphics/font"
 	"avyos.dev/pkg/ini"
 	xfont "golang.org/x/image/font"
 )
@@ -35,7 +34,7 @@ const fontConfigFile = "fonts.ini"
 
 type configuredFont struct {
 	Name      string
-	BaseOpts  gfxfont.Options
+	BaseOpts  Options
 	RoleSizes map[string]float64
 }
 
@@ -52,33 +51,27 @@ func ApplyConfiguredDefaultFont() error {
 		return nil
 	}
 
-	if paragraph := fonts[gfxfont.UIFontParagraph]; paragraph != nil {
-		gfxfont.DefaultFont = paragraph
+	if paragraph := fonts[UIFontParagraph]; paragraph != nil {
+		DefaultFont = paragraph
 	}
-	gfxfont.SetUIFonts(fonts)
+	SetUIFonts(fonts)
 	return nil
 }
 
-func (a *App) loadConfiguredDefaultFont() {
-	if err := ApplyConfiguredDefaultFont(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to load configured font: %v (using internal bitmap font)\n", err)
-	}
-}
-
 func applyBitmapFallbackFonts() {
-	if gfxfont.BitmapFont == nil {
+	if BitmapFont == nil {
 		return
 	}
-	gfxfont.DefaultFont = gfxfont.BitmapFont
-	gfxfont.SetUIFonts(map[string]*gfxfont.Font{
-		gfxfont.UIFontParagraph:  gfxfont.BitmapFont,
-		gfxfont.UIFontSubheading: gfxfont.BitmapFont,
-		gfxfont.UIFontHeading:    gfxfont.BitmapFont,
-		gfxfont.UIFontTitle:      gfxfont.BitmapFont,
+	DefaultFont = BitmapFont
+	SetUIFonts(map[string]*Font{
+		UIFontParagraph:  BitmapFont,
+		UIFontSubheading: BitmapFont,
+		UIFontHeading:    BitmapFont,
+		UIFontTitle:      BitmapFont,
 	})
 }
 
-func loadConfiguredFonts() (map[string]*gfxfont.Font, error) {
+func loadConfiguredFonts() (map[string]*Font, error) {
 	cfgPath := fs.Resolve("config:%s", fontConfigFile)
 	cfg, err := ini.ParseFile(cfgPath)
 	if err != nil {
@@ -98,12 +91,12 @@ func loadConfiguredFonts() (map[string]*gfxfont.Font, error) {
 		return nil, err
 	}
 
-	loaded := make(map[string]*gfxfont.Font, len(spec.RoleSizes))
+	loaded := make(map[string]*Font, len(spec.RoleSizes))
 	loadOrder := []string{
-		gfxfont.UIFontParagraph,
-		gfxfont.UIFontSubheading,
-		gfxfont.UIFontHeading,
-		gfxfont.UIFontTitle,
+		UIFontParagraph,
+		UIFontSubheading,
+		UIFontHeading,
+		UIFontTitle,
 	}
 	for _, role := range loadOrder {
 		size, ok := spec.RoleSizes[role]
@@ -112,14 +105,14 @@ func loadConfiguredFonts() (map[string]*gfxfont.Font, error) {
 		}
 		opts := spec.BaseOpts
 		opts.Size = size
-		font, err := gfxfont.LoadTTFFontFile(resolvedPath, &opts)
+		font, err := LoadTTFFontFile(resolvedPath, &opts)
 		if err != nil {
 			return nil, fmt.Errorf("load %s (%s size %.1f): %w", resolvedPath, role, size, err)
 		}
 		loaded[role] = font
 	}
 
-	if loaded[gfxfont.UIFontParagraph] == nil {
+	if loaded[UIFontParagraph] == nil {
 		return nil, fmt.Errorf("paragraph font size is not configured in %s", cfgPath)
 	}
 	return loaded, nil
@@ -141,7 +134,7 @@ func pickConfiguredFont(cfg *ini.Config) (configuredFont, bool) {
 			continue
 		}
 
-		opts := gfxfont.Options{Hinting: xfont.HintingFull}
+		opts := Options{Hinting: xfont.HintingFull}
 		if v := firstNonEmpty(cfg, section, "dpi"); v != "" {
 			if dpi, err := strconv.ParseFloat(v, 64); err == nil && dpi > 0 {
 				opts.DPI = dpi
@@ -181,10 +174,10 @@ func roleSizes(cfg *ini.Config, section string) map[string]float64 {
 		"title_size", "titleSize"), paragraph+8)
 
 	return map[string]float64{
-		gfxfont.UIFontParagraph:  paragraph,
-		gfxfont.UIFontSubheading: subheading,
-		gfxfont.UIFontHeading:    heading,
-		gfxfont.UIFontTitle:      title,
+		UIFontParagraph:  paragraph,
+		UIFontSubheading: subheading,
+		UIFontHeading:    heading,
+		UIFontTitle:      title,
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
+	"image/color"
 	"os"
 	"os/exec"
 	"strings"
@@ -12,10 +13,10 @@ import (
 	display "avyos.dev/api/display"
 	settingsapi "avyos.dev/api/settings"
 	gapp "avyos.dev/pkg/graphics/app"
-	declapp "avyos.dev/pkg/graphics/app/decl"
 	displaybackend "avyos.dev/pkg/graphics/backend/display"
-	graphics "avyos.dev/pkg/graphics/input"
-	gfxtheme "avyos.dev/pkg/graphics/theme"
+	gfxinput "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
+	gfxtheme "avyos.dev/pkg/graphics/themes"
 	"avyos.dev/pkg/logger"
 )
 
@@ -43,7 +44,7 @@ type options struct {
 	mode      string
 	imagePath string
 	scaleMode string
-	color     graphics.Color
+	color     color.NRGBA
 }
 
 var (
@@ -74,7 +75,7 @@ func init() {
 }
 
 type BackgroundApp struct {
-	declapp.App
+	gapp.App
 	mouseX int
 	mouseY int
 }
@@ -112,17 +113,17 @@ func run() error {
 	app.Configure(func(core *gapp.App) {
 		core.OnEvent = app.handleCoreEvent
 	})
-	if err := app.RegisterClientShortcut(shortcutDesktopMenu, 0, graphics.KeyF10, 0, graphics.ModShift, func(graphics.Event) {
+	if err := app.RegisterClientShortcut(shortcutDesktopMenu, 0, gfxinput.KeyF10, 0, gfxinput.ModShift, func(gfxinput.Event) {
 		app.openDesktopMenuAtPointer()
 	}); err != nil {
 		return err
 	}
-	if err := app.RegisterGlobalShortcut(shortcutLaunchpad, graphics.KeySpace, 0, graphics.ModCtrl, func(graphics.Event) {
+	if err := app.RegisterGlobalShortcut(shortcutLaunchpad, gfxinput.KeySpace, 0, gfxinput.ModCtrl, func(gfxinput.Event) {
 		app.OpenLaunchpad()
 	}); err != nil {
 		return err
 	}
-	if err := app.RegisterGlobalShortcut(shortcutTerminal, graphics.KeyNone, 't', graphics.ModCtrl|graphics.ModAlt, func(graphics.Event) {
+	if err := app.RegisterGlobalShortcut(shortcutTerminal, gfxinput.KeyNone, 't', gfxinput.ModCtrl|gfxinput.ModAlt, func(gfxinput.Event) {
 		app.OpenTerminal()
 	}); err != nil {
 		return err
@@ -144,20 +145,20 @@ func run() error {
 	return nil
 }
 
-func (a *BackgroundApp) handleCoreEvent(ev graphics.Event) bool {
+func (a *BackgroundApp) handleCoreEvent(ev gfxinput.Event) bool {
 	switch ev.Type {
-	case graphics.EventMouseMove:
+	case gfxinput.EventMouseMove:
 		a.mouseX = ev.X
 		a.mouseY = ev.Y
-	case graphics.EventMouseButtonRelease:
-		if ev.MouseButton == graphics.MouseButtonRight {
+	case gfxinput.EventMouseButtonRelease:
+		if ev.MouseButton == gfxinput.MouseButtonRight {
 			a.mouseX = ev.X
 			a.mouseY = ev.Y
 			return a.OpenMenu("DesktopMenu", ev.X, ev.Y)
 		}
-	case graphics.EventMouseButtonPress:
+	case gfxinput.EventMouseButtonPress:
 		// Dismiss open desktop menu quickly when user clicks the wallpaper.
-		if ev.MouseButton == graphics.MouseButtonLeft {
+		if ev.MouseButton == gfxinput.MouseButtonLeft {
 			a.CloseMenu()
 		}
 	}
@@ -169,8 +170,8 @@ func (a *BackgroundApp) openDesktopMenuAtPointer() {
 	if x < 0 || y < 0 {
 		if root := a.FindElement("Root"); root != nil {
 			b := root.Bounds()
-			x = b.W / 2
-			y = b.H / 2
+			x = b.Dx() / 2
+			y = b.Dy() / 2
 		} else {
 			x, y = 20, 20
 		}
@@ -264,10 +265,9 @@ func watchSettings(app *BackgroundApp) {
 	}
 }
 
-func setAppBackground(app *BackgroundApp, color graphics.Color) {
-	internal := app.InternalApp()
-	if internal != nil {
-		internal.SetBackground(color)
+func setAppBackground(app *BackgroundApp, color color.NRGBA) {
+	if app != nil {
+		app.App.SetBackground(color)
 	}
 }
 
@@ -386,10 +386,10 @@ func flagProvided(name string) bool {
 	return false
 }
 
-func parseHexColor(value string) (graphics.Color, error) {
+func parseHexColor(value string) (color.NRGBA, error) {
 	v := strings.TrimPrefix(strings.TrimSpace(value), "#")
 	if len(v) != 6 && len(v) != 8 {
-		return graphics.Color{}, fmt.Errorf("invalid --color %q: expected RRGGBB or RRGGBBAA", value)
+		return color.NRGBA{}, fmt.Errorf("invalid --color %q: expected RRGGBB or RRGGBBAA", value)
 	}
 	var parsed uint32
 	for _, ch := range v {
@@ -402,13 +402,13 @@ func parseHexColor(value string) (graphics.Color, error) {
 		case ch >= 'A' && ch <= 'F':
 			parsed += uint32(ch-'A') + 10
 		default:
-			return graphics.Color{}, fmt.Errorf("invalid --color %q: bad hex digit %q", value, string(ch))
+			return color.NRGBA{}, fmt.Errorf("invalid --color %q: bad hex digit %q", value, string(ch))
 		}
 	}
-	return graphics.NewColorHex(parsed), nil
+	return core.NewColorHex(parsed), nil
 }
 
-func colorToHex(c graphics.Color) string {
+func colorToHex(c color.NRGBA) string {
 	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
 }
 

@@ -17,7 +17,7 @@
 
 package wayland
 
-import graphics "avyos.dev/pkg/graphics/input"
+import gfxinput "avyos.dev/pkg/graphics/input"
 
 // wl_seat opcodes (client → server)
 const (
@@ -157,96 +157,96 @@ const (
 
 // keyMapping maps an evdev keycode to a Key constant and runes.
 type keyMapping struct {
-	key     graphics.Key
+	key     gfxinput.Key
 	normal  rune
 	shifted rune
 }
 
 // keyMap is the US keyboard layout mapping (evdev keycodes).
 var keyMap = map[uint32]keyMapping{
-	evKeyEsc:        {graphics.KeyEscape, 0, 0},
-	evKey1:          {graphics.KeyNone, '1', '!'},
-	evKey2:          {graphics.KeyNone, '2', '@'},
-	evKey3:          {graphics.KeyNone, '3', '#'},
-	evKey4:          {graphics.KeyNone, '4', '$'},
-	evKey5:          {graphics.KeyNone, '5', '%'},
-	evKey6:          {graphics.KeyNone, '6', '^'},
-	evKey7:          {graphics.KeyNone, '7', '&'},
-	evKey8:          {graphics.KeyNone, '8', '*'},
-	evKey9:          {graphics.KeyNone, '9', '('},
-	evKey0:          {graphics.KeyNone, '0', ')'},
-	evKeyMinus:      {graphics.KeyNone, '-', '_'},
-	evKeyEqual:      {graphics.KeyNone, '=', '+'},
-	evKeyBackspace:  {graphics.KeyBackspace, 0, 0},
-	evKeyTab:        {graphics.KeyTab, '\t', '\t'},
-	evKeyQ:          {graphics.KeyNone, 'q', 'Q'},
-	evKeyW:          {graphics.KeyNone, 'w', 'W'},
-	evKeyE:          {graphics.KeyNone, 'e', 'E'},
-	evKeyR:          {graphics.KeyNone, 'r', 'R'},
-	evKeyT:          {graphics.KeyNone, 't', 'T'},
-	evKeyY:          {graphics.KeyNone, 'y', 'Y'},
-	evKeyU:          {graphics.KeyNone, 'u', 'U'},
-	evKeyI:          {graphics.KeyNone, 'i', 'I'},
-	evKeyO:          {graphics.KeyNone, 'o', 'O'},
-	evKeyP:          {graphics.KeyNone, 'p', 'P'},
-	evKeyLeftBrace:  {graphics.KeyNone, '[', '{'},
-	evKeyRightBrace: {graphics.KeyNone, ']', '}'},
-	evKeyEnter:      {graphics.KeyEnter, '\n', '\n'},
-	evKeyLeftCtrl:   {graphics.KeyLeftCtrl, 0, 0},
-	evKeyA:          {graphics.KeyNone, 'a', 'A'},
-	evKeyS:          {graphics.KeyNone, 's', 'S'},
-	evKeyD:          {graphics.KeyNone, 'd', 'D'},
-	evKeyF:          {graphics.KeyNone, 'f', 'F'},
-	evKeyG:          {graphics.KeyNone, 'g', 'G'},
-	evKeyH:          {graphics.KeyNone, 'h', 'H'},
-	evKeyJ:          {graphics.KeyNone, 'j', 'J'},
-	evKeyK:          {graphics.KeyNone, 'k', 'K'},
-	evKeyL:          {graphics.KeyNone, 'l', 'L'},
-	evKeySemicolon:  {graphics.KeyNone, ';', ':'},
-	evKeyApostrophe: {graphics.KeyNone, '\'', '"'},
-	evKeyGrave:      {graphics.KeyNone, '`', '~'},
-	evKeyLeftShift:  {graphics.KeyLeftShift, 0, 0},
-	evKeyBackslash:  {graphics.KeyNone, '\\', '|'},
-	evKeyZ:          {graphics.KeyNone, 'z', 'Z'},
-	evKeyX:          {graphics.KeyNone, 'x', 'X'},
-	evKeyC:          {graphics.KeyNone, 'c', 'C'},
-	evKeyV:          {graphics.KeyNone, 'v', 'V'},
-	evKeyB:          {graphics.KeyNone, 'b', 'B'},
-	evKeyN:          {graphics.KeyNone, 'n', 'N'},
-	evKeyM:          {graphics.KeyNone, 'm', 'M'},
-	evKeyComma:      {graphics.KeyNone, ',', '<'},
-	evKeyDot:        {graphics.KeyNone, '.', '>'},
-	evKeySlash:      {graphics.KeyNone, '/', '?'},
-	evKeyRightShift: {graphics.KeyRightShift, 0, 0},
-	evKeyLeftAlt:    {graphics.KeyLeftAlt, 0, 0},
-	evKeySpace:      {graphics.KeySpace, ' ', ' '},
-	evKeyCapsLock:   {graphics.KeyCapsLock, 0, 0},
-	evKeyF1:         {graphics.KeyF1, 0, 0},
-	evKeyF2:         {graphics.KeyF2, 0, 0},
-	evKeyF3:         {graphics.KeyF3, 0, 0},
-	evKeyF4:         {graphics.KeyF4, 0, 0},
-	evKeyF5:         {graphics.KeyF5, 0, 0},
-	evKeyF6:         {graphics.KeyF6, 0, 0},
-	evKeyF7:         {graphics.KeyF7, 0, 0},
-	evKeyF8:         {graphics.KeyF8, 0, 0},
-	evKeyF9:         {graphics.KeyF9, 0, 0},
-	evKeyF10:        {graphics.KeyF10, 0, 0},
-	evKeyF11:        {graphics.KeyF11, 0, 0},
-	evKeyF12:        {graphics.KeyF12, 0, 0},
-	evKeyNumLock:    {graphics.KeyNumLock, 0, 0},
-	evKeyScrollLock: {graphics.KeyScrollLock, 0, 0},
-	evKeyRightCtrl:  {graphics.KeyRightCtrl, 0, 0},
-	evKeyRightAlt:   {graphics.KeyRightAlt, 0, 0},
-	evKeyHome:       {graphics.KeyHome, 0, 0},
-	evKeyUp:         {graphics.KeyUp, 0, 0},
-	evKeyPageUp:     {graphics.KeyPageUp, 0, 0},
-	evKeyLeft:       {graphics.KeyLeft, 0, 0},
-	evKeyRight:      {graphics.KeyRight, 0, 0},
-	evKeyEnd:        {graphics.KeyEnd, 0, 0},
-	evKeyDown:       {graphics.KeyDown, 0, 0},
-	evKeyPageDown:   {graphics.KeyPageDown, 0, 0},
-	evKeyInsert:     {graphics.KeyInsert, 0, 0},
-	evKeyDelete:     {graphics.KeyDelete, 0, 0},
+	evKeyEsc:        {gfxinput.KeyEscape, 0, 0},
+	evKey1:          {gfxinput.KeyNone, '1', '!'},
+	evKey2:          {gfxinput.KeyNone, '2', '@'},
+	evKey3:          {gfxinput.KeyNone, '3', '#'},
+	evKey4:          {gfxinput.KeyNone, '4', '$'},
+	evKey5:          {gfxinput.KeyNone, '5', '%'},
+	evKey6:          {gfxinput.KeyNone, '6', '^'},
+	evKey7:          {gfxinput.KeyNone, '7', '&'},
+	evKey8:          {gfxinput.KeyNone, '8', '*'},
+	evKey9:          {gfxinput.KeyNone, '9', '('},
+	evKey0:          {gfxinput.KeyNone, '0', ')'},
+	evKeyMinus:      {gfxinput.KeyNone, '-', '_'},
+	evKeyEqual:      {gfxinput.KeyNone, '=', '+'},
+	evKeyBackspace:  {gfxinput.KeyBackspace, 0, 0},
+	evKeyTab:        {gfxinput.KeyTab, '\t', '\t'},
+	evKeyQ:          {gfxinput.KeyNone, 'q', 'Q'},
+	evKeyW:          {gfxinput.KeyNone, 'w', 'W'},
+	evKeyE:          {gfxinput.KeyNone, 'e', 'E'},
+	evKeyR:          {gfxinput.KeyNone, 'r', 'R'},
+	evKeyT:          {gfxinput.KeyNone, 't', 'T'},
+	evKeyY:          {gfxinput.KeyNone, 'y', 'Y'},
+	evKeyU:          {gfxinput.KeyNone, 'u', 'U'},
+	evKeyI:          {gfxinput.KeyNone, 'i', 'I'},
+	evKeyO:          {gfxinput.KeyNone, 'o', 'O'},
+	evKeyP:          {gfxinput.KeyNone, 'p', 'P'},
+	evKeyLeftBrace:  {gfxinput.KeyNone, '[', '{'},
+	evKeyRightBrace: {gfxinput.KeyNone, ']', '}'},
+	evKeyEnter:      {gfxinput.KeyEnter, '\n', '\n'},
+	evKeyLeftCtrl:   {gfxinput.KeyLeftCtrl, 0, 0},
+	evKeyA:          {gfxinput.KeyNone, 'a', 'A'},
+	evKeyS:          {gfxinput.KeyNone, 's', 'S'},
+	evKeyD:          {gfxinput.KeyNone, 'd', 'D'},
+	evKeyF:          {gfxinput.KeyNone, 'f', 'F'},
+	evKeyG:          {gfxinput.KeyNone, 'g', 'G'},
+	evKeyH:          {gfxinput.KeyNone, 'h', 'H'},
+	evKeyJ:          {gfxinput.KeyNone, 'j', 'J'},
+	evKeyK:          {gfxinput.KeyNone, 'k', 'K'},
+	evKeyL:          {gfxinput.KeyNone, 'l', 'L'},
+	evKeySemicolon:  {gfxinput.KeyNone, ';', ':'},
+	evKeyApostrophe: {gfxinput.KeyNone, '\'', '"'},
+	evKeyGrave:      {gfxinput.KeyNone, '`', '~'},
+	evKeyLeftShift:  {gfxinput.KeyLeftShift, 0, 0},
+	evKeyBackslash:  {gfxinput.KeyNone, '\\', '|'},
+	evKeyZ:          {gfxinput.KeyNone, 'z', 'Z'},
+	evKeyX:          {gfxinput.KeyNone, 'x', 'X'},
+	evKeyC:          {gfxinput.KeyNone, 'c', 'C'},
+	evKeyV:          {gfxinput.KeyNone, 'v', 'V'},
+	evKeyB:          {gfxinput.KeyNone, 'b', 'B'},
+	evKeyN:          {gfxinput.KeyNone, 'n', 'N'},
+	evKeyM:          {gfxinput.KeyNone, 'm', 'M'},
+	evKeyComma:      {gfxinput.KeyNone, ',', '<'},
+	evKeyDot:        {gfxinput.KeyNone, '.', '>'},
+	evKeySlash:      {gfxinput.KeyNone, '/', '?'},
+	evKeyRightShift: {gfxinput.KeyRightShift, 0, 0},
+	evKeyLeftAlt:    {gfxinput.KeyLeftAlt, 0, 0},
+	evKeySpace:      {gfxinput.KeySpace, ' ', ' '},
+	evKeyCapsLock:   {gfxinput.KeyCapsLock, 0, 0},
+	evKeyF1:         {gfxinput.KeyF1, 0, 0},
+	evKeyF2:         {gfxinput.KeyF2, 0, 0},
+	evKeyF3:         {gfxinput.KeyF3, 0, 0},
+	evKeyF4:         {gfxinput.KeyF4, 0, 0},
+	evKeyF5:         {gfxinput.KeyF5, 0, 0},
+	evKeyF6:         {gfxinput.KeyF6, 0, 0},
+	evKeyF7:         {gfxinput.KeyF7, 0, 0},
+	evKeyF8:         {gfxinput.KeyF8, 0, 0},
+	evKeyF9:         {gfxinput.KeyF9, 0, 0},
+	evKeyF10:        {gfxinput.KeyF10, 0, 0},
+	evKeyF11:        {gfxinput.KeyF11, 0, 0},
+	evKeyF12:        {gfxinput.KeyF12, 0, 0},
+	evKeyNumLock:    {gfxinput.KeyNumLock, 0, 0},
+	evKeyScrollLock: {gfxinput.KeyScrollLock, 0, 0},
+	evKeyRightCtrl:  {gfxinput.KeyRightCtrl, 0, 0},
+	evKeyRightAlt:   {gfxinput.KeyRightAlt, 0, 0},
+	evKeyHome:       {gfxinput.KeyHome, 0, 0},
+	evKeyUp:         {gfxinput.KeyUp, 0, 0},
+	evKeyPageUp:     {gfxinput.KeyPageUp, 0, 0},
+	evKeyLeft:       {gfxinput.KeyLeft, 0, 0},
+	evKeyRight:      {gfxinput.KeyRight, 0, 0},
+	evKeyEnd:        {gfxinput.KeyEnd, 0, 0},
+	evKeyDown:       {gfxinput.KeyDown, 0, 0},
+	evKeyPageDown:   {gfxinput.KeyPageDown, 0, 0},
+	evKeyInsert:     {gfxinput.KeyInsert, 0, 0},
+	evKeyDelete:     {gfxinput.KeyDelete, 0, 0},
 }
 
 // seatHandler manages wl_pointer and wl_keyboard events.
@@ -254,15 +254,15 @@ type seatHandler struct {
 	cl         *client
 	pointerID  uint32
 	keyboardID uint32
-	events     chan graphics.Event
+	events     chan gfxinput.Event
 	mouseX     int
 	mouseY     int
-	modifiers  graphics.Modifiers
+	modifiers  gfxinput.Modifiers
 	capsLock   bool
 }
 
 // newSeatHandler creates a seat handler with the given event channel.
-func newSeatHandler(cl *client, events chan graphics.Event) *seatHandler {
+func newSeatHandler(cl *client, events chan gfxinput.Event) *seatHandler {
 	return &seatHandler{
 		cl:     cl,
 		events: events,
@@ -323,8 +323,8 @@ func (s *seatHandler) handlePointer(_ uint32, opcode uint16, payload []byte, fds
 			sy := fixedToInt(getInt32(payload, 8))
 			s.mouseX = sx
 			s.mouseY = sy
-			s.emit(graphics.Event{
-				Type:      graphics.EventMouseMove,
+			s.emit(gfxinput.Event{
+				Type:      gfxinput.EventMouseMove,
 				X:         sx,
 				Y:         sy,
 				Modifiers: s.modifiers,
@@ -337,22 +337,22 @@ func (s *seatHandler) handlePointer(_ uint32, opcode uint16, payload []byte, fds
 			button := getUint32(payload, 8)
 			state := getUint32(payload, 12)
 
-			var btn graphics.MouseButton
+			var btn gfxinput.MouseButton
 			switch button {
 			case evBtnLeft:
-				btn = graphics.MouseButtonLeft
+				btn = gfxinput.MouseButtonLeft
 			case evBtnRight:
-				btn = graphics.MouseButtonRight
+				btn = gfxinput.MouseButtonRight
 			case evBtnMiddle:
-				btn = graphics.MouseButtonMiddle
+				btn = gfxinput.MouseButtonMiddle
 			}
 
-			evType := graphics.EventMouseButtonPress
+			evType := gfxinput.EventMouseButtonPress
 			if state == 0 {
-				evType = graphics.EventMouseButtonRelease
+				evType = gfxinput.EventMouseButtonRelease
 			}
 
-			s.emit(graphics.Event{
+			s.emit(gfxinput.Event{
 				Type:        evType,
 				X:           s.mouseX,
 				Y:           s.mouseY,
@@ -376,25 +376,25 @@ func (s *seatHandler) handlePointer(_ uint32, opcode uint16, payload []byte, fds
 			if val == 0 {
 				return
 			}
-			var btn graphics.MouseButton
+			var btn gfxinput.MouseButton
 			switch axis {
 			case pointerAxisVertical:
 				if val > 0 {
-					btn = graphics.MouseButtonWheelDown
+					btn = gfxinput.MouseButtonWheelDown
 				} else {
-					btn = graphics.MouseButtonWheelUp
+					btn = gfxinput.MouseButtonWheelUp
 				}
 			case pointerAxisHorizontal:
 				if val > 0 {
-					btn = graphics.MouseButtonWheelRight
+					btn = gfxinput.MouseButtonWheelRight
 				} else {
-					btn = graphics.MouseButtonWheelLeft
+					btn = gfxinput.MouseButtonWheelLeft
 				}
 			default:
 				return
 			}
-			s.emit(graphics.Event{
-				Type:        graphics.EventMouseButtonPress,
+			s.emit(gfxinput.Event{
+				Type:        gfxinput.EventMouseButtonPress,
 				X:           s.mouseX,
 				Y:           s.mouseY,
 				MouseButton: btn,
@@ -433,7 +433,7 @@ func (s *seatHandler) handleKeyboard(_ uint32, opcode uint16, payload []byte, fd
 
 			// Determine rune
 			var r rune
-			shifted := s.modifiers&graphics.ModShift != 0
+			shifted := s.modifiers&gfxinput.ModShift != 0
 			if s.capsLock && mapping.normal >= 'a' && mapping.normal <= 'z' {
 				shifted = !shifted
 			}
@@ -443,12 +443,12 @@ func (s *seatHandler) handleKeyboard(_ uint32, opcode uint16, payload []byte, fd
 				r = mapping.normal
 			}
 
-			evType := graphics.EventKeyPress
+			evType := gfxinput.EventKeyPress
 			if state == 0 {
-				evType = graphics.EventKeyRelease
+				evType = gfxinput.EventKeyRelease
 			}
 
-			s.emit(graphics.Event{
+			s.emit(gfxinput.Event{
 				Type:      evType,
 				Key:       mapping.key,
 				Rune:      r,
@@ -465,17 +465,17 @@ func (s *seatHandler) handleKeyboard(_ uint32, opcode uint16, payload []byte, fd
 
 			s.modifiers = 0
 			if depressed&1 != 0 { // Shift
-				s.modifiers |= graphics.ModShift
+				s.modifiers |= gfxinput.ModShift
 			}
 			if depressed&4 != 0 { // Control
-				s.modifiers |= graphics.ModCtrl
+				s.modifiers |= gfxinput.ModCtrl
 			}
 			if depressed&8 != 0 { // Alt/Mod1
-				s.modifiers |= graphics.ModAlt
+				s.modifiers |= gfxinput.ModAlt
 			}
 			s.capsLock = locked&2 != 0
 			if s.capsLock {
-				s.modifiers |= graphics.ModCapsLock
+				s.modifiers |= gfxinput.ModCapsLock
 			}
 		}
 
@@ -484,39 +484,39 @@ func (s *seatHandler) handleKeyboard(_ uint32, opcode uint16, payload []byte, fd
 	}
 }
 
-func (s *seatHandler) updateModifiers(key graphics.Key, state uint32) {
+func (s *seatHandler) updateModifiers(key gfxinput.Key, state uint32) {
 	switch key {
-	case graphics.KeyLeftShift, graphics.KeyRightShift:
+	case gfxinput.KeyLeftShift, gfxinput.KeyRightShift:
 		if state == 1 {
-			s.modifiers |= graphics.ModShift
+			s.modifiers |= gfxinput.ModShift
 		} else {
-			s.modifiers &^= graphics.ModShift
+			s.modifiers &^= gfxinput.ModShift
 		}
-	case graphics.KeyLeftCtrl, graphics.KeyRightCtrl:
+	case gfxinput.KeyLeftCtrl, gfxinput.KeyRightCtrl:
 		if state == 1 {
-			s.modifiers |= graphics.ModCtrl
+			s.modifiers |= gfxinput.ModCtrl
 		} else {
-			s.modifiers &^= graphics.ModCtrl
+			s.modifiers &^= gfxinput.ModCtrl
 		}
-	case graphics.KeyLeftAlt, graphics.KeyRightAlt:
+	case gfxinput.KeyLeftAlt, gfxinput.KeyRightAlt:
 		if state == 1 {
-			s.modifiers |= graphics.ModAlt
+			s.modifiers |= gfxinput.ModAlt
 		} else {
-			s.modifiers &^= graphics.ModAlt
+			s.modifiers &^= gfxinput.ModAlt
 		}
-	case graphics.KeyCapsLock:
+	case gfxinput.KeyCapsLock:
 		if state == 1 {
 			s.capsLock = !s.capsLock
 			if s.capsLock {
-				s.modifiers |= graphics.ModCapsLock
+				s.modifiers |= gfxinput.ModCapsLock
 			} else {
-				s.modifiers &^= graphics.ModCapsLock
+				s.modifiers &^= gfxinput.ModCapsLock
 			}
 		}
 	}
 }
 
-func (s *seatHandler) emit(ev graphics.Event) {
+func (s *seatHandler) emit(ev gfxinput.Event) {
 	select {
 	case s.events <- ev:
 	default:

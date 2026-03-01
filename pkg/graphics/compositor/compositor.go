@@ -19,13 +19,17 @@ package compositor
 
 import (
 	"fmt"
+	"image"
+	"image/color"
 	"log"
 	"net"
 	"sync"
 	"time"
 
-	gfxfont "avyos.dev/pkg/graphics/font"
-	graphics "avyos.dev/pkg/graphics/input"
+	gfxdisplay "avyos.dev/pkg/graphics/backend"
+	gfxfont "avyos.dev/pkg/graphics/fonts"
+	gfxinput "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
 const (
@@ -55,19 +59,19 @@ func (w *Window) surfaceLocal(gx, gy int) (int, int) {
 }
 
 // bounds returns the total window bounds including decorations.
-func (w *Window) bounds() graphics.Rect {
-	return graphics.Rect{X: w.x, Y: w.y, W: w.width, H: w.height + w.decorH}
+func (w *Window) bounds() image.Rectangle {
+	return core.RectXYWH(w.x, w.y, w.width, w.height+w.decorH)
 }
 
 // containsPoint checks if a point is within the window bounds.
 func (w *Window) containsPoint(x, y int) bool {
-	return w.bounds().ContainsXY(x, y)
+	return core.RectContainsXY(w.bounds(), x, y)
 }
 
 // Compositor is the main Wayland compositor.
 type Compositor struct {
-	fb       graphics.Backend
-	input    graphics.InputHandler
+	fb       gfxdisplay.Backend
+	input    gfxinput.Handler
 	listener *net.UnixListener
 	display  string
 
@@ -95,7 +99,7 @@ type Compositor struct {
 }
 
 // New creates a new compositor.
-func New(fb graphics.Backend, input graphics.InputHandler) *Compositor {
+func New(fb gfxdisplay.Backend, input gfxinput.Handler) *Compositor {
 	c := &Compositor{
 		fb:      fb,
 		input:   input,
@@ -159,10 +163,10 @@ func (c *Compositor) Run() error {
 			if ev == nil {
 				break
 			}
-			if ev.Type == graphics.EventQuit {
+			if ev.Type == gfxinput.EventQuit {
 				return nil
 			}
-			if ev.Type == graphics.EventMouseMove {
+			if ev.Type == gfxinput.EventMouseMove {
 				mx, my := c.input.MousePosition()
 				ev.X = mx
 				ev.Y = my
@@ -258,7 +262,7 @@ func (c *Compositor) composite() {
 	c.mu.Unlock()
 
 	// Clear background
-	bg := graphics.NewColorHex(bgColor)
+	bg := core.NewColorHex(bgColor)
 	buf.Clear(bg)
 
 	// Layer: background
@@ -300,13 +304,13 @@ func (c *Compositor) composite() {
 	fpsText := fmt.Sprintf("FPS: %d", c.fps)
 	w, _ := c.fb.Size()
 	fpsX := w - len(fpsText)*8 - 4
-	gfxfont.DefaultFont.DrawText(buf, fpsText, fpsX, 4, graphics.NewColorHex(0xECEFF4), graphics.NewColorHex(0x2E3440))
+	gfxfont.DefaultFont.DrawText(buf, fpsText, fpsX, 4, core.NewColorHex(0xECEFF4), core.NewColorHex(0x2E3440))
 
 	c.fb.Flush()
 }
 
 // drawWindow draws a single window with decorations.
-func (c *Compositor) drawWindow(buf *graphics.Buffer, win *Window) {
+func (c *Compositor) drawWindow(buf *core.Buffer, win *Window) {
 	if win.surface == nil {
 		return
 	}
@@ -320,14 +324,14 @@ func (c *Compositor) drawWindow(buf *graphics.Buffer, win *Window) {
 	focused := win == c.inp.focusedWindow
 
 	// Title bar
-	var titleColor graphics.Color
+	var titleColor color.NRGBA
 	if focused {
-		titleColor = graphics.NewColorHex(decorActive)
+		titleColor = core.NewColorHex(decorActive)
 	} else {
-		titleColor = graphics.NewColorHex(decorInactive)
+		titleColor = core.NewColorHex(decorInactive)
 	}
 
-	titleRect := graphics.Rect{X: win.x, Y: win.y, W: win.width, H: win.decorH}
+	titleRect := core.RectXYWH(win.x, win.y, win.width, win.decorH)
 	buf.FillRect(titleRect, titleColor)
 
 	// Window title text
@@ -335,29 +339,24 @@ func (c *Compositor) drawWindow(buf *graphics.Buffer, win *Window) {
 	if win.toplevel != nil && win.toplevel.title != "" {
 		title = win.toplevel.title
 	}
-	textColor := graphics.NewColorHex(decorText)
+	textColor := core.NewColorHex(decorText)
 	textX := win.x + 6
 	textY := win.y + (win.decorH-16)/2
-	gfxfont.DefaultFont.DrawText(buf, title, textX, textY, textColor, graphics.Color{})
+	gfxfont.DefaultFont.DrawText(buf, title, textX, textY, textColor, color.NRGBA{})
 
 	// Close button [X]
-	closeBtnRect := graphics.Rect{
-		X: win.x + win.width - win.decorH,
-		Y: win.y,
-		W: win.decorH,
-		H: win.decorH,
-	}
-	buf.FillRect(closeBtnRect, graphics.NewColorHex(closeBtn))
-	xTextX := closeBtnRect.X + (closeBtnRect.W-8)/2
-	xTextY := closeBtnRect.Y + (closeBtnRect.H-16)/2
-	gfxfont.DefaultFont.DrawText(buf, "X", xTextX, xTextY, textColor, graphics.Color{})
+	closeBtnRect := core.RectXYWH(win.x+win.width-win.decorH, win.y, win.decorH, win.decorH)
+	buf.FillRect(closeBtnRect, core.NewColorHex(closeBtn))
+	xTextX := closeBtnRect.Min.X + (closeBtnRect.Dx()-8)/2
+	xTextY := closeBtnRect.Min.Y + (closeBtnRect.Dy()-16)/2
+	gfxfont.DefaultFont.DrawText(buf, "X", xTextX, xTextY, textColor, color.NRGBA{})
 
 	// Window border
-	borderRect := graphics.Rect{X: win.x - 1, Y: win.y - 1, W: win.width + 2, H: win.height + win.decorH + 2}
+	borderRect := core.RectXYWH(win.x-1, win.y-1, win.width+2, win.height+win.decorH+2)
 	if focused {
-		buf.DrawRect(borderRect, graphics.NewColorHex(decorActive))
+		buf.DrawRect(borderRect, core.NewColorHex(decorActive))
 	} else {
-		buf.DrawRect(borderRect, graphics.NewColorHex(decorInactive))
+		buf.DrawRect(borderRect, core.NewColorHex(decorInactive))
 	}
 
 	// Client surface content (use BlitOpaque since client may use XRGB with undefined alpha)
@@ -365,9 +364,9 @@ func (c *Compositor) drawWindow(buf *graphics.Buffer, win *Window) {
 }
 
 // drawCursor draws a simple software cursor.
-func (c *Compositor) drawCursor(buf *graphics.Buffer, x, y int) {
-	white := graphics.NewColorRGB(255, 255, 255)
-	black := graphics.NewColorRGB(0, 0, 0)
+func (c *Compositor) drawCursor(buf *core.Buffer, x, y int) {
+	white := core.NewColorRGB(255, 255, 255)
+	black := core.NewColorRGB(0, 0, 0)
 
 	// Simple arrow cursor
 	for i := 0; i < cursorSize; i++ {

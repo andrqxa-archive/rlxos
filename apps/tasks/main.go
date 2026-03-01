@@ -17,7 +17,6 @@ import (
 	"avyos.dev/pkg/appcatalog"
 	"avyos.dev/pkg/fs"
 	gapp "avyos.dev/pkg/graphics/app"
-	declapp "avyos.dev/pkg/graphics/app/decl"
 	gfxicons "avyos.dev/pkg/graphics/icons"
 	ui "avyos.dev/pkg/graphics/widget/engine"
 )
@@ -63,7 +62,7 @@ func (p procInfo) displayName() string {
 }
 
 type TaskManagerApp struct {
-	declapp.App
+	gapp.App
 	mu sync.Mutex
 
 	home string
@@ -223,7 +222,7 @@ func (a *TaskManagerApp) renderTaskTable() {
 	if table == nil {
 		return
 	}
-	a.updateTaskColumnLayout(table.Bounds().W)
+	a.updateTaskColumnLayout(table.Bounds().Dx())
 	table.ClearChildren()
 
 	if len(a.appProcs) == 0 && len(a.otherProcs) == 0 {

@@ -2,23 +2,24 @@ package engine
 
 import (
 	"fmt"
-	"math"
+	"image"
+	"image/color"
 	"regexp"
 	"strings"
 	"time"
 
-	gfxfont "avyos.dev/pkg/graphics/font"
-	graphics "avyos.dev/pkg/graphics/input"
+	gfxfont "avyos.dev/pkg/graphics/fonts"
+	core "avyos.dev/pkg/graphics/pixmap"
 	gfxrenderer "avyos.dev/pkg/graphics/renderer"
-	gfxtheme "avyos.dev/pkg/graphics/theme"
+	gfxtheme "avyos.dev/pkg/graphics/themes"
 )
 
 var tableMultiSpaceSplit = regexp.MustCompile(`\s{2,}`)
 
 // drawElement renders an element to the buffer based on its attributes.
-func drawElement(e *Element, buf *graphics.Buffer) {
+func drawElement(e *Element, buf *core.Buffer) {
 	bounds := e.bounds
-	if bounds.W <= 0 || bounds.H <= 0 {
+	if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
 		return
 	}
 
@@ -49,13 +50,13 @@ func drawElement(e *Element, buf *graphics.Buffer) {
 	}
 
 	restoreSelfClip := false
-	selfPrevClip := graphics.Rect{}
+	selfPrevClip := image.Rectangle{}
 	selfPrevClipOn := false
 	if e.overflowClipped() {
 		selfPrevClip, selfPrevClipOn = buf.Clip()
 		clipRect := bounds
 		if selfPrevClipOn {
-			clipRect = clipRect.Intersection(selfPrevClip)
+			clipRect = clipRect.Intersect(selfPrevClip)
 		}
 		buf.SetClip(clipRect)
 		restoreSelfClip = true
@@ -93,13 +94,13 @@ func drawElement(e *Element, buf *graphics.Buffer) {
 
 	// 6. Children
 	restoreChildrenClip := false
-	childrenPrevClip := graphics.Rect{}
+	childrenPrevClip := image.Rectangle{}
 	childrenPrevClipOn := false
 	if e.overflowClipped() && len(e.children) > 0 {
 		childrenPrevClip, childrenPrevClipOn = buf.Clip()
 		clipRect := e.contentArea()
 		if childrenPrevClipOn {
-			clipRect = clipRect.Intersection(childrenPrevClip)
+			clipRect = clipRect.Intersect(childrenPrevClip)
 		}
 		buf.SetClip(clipRect)
 		restoreChildrenClip = true
@@ -131,13 +132,13 @@ func drawElement(e *Element, buf *graphics.Buffer) {
 	}
 }
 
-func drawOverflowScrollbar(e *Element, buf *graphics.Buffer) {
+func drawOverflowScrollbar(e *Element, buf *core.Buffer) {
 	if !e.overflowScrollable() || e.isRow() {
 		return
 	}
 
 	content := e.contentArea()
-	if content.W < 10 || content.H < 16 {
+	if content.Dx() < 10 || content.Dy() < 16 {
 		return
 	}
 
@@ -166,20 +167,15 @@ func drawOverflowScrollbar(e *Element, buf *graphics.Buffer) {
 		margin = 0
 	}
 
-	trackRect := graphics.Rect{
-		X: content.X + content.W - barW - margin,
-		Y: content.Y + margin,
-		W: barW,
-		H: content.H - margin*2,
-	}
-	if trackRect.H < 8 || trackRect.W < 2 {
+	trackRect := core.RectXYWH(content.Min.X+content.Dx()-barW-margin, content.Min.Y+margin, barW, content.Dy()-margin*2)
+	if trackRect.Dy() < 8 || trackRect.Dx() < 2 {
 		return
 	}
 
-	contentTotal := content.H + maxScroll
+	contentTotal := content.Dy() + maxScroll
 	thumbH := 0
 	if contentTotal > 0 {
-		thumbH = trackRect.H * content.H / contentTotal
+		thumbH = trackRect.Dy() * content.Dy() / contentTotal
 	}
 	minThumb := e.AttrInt("scrollbarThumbMinHeight", 22)
 	if minThumb < 10 {
@@ -188,19 +184,19 @@ func drawOverflowScrollbar(e *Element, buf *graphics.Buffer) {
 	if thumbH < minThumb {
 		thumbH = minThumb
 	}
-	if thumbH > trackRect.H {
-		thumbH = trackRect.H
+	if thumbH > trackRect.Dy() {
+		thumbH = trackRect.Dy()
 	}
 
-	travel := trackRect.H - thumbH
-	thumbY := trackRect.Y
+	travel := trackRect.Dy() - thumbH
+	thumbY := trackRect.Min.Y
 	if travel > 0 {
 		thumbY += scrollY * travel / maxScroll
 	}
-	thumbRect := graphics.Rect{X: trackRect.X, Y: thumbY, W: trackRect.W, H: thumbH}
+	thumbRect := core.RectXYWH(trackRect.Min.X, thumbY, trackRect.Dx(), thumbH)
 
-	trackColor := e.AttrColor("scrollbarTrackColor", graphics.NewColor(16, 24, 40, 28))
-	thumbColor := e.AttrColor("scrollbarThumbColor", graphics.NewColor(70, 96, 148, 136))
+	trackColor := e.AttrColor("scrollbarTrackColor", core.NewColor(16, 24, 40, 28))
+	thumbColor := e.AttrColor("scrollbarThumbColor", core.NewColor(70, 96, 148, 136))
 	radius := barW / 2
 
 	if trackColor.A > 0 {
@@ -211,7 +207,7 @@ func drawOverflowScrollbar(e *Element, buf *graphics.Buffer) {
 	}
 }
 
-func drawElementShadow(e *Element, buf *graphics.Buffer, bounds graphics.Rect, radius int) {
+func drawElementShadow(e *Element, buf *core.Buffer, bounds image.Rectangle, radius int) {
 	if !e.AttrBool("shadow", false) && e.Attr("shadowColor", "") == "" {
 		return
 	}
@@ -225,21 +221,21 @@ func drawElementShadow(e *Element, buf *graphics.Buffer, bounds graphics.Rect, r
 	}
 	shadowBase := bg
 	if shadowBase.A == 0 {
-		if c := e.AttrColor("gradientTop", graphics.Color{}); c.A > 0 {
+		if c := e.AttrColor("gradientTop", color.NRGBA{}); c.A > 0 {
 			shadowBase = c
 		}
-		if c := e.AttrColor("gradientBottom", graphics.Color{}); c.A > 0 {
+		if c := e.AttrColor("gradientBottom", color.NRGBA{}); c.A > 0 {
 			if shadowBase.A == 0 {
 				shadowBase = c
 			} else {
-				shadowBase = mixColors(shadowBase, c, 0.5)
+				shadowBase = gfxrenderer.MixColors(shadowBase, c, 0.5)
 			}
 		}
 	}
 	if shadowBase.A > 0 {
 		shadowBase.A = 255
 	}
-	c := e.AttrColor("shadowColor", graphics.NewColor(16, 24, 40, 14))
+	c := e.AttrColor("shadowColor", core.NewColor(16, 24, 40, 14))
 	if c.A == 0 {
 		return
 	}
@@ -277,79 +273,14 @@ func drawElementShadow(e *Element, buf *graphics.Buffer, bounds graphics.Rect, r
 		}
 	}
 
-	shadowRect := graphics.Rect{X: bounds.X + ox, Y: bounds.Y + oy, W: bounds.W, H: bounds.H}
-	startX := shadowRect.X - spread
-	if startX < 0 {
-		startX = 0
-	}
-	startY := shadowRect.Y - spread
-	if startY < 0 {
-		startY = 0
-	}
-	endX := shadowRect.X + shadowRect.W + spread
-	if endX > buf.Width {
-		endX = buf.Width
-	}
-	endY := shadowRect.Y + shadowRect.H + spread
-	if endY > buf.Height {
-		endY = buf.Height
-	}
-
-	spreadF := float64(spread)
-	gapF := float64(gap)
-	effective := spreadF - gapF
-	if effective <= 0 {
-		effective = 1
-	}
-
-	for y := startY; y < endY; y++ {
-		for x := startX; x < endX; x++ {
-			d := gfxrenderer.RoundedRectOutsideDistance(float64(x)+0.5, float64(y)+0.5, shadowRect, radius)
-			if d > spreadF {
-				continue
-			}
-			if d < gapF {
-				continue
-			}
-
-			// Soft eased falloff from an edge gap outwards, avoids contour lines.
-			dist := d - gapF
-			if dist < 0 {
-				dist = 0
-			}
-			t := dist / effective
-			if t < 0 {
-				t = 0
-			}
-			if t > 1 {
-				t = 1
-			}
-			falloff := (1 - t) * (1 - t)
-			a := uint8(float64(c.A) * falloff)
-			if a == 0 {
-				continue
-			}
-
-			sc := graphics.NewColor(c.R, c.G, c.B, a)
-			dst := buf.GetPixel(x, y)
-			// When drawing over transparent pixels (common in layer/popup surfaces),
-			// tint shadow using the element surface color but keep soft shadow alpha.
-			if shadowBase.A > 0 && dst.A == 0 {
-				baseOpaque := graphics.NewColor(shadowBase.R, shadowBase.G, shadowBase.B, 255)
-				tinted := sc.Blend(baseOpaque)
-				tinted.A = sc.A
-				buf.SetPixel(x, y, tinted)
-				continue
-			}
-			buf.SetPixel(x, y, sc.Blend(dst))
-		}
-	}
+	shadowRect := core.RectXYWH(bounds.Min.X+ox, bounds.Min.Y+oy, bounds.Dx(), bounds.Dy())
+	gfxrenderer.DrawRoundedShadow(buf, shadowRect, radius, c, shadowBase, spread, gap)
 }
 
-func drawElementBackground(e *Element, buf *graphics.Buffer, bounds graphics.Rect, radius int) {
-	bg := e.AttrColor("background", graphics.Color{})
-	gradTop := e.AttrColor("gradientTop", graphics.Color{})
-	gradBottom := e.AttrColor("gradientBottom", graphics.Color{})
+func drawElementBackground(e *Element, buf *core.Buffer, bounds image.Rectangle, radius int) {
+	bg := e.AttrColor("background", color.NRGBA{})
+	gradTop := e.AttrColor("gradientTop", color.NRGBA{})
+	gradBottom := e.AttrColor("gradientBottom", color.NRGBA{})
 	overlay := stateBackgroundOverlay(e)
 
 	if gradTop.A == 0 && gradBottom.A == 0 {
@@ -361,7 +292,7 @@ func drawElementBackground(e *Element, buf *graphics.Buffer, bounds graphics.Rec
 			}
 		}
 		if overlay.A > 0 {
-			drawVerticalGradient(buf, bounds, radius, overlay, overlay)
+			gfxrenderer.DrawVerticalGradient(buf, bounds, radius, overlay, overlay)
 		}
 		return
 	}
@@ -372,80 +303,13 @@ func drawElementBackground(e *Element, buf *graphics.Buffer, bounds graphics.Rec
 	if gradBottom.A == 0 {
 		gradBottom = bg
 	}
-	drawVerticalGradient(buf, bounds, radius, gradTop, gradBottom)
+	gfxrenderer.DrawVerticalGradient(buf, bounds, radius, gradTop, gradBottom)
 	if overlay.A > 0 {
-		drawVerticalGradient(buf, bounds, radius, overlay, overlay)
+		gfxrenderer.DrawVerticalGradient(buf, bounds, radius, overlay, overlay)
 	}
 }
 
-func drawVerticalGradient(buf *graphics.Buffer, r graphics.Rect, radius int, top, bottom graphics.Color) {
-	if r.W <= 0 || r.H <= 0 {
-		return
-	}
-	if r.H == 1 {
-		fill := top
-		if fill.A == 0 {
-			return
-		}
-		endX := r.X + r.W
-		for x := r.X; x < endX; x++ {
-			if radius > 0 {
-				cov := gfxrenderer.RoundedRectCoverage(x, r.Y, r, radius)
-				if cov <= 0.001 {
-					continue
-				}
-				alpha := uint8(float64(fill.A)*cov + 0.5)
-				if alpha == 0 {
-					continue
-				}
-				sc := graphics.NewColor(fill.R, fill.G, fill.B, alpha)
-				dst := buf.GetPixel(x, r.Y)
-				buf.SetPixel(x, r.Y, sc.Blend(dst))
-				continue
-			}
-			dst := buf.GetPixel(x, r.Y)
-			buf.SetPixel(x, r.Y, fill.Blend(dst))
-		}
-		return
-	}
-
-	endY := r.Y + r.H
-	endX := r.X + r.W
-	hm1 := float64(r.H - 1)
-	for y := r.Y; y < endY; y++ {
-		t := float64(y-r.Y) / hm1
-		line := graphics.NewColor(
-			uint8(float64(top.R)+(float64(bottom.R)-float64(top.R))*t+0.5),
-			uint8(float64(top.G)+(float64(bottom.G)-float64(top.G))*t+0.5),
-			uint8(float64(top.B)+(float64(bottom.B)-float64(top.B))*t+0.5),
-			uint8(float64(top.A)+(float64(bottom.A)-float64(top.A))*t+0.5),
-		)
-		if line.A == 0 {
-			continue
-		}
-		for x := r.X; x < endX; x++ {
-			if radius > 0 {
-				cov := gfxrenderer.RoundedRectCoverage(x, y, r, radius)
-				if cov <= 0.001 {
-					continue
-				}
-				if cov < 0.999 {
-					sc := graphics.NewColor(line.R, line.G, line.B, uint8(float64(line.A)*cov+0.5))
-					if sc.A == 0 {
-						continue
-					}
-					dst := buf.GetPixel(x, y)
-					buf.SetPixel(x, y, sc.Blend(dst))
-					continue
-				}
-			}
-			dst := buf.GetPixel(x, y)
-			buf.SetPixel(x, y, line.Blend(dst))
-		}
-	}
-}
-
-func drawElementFocusRing(e *Element, buf *graphics.Buffer, bounds graphics.Rect, radius int) {
+func drawElementFocusRing(e *Element, buf *core.Buffer, bounds image.Rectangle, radius int) {
 	if !e.focused {
 		return
 	}
@@ -481,32 +345,17 @@ func drawElementFocusRing(e *Element, buf *graphics.Buffer, bounds graphics.Rect
 	if ringOffset > 4 {
 		ringOffset = 4
 	}
-
-	for i := 0; i < ringWidth; i++ {
-		grow := ringOffset + i
-		ringRect := graphics.Rect{
-			X: bounds.X - grow,
-			Y: bounds.Y - grow,
-			W: bounds.W + grow*2,
-			H: bounds.H + grow*2,
-		}
-		ringRadius := radius + grow
-		if ringRadius > 0 {
-			buf.DrawRoundedRect(ringRect, ringRadius, ringColor)
-		} else {
-			buf.DrawRect(ringRect, ringColor)
-		}
-	}
+	gfxrenderer.DrawFocusRing(buf, bounds, radius, ringColor, ringWidth, ringOffset)
 }
 
-func drawText(e *Element, buf *graphics.Buffer, text string) {
+func drawText(e *Element, buf *core.Buffer, text string) {
 	font := elementFont(e, gfxfont.UIFontParagraph)
 	textColor := e.AttrColor("textColor", gfxtheme.DefaultTheme.Foreground)
 	align := e.Attr("textAlign", "left")
 
 	content := e.contentArea()
-	if e.AttrBool("clipText", false) && content.W > 0 {
-		text = trimTextToWidth(font, text, content.W, align)
+	if e.AttrBool("clipText", false) && content.Dx() > 0 {
+		text = gfxrenderer.TrimTextToWidth(font, text, content.Dx(), align)
 	}
 	if text == "" {
 		return
@@ -514,102 +363,21 @@ func drawText(e *Element, buf *graphics.Buffer, text string) {
 	textW := font.TextWidth(text)
 	textH := font.TextHeight(text)
 
-	x := content.X
+	x := content.Min.X
 	switch align {
 	case "center":
-		x = content.X + (content.W-textW)/2
+		x = content.Min.X + (content.Dx()-textW)/2
 	case "right":
-		x = content.X + content.W - textW
+		x = content.Min.X + content.Dx() - textW
 	}
-	y := content.Y + (content.H-textH)/2
+	y := content.Min.Y + (content.Dy()-textH)/2
 
-	font.DrawText(buf, text, x, y, textColor, graphics.ColorTransparent)
-}
-
-func trimTextToWidth(font *gfxfont.Font, text string, maxWidth int, align string) string {
-	if text == "" || maxWidth <= 0 {
-		return ""
-	}
-	if font == nil {
-		return text
-	}
-	if font.TextWidth(text) <= maxWidth {
-		return text
-	}
-
-	runes := []rune(text)
-	if len(runes) == 0 {
-		return ""
-	}
-
-	runeWidth := func(ch rune) int {
-		w := font.TextWidth(string(ch))
-		if w <= 0 {
-			w = font.Width
-		}
-		if w <= 0 {
-			w = 8
-		}
-		return w
-	}
-
-	dots := "..."
-	dotsW := font.TextWidth(dots)
-	if dotsW >= maxWidth {
-		dots = ""
-		dotsW = 0
-	}
-
-	if strings.EqualFold(align, "right") {
-		budget := maxWidth - dotsW
-		if budget < 0 {
-			budget = 0
-		}
-		start := len(runes)
-		width := 0
-		for start > 0 {
-			w := runeWidth(runes[start-1])
-			if width+w > budget {
-				break
-			}
-			width += w
-			start--
-		}
-		if start > 0 && dots != "" {
-			return dots + string(runes[start:])
-		}
-		return string(runes[start:])
-	}
-
-	budget := maxWidth - dotsW
-	if budget < 0 {
-		budget = 0
-	}
-	end := 0
-	width := 0
-	for end < len(runes) {
-		w := runeWidth(runes[end])
-		if width+w > budget {
-			break
-		}
-		width += w
-		end++
-	}
-	if end <= 0 {
-		if dots != "" && dotsW <= maxWidth {
-			return dots
-		}
-		return ""
-	}
-	if end < len(runes) && dots != "" {
-		return string(runes[:end]) + dots
-	}
-	return string(runes[:end])
+	font.DrawText(buf, text, x, y, textColor, core.ColorTransparent)
 }
 
 // --- Frame title ---
 
-func drawFrameTitle(e *Element, buf *graphics.Buffer, title string, radius int) {
+func drawFrameTitle(e *Element, buf *core.Buffer, title string, radius int) {
 	bounds := e.Bounds()
 	font := elementTitleFont(e)
 	borderColor := effectiveBorderColor(e)
@@ -619,12 +387,7 @@ func drawFrameTitle(e *Element, buf *graphics.Buffer, title string, radius int) 
 	titleGap := 4
 
 	// Draw border offset down by titleH
-	borderRect := graphics.Rect{
-		X: bounds.X,
-		Y: bounds.Y + titleH,
-		W: bounds.W,
-		H: bounds.H - titleH,
-	}
+	borderRect := core.RectXYWH(bounds.Min.X, bounds.Min.Y+titleH, bounds.Dx(), bounds.Dy()-titleH)
 	if borderColor.A > 0 {
 		if radius > 0 {
 			buf.DrawRoundedRect(borderRect, radius, borderColor)
@@ -634,31 +397,26 @@ func drawFrameTitle(e *Element, buf *graphics.Buffer, title string, radius int) 
 	}
 
 	// Draw title text on the border
-	titleX := bounds.X + 1 + titleGap
-	titleY := bounds.Y
+	titleX := bounds.Min.X + 1 + titleGap
+	titleY := bounds.Min.Y
 
 	// Clear the border behind the title
 	textW := font.TextWidth(title)
-	bg := e.AttrColor("background", graphics.Color{})
-	clearRect := graphics.Rect{
-		X: titleX - 2,
-		Y: bounds.Y + titleH,
-		W: textW + 4,
-		H: 1,
-	}
+	bg := e.AttrColor("background", color.NRGBA{})
+	clearRect := core.RectXYWH(titleX-2, bounds.Min.Y+titleH, textW+4, 1)
 	buf.FillRect(clearRect, bg)
 
-	font.DrawText(buf, title, titleX, titleY, titleColor, graphics.ColorTransparent)
+	font.DrawText(buf, title, titleX, titleY, titleColor, core.ColorTransparent)
 }
 
 // --- Checkbox ---
 
-func drawCheckable(e *Element, buf *graphics.Buffer) {
+func drawCheckable(e *Element, buf *core.Buffer) {
 	bounds := e.Bounds()
 	font := elementFont(e, gfxfont.UIFontParagraph)
 	boxSize := font.Height + 4
-	if boxSize > bounds.H-2 {
-		boxSize = bounds.H - 2
+	if boxSize > bounds.Dy()-2 {
+		boxSize = bounds.Dy() - 2
 	}
 	if boxSize < font.Height {
 		boxSize = font.Height
@@ -666,8 +424,8 @@ func drawCheckable(e *Element, buf *graphics.Buffer) {
 	gap := 8
 	isRadio := e.AttrBool("radio", false)
 
-	boxY := bounds.Y + (bounds.H-boxSize)/2
-	boxRect := graphics.Rect{X: bounds.X, Y: boxY, W: boxSize, H: boxSize}
+	boxY := bounds.Min.Y + (bounds.Dy()-boxSize)/2
+	boxRect := core.RectXYWH(bounds.Min.X, boxY, boxSize, boxSize)
 	radius := gfxtheme.DefaultTheme.BorderRadius / 2
 	if isRadio {
 		radius = boxSize / 2
@@ -686,50 +444,39 @@ func drawCheckable(e *Element, buf *graphics.Buffer) {
 	checkColor := e.AttrColor("checkColor", gfxtheme.DefaultTheme.Primary)
 
 	if e.hovered {
-		highlight := graphics.NewColor(checkColor.R, checkColor.G, checkColor.B, 30)
-		buf.FillRoundedRect(graphics.Rect{
-			X: boxRect.X + 1, Y: boxRect.Y + 1,
-			W: boxRect.W - 2, H: boxRect.H - 2,
-		}, radius, highlight)
+		highlight := core.NewColor(checkColor.R, checkColor.G, checkColor.B, 30)
+		buf.FillRoundedRect(core.RectXYWH(boxRect.Min.X+1, boxRect.Min.Y+1, boxRect.Dx()-2, boxRect.Dy()-2), radius, highlight)
 	}
 
 	if e.AttrBool("checked", false) {
 		if isRadio {
 			dotD := (boxSize * 9) / 20
-			dotRect := graphics.Rect{
-				X: boxRect.X + (boxSize-dotD)/2,
-				Y: boxRect.Y + (boxSize-dotD)/2,
-				W: dotD,
-				H: dotD,
-			}
+			dotRect := core.RectXYWH(boxRect.Min.X+(boxSize-dotD)/2, boxRect.Min.Y+(boxSize-dotD)/2, dotD, dotD)
 			buf.FillRoundedRect(dotRect, dotD/2, checkColor)
 		} else {
-			buf.FillRoundedRect(graphics.Rect{
-				X: boxRect.X + 1, Y: boxRect.Y + 1,
-				W: boxRect.W - 2, H: boxRect.H - 2,
-			}, radius, checkColor)
-			bx, by := float64(boxRect.X), float64(boxRect.Y)
+			buf.FillRoundedRect(core.RectXYWH(boxRect.Min.X+1, boxRect.Min.Y+1, boxRect.Dx()-2, boxRect.Dy()-2), radius, checkColor)
+			bx, by := float64(boxRect.Min.X), float64(boxRect.Min.Y)
 			sz := float64(boxSize)
-			tickColor := graphics.NewColor(255, 255, 255, 246)
+			tickColor := core.NewColor(255, 255, 255, 246)
 			p1x, p1y := bx+0.24*sz, by+0.54*sz
 			p2x, p2y := bx+0.44*sz, by+0.74*sz
 			p3x, p3y := bx+0.78*sz, by+0.30*sz
-			drawAALine(buf, p1x, p1y, p2x, p2y, 2.2, tickColor)
-			drawAALine(buf, p2x, p2y, p3x, p3y, 2.2, tickColor)
+			gfxrenderer.DrawAALine(buf, p1x, p1y, p2x, p2y, 2.2, tickColor)
+			gfxrenderer.DrawAALine(buf, p2x, p2y, p3x, p3y, 2.2, tickColor)
 		}
 	}
 
 	text := e.Attr("text", "")
 	if text != "" {
 		textColor := e.AttrColor("textColor", gfxtheme.DefaultTheme.Foreground)
-		textX := bounds.X + boxSize + gap
+		textX := bounds.Min.X + boxSize + gap
 		textH := font.TextHeight(text)
-		textY := bounds.Y + (bounds.H-textH)/2
-		font.DrawText(buf, text, textX, textY, textColor, graphics.ColorTransparent)
+		textY := bounds.Min.Y + (bounds.Dy()-textH)/2
+		font.DrawText(buf, text, textX, textY, textColor, core.ColorTransparent)
 	}
 }
 
-func drawToggle(e *Element, buf *graphics.Buffer) {
+func drawToggle(e *Element, buf *core.Buffer) {
 	bounds := e.Bounds()
 	font := elementFont(e, gfxfont.UIFontParagraph)
 	text := e.Attr("text", "")
@@ -737,13 +484,13 @@ func drawToggle(e *Element, buf *graphics.Buffer) {
 	trackW := 42
 	trackH := 24
 	r := trackH / 2
-	trackX := bounds.X
-	trackY := bounds.Y + (bounds.H-trackH)/2
-	trackRect := graphics.Rect{X: trackX, Y: trackY, W: trackW, H: trackH}
+	trackX := bounds.Min.X
+	trackY := bounds.Min.Y + (bounds.Dy()-trackH)/2
+	trackRect := core.RectXYWH(trackX, trackY, trackW, trackH)
 
-	offColor := e.AttrColor("offTrackColor", graphics.NewColorHex(0x1B2A4A24))
-	onColor := e.AttrColor("onTrackColor", graphics.NewColorHex(0x2F6BBF))
-	borderColor := e.AttrColor("trackBorderColor", e.AttrColor("borderColor", graphics.NewColorHex(0x1B2A4A24)))
+	offColor := e.AttrColor("offTrackColor", core.NewColorHex(0x1B2A4A24))
+	onColor := e.AttrColor("onTrackColor", core.NewColorHex(0x2F6BBF))
+	borderColor := e.AttrColor("trackBorderColor", e.AttrColor("borderColor", core.NewColorHex(0x1B2A4A24)))
 	if e.focused {
 		borderColor = e.AttrColor("focusedTrackBorderColor", e.AttrColor("focusedBorderColor", borderColor))
 	}
@@ -753,12 +500,12 @@ func drawToggle(e *Element, buf *graphics.Buffer) {
 		position = 1.0
 	}
 
-	trackColor := mixColors(offColor, onColor, position)
+	trackColor := gfxrenderer.MixColors(offColor, onColor, position)
 	if e.hovered {
-		trackColor = mixColors(trackColor, graphics.ColorWhite, 0.06)
+		trackColor = gfxrenderer.MixColors(trackColor, core.ColorWhite, 0.06)
 	}
 	if e.pressed {
-		trackColor = mixColors(trackColor, graphics.ColorBlack, 0.08)
+		trackColor = gfxrenderer.MixColors(trackColor, core.ColorBlack, 0.08)
 	}
 	buf.FillRoundedRect(trackRect, r, trackColor)
 	buf.DrawRoundedRect(trackRect, r, borderColor)
@@ -771,82 +518,29 @@ func drawToggle(e *Element, buf *graphics.Buffer) {
 		thumbX += int(float64(thumbMaxX-thumbMinX)*position + 0.5)
 	}
 	thumbY := trackY + (trackH-thumbD)/2
-	thumbRect := graphics.Rect{X: thumbX, Y: thumbY, W: thumbD, H: thumbD}
-	drawVerticalGradient(
+	thumbRect := core.RectXYWH(thumbX, thumbY, thumbD, thumbD)
+	gfxrenderer.DrawVerticalGradient(
 		buf,
 		thumbRect,
 		thumbD/2,
-		graphics.NewColor(255, 255, 255, 255),
-		graphics.NewColor(237, 244, 255, 252),
+		core.NewColor(255, 255, 255, 255),
+		core.NewColor(237, 244, 255, 252),
 	)
-	outline := graphics.NewColorHex(0x1B2A4A1C)
+	outline := core.NewColorHex(0x1B2A4A1C)
 	if e.AttrBool("checked", false) {
-		outline = graphics.NewColorHex(0x1B2A4A26)
+		outline = core.NewColorHex(0x1B2A4A26)
 	}
 	buf.DrawRoundedRect(thumbRect, thumbD/2, outline)
 
 	if text != "" {
 		textColor := e.AttrColor("textColor", gfxtheme.DefaultTheme.Foreground)
-		tx := trackRect.X + trackRect.W + 8
-		ty := bounds.Y + (bounds.H-font.Height)/2
-		font.DrawText(buf, text, tx, ty, textColor, graphics.ColorTransparent)
+		tx := trackRect.Min.X + trackRect.Dx() + 8
+		ty := bounds.Min.Y + (bounds.Dy()-font.Height)/2
+		font.DrawText(buf, text, tx, ty, textColor, core.ColorTransparent)
 	}
 }
 
-func drawAALine(buf *graphics.Buffer, x0, y0, x1, y1, width float64, c graphics.Color) {
-	if c.A == 0 || width <= 0 {
-		return
-	}
-	minX := int(math.Floor(math.Min(x0, x1) - width - 1))
-	maxX := int(math.Ceil(math.Max(x0, x1) + width + 1))
-	minY := int(math.Floor(math.Min(y0, y1) - width - 1))
-	maxY := int(math.Ceil(math.Max(y0, y1) + width + 1))
-	r := width / 2
-	if r < 0.5 {
-		r = 0.5
-	}
-	for y := minY; y <= maxY; y++ {
-		for x := minX; x <= maxX; x++ {
-			px := float64(x) + 0.5
-			py := float64(y) + 0.5
-			d := pointSegmentDistance(px, py, x0, y0, x1, y1)
-			cov := r + 0.5 - d
-			if cov <= 0 {
-				continue
-			}
-			if cov > 1 {
-				cov = 1
-			}
-			a := uint8(float64(c.A)*cov + 0.5)
-			if a == 0 {
-				continue
-			}
-			sc := graphics.NewColor(c.R, c.G, c.B, a)
-			bg := buf.GetPixel(x, y)
-			buf.SetPixel(x, y, sc.Blend(bg))
-		}
-	}
-}
-
-func pointSegmentDistance(px, py, x0, y0, x1, y1 float64) float64 {
-	dx := x1 - x0
-	dy := y1 - y0
-	den := dx*dx + dy*dy
-	if den <= 1e-6 {
-		return math.Hypot(px-x0, py-y0)
-	}
-	t := ((px-x0)*dx + (py-y0)*dy) / den
-	if t < 0 {
-		t = 0
-	} else if t > 1 {
-		t = 1
-	}
-	cx := x0 + t*dx
-	cy := y0 + t*dy
-	return math.Hypot(px-cx, py-cy)
-}
-
-func drawListView(e *Element, buf *graphics.Buffer) {
+func drawListView(e *Element, buf *core.Buffer) {
 	bounds := e.Bounds()
 	font := elementFont(e, gfxfont.UIFontParagraph)
 	itemsRaw := e.Attr("items", "")
@@ -858,7 +552,7 @@ func drawListView(e *Element, buf *graphics.Buffer) {
 	if rowH < font.Height+8 {
 		rowH = font.Height + 8
 	}
-	visibleRows := bounds.H / rowH
+	visibleRows := bounds.Dy() / rowH
 	if visibleRows < 1 {
 		visibleRows = 1
 	}
@@ -886,22 +580,22 @@ func drawListView(e *Element, buf *graphics.Buffer) {
 		e.attrs["selected"] = "-1"
 		e.dirty = true
 	}
-	hoverColor := e.AttrColor("hoverBackground", graphics.NewColorHex(0x2F6BFF24))
-	selectColor := e.AttrColor("selectedBackground", graphics.NewColorHex(0x2F6BFF24))
+	hoverColor := e.AttrColor("hoverBackground", core.NewColorHex(0x2F6BFF24))
+	selectColor := e.AttrColor("selectedBackground", core.NewColorHex(0x2F6BFF24))
 	baseColor := gfxtheme.DefaultTheme.SurfaceGlass
-	hoverGradTop := e.AttrColor("hoverGradientTop", graphics.Color{})
-	hoverGradBottom := e.AttrColor("hoverGradientBottom", graphics.Color{})
-	selectGradTop := e.AttrColor("selectedGradientTop", graphics.Color{})
-	selectGradBottom := e.AttrColor("selectedGradientBottom", graphics.Color{})
+	hoverGradTop := e.AttrColor("hoverGradientTop", color.NRGBA{})
+	hoverGradBottom := e.AttrColor("hoverGradientBottom", color.NRGBA{})
+	selectGradTop := e.AttrColor("selectedGradientTop", color.NRGBA{})
+	selectGradBottom := e.AttrColor("selectedGradientBottom", color.NRGBA{})
 	indicatorColor := e.AttrColor("selectedIndicatorColor", gfxtheme.DefaultTheme.Primary)
-	indicatorGradTop := e.AttrColor("selectedIndicatorGradientTop", graphics.Color{})
-	indicatorGradBottom := e.AttrColor("selectedIndicatorGradientBottom", graphics.Color{})
+	indicatorGradTop := e.AttrColor("selectedIndicatorGradientTop", color.NRGBA{})
+	indicatorGradBottom := e.AttrColor("selectedIndicatorGradientBottom", color.NRGBA{})
 	indicatorW := e.AttrInt("selectedIndicatorWidth", 3)
 	if indicatorW < 0 {
 		indicatorW = 0
 	}
 	textColor := e.AttrColor("textColor", gfxtheme.DefaultTheme.Foreground)
-	borderColor := e.AttrColor("borderColor", graphics.NewColorHex(0x1B2A4A24))
+	borderColor := e.AttrColor("borderColor", core.NewColorHex(0x1B2A4A24))
 	dividerColor := e.AttrColor("dividerColor", gfxtheme.DefaultTheme.StrokeDivider)
 	rowRadius := e.AttrInt("rowRadius", 8)
 
@@ -910,37 +604,31 @@ func drawListView(e *Element, buf *graphics.Buffer) {
 		if itemIdx >= len(items) {
 			break
 		}
-		y := bounds.Y + i*rowH
-		if y+rowH > bounds.Y+bounds.H {
+		y := bounds.Min.Y + i*rowH
+		if y+rowH > bounds.Min.Y+bounds.Dy() {
 			break
 		}
-		row := graphics.Rect{X: bounds.X + 1, Y: y, W: bounds.W - 2, H: rowH}
+		row := core.RectXYWH(bounds.Min.X+1, y, bounds.Dx()-2, rowH)
 		hovered := itemIdx == e.AttrInt("hoveredIndex", -1)
-		drawListRowFill(buf, row, rowRadius, baseColor, graphics.Color{}, graphics.Color{})
+		gfxrenderer.DrawListRowFill(buf, row, rowRadius, baseColor, color.NRGBA{}, color.NRGBA{})
 		if hovered && itemIdx != selected {
-			drawListRowFill(buf, row, rowRadius, hoverColor, hoverGradTop, hoverGradBottom)
+			gfxrenderer.DrawListRowFill(buf, row, rowRadius, hoverColor, hoverGradTop, hoverGradBottom)
 		}
 		textInset := 12
 		if itemIdx == selected {
-			drawListRowFill(buf, row, rowRadius, selectColor, selectGradTop, selectGradBottom)
+			gfxrenderer.DrawListRowFill(buf, row, rowRadius, selectColor, selectGradTop, selectGradBottom)
 			if indicatorW > 0 {
 				iw := indicatorW
-				if iw > row.W-4 {
-					iw = row.W - 4
+				if iw > row.Dx()-4 {
+					iw = row.Dx() - 4
 				}
 				if iw > 0 {
-					indicatorRect := graphics.Rect{
-						X: row.X + 2,
-						Y: row.Y + 4,
-						W: iw,
-						H: row.H - 8,
+					indicatorRect := core.RectXYWH(row.Min.X+2, row.Min.Y+4, iw, row.Dy()-8)
+					if indicatorRect.Dy() < 2 {
+						indicatorRect = core.RectXYWH(row.Min.X+2, row.Min.Y+1, iw, row.Dy()-2)
 					}
-					if indicatorRect.H < 2 {
-						indicatorRect.Y = row.Y + 1
-						indicatorRect.H = row.H - 2
-					}
-					if indicatorRect.H > 0 {
-						drawListRowFill(buf, indicatorRect, iw, indicatorColor, indicatorGradTop, indicatorGradBottom)
+					if indicatorRect.Dy() > 0 {
+						gfxrenderer.DrawListRowFill(buf, indicatorRect, iw, indicatorColor, indicatorGradTop, indicatorGradBottom)
 					}
 					textInset += iw + 4
 				}
@@ -948,14 +636,14 @@ func drawListView(e *Element, buf *graphics.Buffer) {
 		}
 		if i > 0 && dividerColor.A > 0 {
 			dy := y
-			for x := bounds.X + 8; x < bounds.X+bounds.W-8; x++ {
+			for x := bounds.Min.X + 8; x < bounds.Min.X+bounds.Dx()-8; x++ {
 				bg := buf.GetPixel(x, dy)
-				buf.SetPixel(x, dy, dividerColor.Blend(bg))
+				buf.SetPixel(x, dy, core.Blend(dividerColor, bg))
 			}
 		}
-		tx := row.X + textInset
-		ty := row.Y + (row.H-font.Height)/2
-		font.DrawText(buf, strings.TrimSpace(items[itemIdx]), tx, ty, textColor, graphics.ColorTransparent)
+		tx := row.Min.X + textInset
+		ty := row.Min.Y + (row.Dy()-font.Height)/2
+		font.DrawText(buf, strings.TrimSpace(items[itemIdx]), tx, ty, textColor, core.ColorTransparent)
 	}
 
 	if borderColor.A > 0 {
@@ -963,52 +651,9 @@ func drawListView(e *Element, buf *graphics.Buffer) {
 	}
 }
 
-func drawListRowFill(buf *graphics.Buffer, row graphics.Rect, radius int, solid, top, bottom graphics.Color) {
-	if row.W <= 0 || row.H <= 0 {
-		return
-	}
-	if top.A == 0 && bottom.A == 0 {
-		if solid.A == 0 {
-			return
-		}
-		if radius > 0 {
-			buf.FillRoundedRect(row, radius, solid)
-		} else if solid.A == 255 {
-			buf.FillRect(row, solid)
-		} else {
-			// Keep translucent row fills as overlays instead of replacing alpha.
-			drawVerticalGradient(buf, row, 0, solid, solid)
-		}
-		return
-	}
-	if top.A == 0 {
-		top = solid
-	}
-	if bottom.A == 0 {
-		bottom = solid
-	}
-	drawVerticalGradient(buf, row, radius, top, bottom)
-}
-
-func mixColors(a, b graphics.Color, t float64) graphics.Color {
-	if t <= 0 {
-		return a
-	}
-	if t >= 1 {
-		return b
-	}
-	inv := 1.0 - t
-	return graphics.NewColor(
-		uint8(float64(a.R)*inv+float64(b.R)*t+0.5),
-		uint8(float64(a.G)*inv+float64(b.G)*t+0.5),
-		uint8(float64(a.B)*inv+float64(b.B)*t+0.5),
-		uint8(float64(a.A)*inv+float64(b.A)*t+0.5),
-	)
-}
-
 // --- Slider ---
 
-func drawSlidable(e *Element, buf *graphics.Buffer) {
+func drawSlidable(e *Element, buf *core.Buffer) {
 	bounds := e.Bounds()
 	st := e.getSliderState()
 
@@ -1020,31 +665,22 @@ func drawSlidable(e *Element, buf *graphics.Buffer) {
 	}
 }
 
-func drawSliderHorizontal(e *Element, buf *graphics.Buffer, bounds graphics.Rect, st *sliderState) {
+func drawSliderHorizontal(e *Element, buf *core.Buffer, bounds image.Rectangle, st *sliderState) {
 	radius := gfxtheme.DefaultTheme.BorderRadius / 2
 	trackColor := e.AttrColor("trackColor", gfxtheme.DefaultTheme.Secondary)
 	thumbColor := e.AttrColor("thumbColor", gfxtheme.DefaultTheme.Primary)
 
-	trackY := bounds.Y + (bounds.H-sliderTrackH)/2
-	trackRect := graphics.Rect{
-		X: bounds.X + sliderThumbW/2, Y: trackY,
-		W: bounds.W - sliderThumbW, H: sliderTrackH,
-	}
+	trackY := bounds.Min.Y + (bounds.Dy()-sliderTrackH)/2
+	trackRect := core.RectXYWH(bounds.Min.X+sliderThumbW/2, trackY, bounds.Dx()-sliderThumbW, sliderTrackH)
 	buf.FillRoundedRect(trackRect, sliderTrackH/2, trackColor)
 
 	thumbX := e.sliderValueToPixelH(bounds)
-	filledRect := graphics.Rect{
-		X: trackRect.X, Y: trackY,
-		W: thumbX - trackRect.X + sliderThumbW/2, H: sliderTrackH,
-	}
-	if filledRect.W > 0 {
+	filledRect := core.RectXYWH(trackRect.Min.X, trackY, thumbX-trackRect.Min.X+sliderThumbW/2, sliderTrackH)
+	if filledRect.Dx() > 0 {
 		buf.FillRoundedRect(filledRect, sliderTrackH/2, thumbColor)
 	}
 
-	thumbRect := graphics.Rect{
-		X: thumbX, Y: bounds.Y + (bounds.H-sliderThumbH)/2,
-		W: sliderThumbW, H: sliderThumbH,
-	}
+	thumbRect := core.RectXYWH(thumbX, bounds.Min.Y+(bounds.Dy()-sliderThumbH)/2, sliderThumbW, sliderThumbH)
 	tc := thumbColor
 	if st.dragging {
 		tc = e.AttrColor("thumbActiveColor", gfxtheme.DefaultTheme.PrimaryActive)
@@ -1060,31 +696,22 @@ func drawSliderHorizontal(e *Element, buf *graphics.Buffer, bounds graphics.Rect
 	buf.DrawRoundedRect(thumbRect, radius, borderColor)
 }
 
-func drawSliderVertical(e *Element, buf *graphics.Buffer, bounds graphics.Rect, st *sliderState) {
+func drawSliderVertical(e *Element, buf *core.Buffer, bounds image.Rectangle, st *sliderState) {
 	radius := gfxtheme.DefaultTheme.BorderRadius / 2
 	trackColor := e.AttrColor("trackColor", gfxtheme.DefaultTheme.Secondary)
 	thumbColor := e.AttrColor("thumbColor", gfxtheme.DefaultTheme.Primary)
 
-	trackX := bounds.X + (bounds.W-sliderTrackH)/2
-	trackRect := graphics.Rect{
-		X: trackX, Y: bounds.Y + sliderThumbW/2,
-		W: sliderTrackH, H: bounds.H - sliderThumbW,
-	}
+	trackX := bounds.Min.X + (bounds.Dx()-sliderTrackH)/2
+	trackRect := core.RectXYWH(trackX, bounds.Min.Y+sliderThumbW/2, sliderTrackH, bounds.Dy()-sliderThumbW)
 	buf.FillRoundedRect(trackRect, sliderTrackH/2, trackColor)
 
 	thumbY := e.sliderValueToPixelV(bounds)
-	filledRect := graphics.Rect{
-		X: trackX, Y: thumbY + sliderThumbW/2,
-		W: sliderTrackH, H: trackRect.Y + trackRect.H - thumbY - sliderThumbW/2,
-	}
-	if filledRect.H > 0 {
+	filledRect := core.RectXYWH(trackX, thumbY+sliderThumbW/2, sliderTrackH, trackRect.Min.Y+trackRect.Dy()-thumbY-sliderThumbW/2)
+	if filledRect.Dy() > 0 {
 		buf.FillRoundedRect(filledRect, sliderTrackH/2, thumbColor)
 	}
 
-	thumbRect := graphics.Rect{
-		X: bounds.X + (bounds.W-sliderThumbH)/2, Y: thumbY,
-		W: sliderThumbH, H: sliderThumbW,
-	}
+	thumbRect := core.RectXYWH(bounds.Min.X+(bounds.Dx()-sliderThumbH)/2, thumbY, sliderThumbH, sliderThumbW)
 	tc := thumbColor
 	if st.dragging {
 		tc = e.AttrColor("thumbActiveColor", gfxtheme.DefaultTheme.PrimaryActive)
@@ -1102,7 +729,7 @@ func drawSliderVertical(e *Element, buf *graphics.Buffer, bounds graphics.Rect, 
 
 // --- Progress bar ---
 
-func drawProgress(e *Element, buf *graphics.Buffer) {
+func drawProgress(e *Element, buf *core.Buffer) {
 	bounds := e.Bounds()
 	value := e.AttrFloat("value", 0)
 	if value < 0 {
@@ -1113,18 +740,15 @@ func drawProgress(e *Element, buf *graphics.Buffer) {
 	}
 
 	fillColor := e.AttrColor("fillColor", gfxtheme.DefaultTheme.Primary)
-	fillTop := e.AttrColor("fillGradientTop", graphics.Color{})
-	fillBottom := e.AttrColor("fillGradientBottom", graphics.Color{})
+	fillTop := e.AttrColor("fillGradientTop", color.NRGBA{})
+	fillBottom := e.AttrColor("fillGradientBottom", color.NRGBA{})
 	radius := e.AttrInt("borderRadius", gfxtheme.DefaultTheme.BorderRadius)
 
-	innerW := bounds.W - 2
+	innerW := bounds.Dx() - 2
 	if innerW > 0 {
 		filledW := int(float64(innerW) * value)
 		if filledW > 0 {
-			fillRect := graphics.Rect{
-				X: bounds.X + 1, Y: bounds.Y + 1,
-				W: filledW, H: bounds.H - 2,
-			}
+			fillRect := core.RectXYWH(bounds.Min.X+1, bounds.Min.Y+1, filledW, bounds.Dy()-2)
 			if fillTop.A > 0 || fillBottom.A > 0 {
 				if fillTop.A == 0 {
 					fillTop = fillColor
@@ -1132,7 +756,7 @@ func drawProgress(e *Element, buf *graphics.Buffer) {
 				if fillBottom.A == 0 {
 					fillBottom = fillColor
 				}
-				drawVerticalGradient(buf, fillRect, radius, fillTop, fillBottom)
+				gfxrenderer.DrawVerticalGradient(buf, fillRect, radius, fillTop, fillBottom)
 			} else {
 				buf.FillRoundedRect(fillRect, radius, fillColor)
 			}
@@ -1145,19 +769,19 @@ func drawProgress(e *Element, buf *graphics.Buffer) {
 		text := fmt.Sprintf("%d%%", int(value*100))
 		textW := font.TextWidth(text)
 		textH := font.TextHeight(text)
-		x := bounds.X + (bounds.W-textW)/2
-		y := bounds.Y + (bounds.H-textH)/2
-		font.DrawText(buf, text, x, y, textColor, graphics.ColorTransparent)
+		x := bounds.Min.X + (bounds.Dx()-textW)/2
+		y := bounds.Min.Y + (bounds.Dy()-textH)/2
+		font.DrawText(buf, text, x, y, textColor, core.ColorTransparent)
 	}
 }
 
 // --- Text input ---
 
-func drawTextInput(e *Element, buf *graphics.Buffer) {
+func drawTextInput(e *Element, buf *core.Buffer) {
 	font := elementFont(e, gfxfont.UIFontParagraph)
 	st := e.getTextInputState()
 	textArea := e.contentArea()
-	if textArea.W <= 0 || textArea.H <= 0 {
+	if textArea.Dx() <= 0 || textArea.Dy() <= 0 {
 		return
 	}
 
@@ -1165,16 +789,16 @@ func drawTextInput(e *Element, buf *graphics.Buffer) {
 	isPassword := e.AttrBool("password", false)
 	display := textInputDisplayRunes(st, isPassword)
 
-	startCol, endCol := textInputVisibleRange(font, display, st.scrollOffset, textArea.W)
-	textY := textArea.Y + (textArea.H-font.Height)/2
+	startCol, endCol := textInputVisibleRange(font, display, st.scrollOffset, textArea.Dx())
+	textY := textArea.Min.Y + (textArea.Dy()-font.Height)/2
 
 	// Placeholder
 	if len(text) == 0 && !e.focused {
 		placeholder := e.Attr("placeholder", "")
 		if placeholder != "" {
-			placeholderColor := e.AttrColor("placeholderColor", graphics.ColorGray)
-			font.DrawText(buf, placeholder, textArea.X, textY,
-				placeholderColor, graphics.ColorTransparent)
+			placeholderColor := e.AttrColor("placeholderColor", core.ColorGray)
+			font.DrawText(buf, placeholder, textArea.Min.X, textY,
+				placeholderColor, core.ColorTransparent)
 		}
 		return
 	}
@@ -1182,8 +806,8 @@ func drawTextInput(e *Element, buf *graphics.Buffer) {
 	// Display text
 	visible := string(display[startCol:endCol])
 	textColor := e.AttrColor("textColor", gfxtheme.DefaultTheme.InputForeground)
-	font.DrawText(buf, visible, textArea.X, textY,
-		textColor, graphics.ColorTransparent)
+	font.DrawText(buf, visible, textArea.Min.X, textY,
+		textColor, core.ColorTransparent)
 
 	// Cursor
 	if e.focused && !e.AttrBool("readOnly", false) {
@@ -1194,7 +818,7 @@ func drawTextInput(e *Element, buf *graphics.Buffer) {
 		}
 		if st.cursorBlink {
 			if st.cursorPos >= startCol && st.cursorPos <= endCol {
-				cx := textArea.X + textInputSliceWidth(font, display, startCol, st.cursorPos)
+				cx := textArea.Min.X + textInputSliceWidth(font, display, startCol, st.cursorPos)
 				cy := textY
 				cursorColor := e.AttrColor("cursorColor", gfxtheme.DefaultTheme.Foreground)
 				for dy := 0; dy < font.Height; dy++ {
@@ -1207,7 +831,7 @@ func drawTextInput(e *Element, buf *graphics.Buffer) {
 
 // --- Text area ---
 
-func drawTextArea(e *Element, buf *graphics.Buffer) {
+func drawTextArea(e *Element, buf *core.Buffer) {
 	if e.AttrBool("table", false) {
 		drawTableArea(e, buf)
 		return
@@ -1216,10 +840,10 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 	font := elementFont(e, gfxfont.UIFontParagraph)
 	st := e.getTextAreaState()
 	textArea := e.contentArea()
-	if textArea.W <= 0 || textArea.H <= 0 {
+	if textArea.Dx() <= 0 || textArea.Dy() <= 0 {
 		return
 	}
-	visRows := textArea.H / font.Height
+	visRows := textArea.Dy() / font.Height
 	if visRows <= 0 {
 		return
 	}
@@ -1247,8 +871,8 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 		st.scrollCol = 0
 
 		drawScrollbar := e.AttrBool("showScrollbar", false) && maxScroll > 0
-		var trackRect graphics.Rect
-		var thumbRect graphics.Rect
+		var trackRect image.Rectangle
+		var thumbRect image.Rectangle
 		if drawScrollbar {
 			barW := e.AttrInt("scrollbarWidth", 6)
 			if barW < 4 {
@@ -1261,16 +885,11 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 			if margin < 0 {
 				margin = 0
 			}
-			trackRect = graphics.Rect{
-				X: textArea.X + textArea.W - barW - margin,
-				Y: textArea.Y + margin,
-				W: barW,
-				H: textArea.H - margin*2,
-			}
-			if trackRect.X <= textArea.X || trackRect.H < 8 {
+			trackRect = core.RectXYWH(textArea.Min.X+textArea.Dx()-barW-margin, textArea.Min.Y+margin, barW, textArea.Dy()-margin*2)
+			if trackRect.Min.X <= textArea.Min.X || trackRect.Dy() < 8 {
 				drawScrollbar = false
 			} else {
-				thumbH := trackRect.H * visRows / len(segments)
+				thumbH := trackRect.Dy() * visRows / len(segments)
 				minThumb := e.AttrInt("scrollbarThumbMinHeight", 16)
 				if minThumb < 8 {
 					minThumb = 8
@@ -1278,26 +897,21 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 				if thumbH < minThumb {
 					thumbH = minThumb
 				}
-				if thumbH > trackRect.H {
-					thumbH = trackRect.H
+				if thumbH > trackRect.Dy() {
+					thumbH = trackRect.Dy()
 				}
 
-				travel := trackRect.H - thumbH
-				thumbY := trackRect.Y
+				travel := trackRect.Dy() - thumbH
+				thumbY := trackRect.Min.Y
 				if travel > 0 && maxScroll > 0 {
 					thumbY += st.scrollRow * travel / maxScroll
 				}
-				thumbRect = graphics.Rect{
-					X: trackRect.X,
-					Y: thumbY,
-					W: trackRect.W,
-					H: thumbH,
-				}
+				thumbRect = core.RectXYWH(trackRect.Min.X, thumbY, trackRect.Dx(), thumbH)
 			}
 		}
 
 		textColor := e.AttrColor("textColor", gfxtheme.DefaultTheme.InputForeground)
-		textX := textArea.X
+		textX := textArea.Min.X
 		for i := 0; i < visRows; i++ {
 			visualIdx := st.scrollRow + i
 			if visualIdx >= len(segments) {
@@ -1311,9 +925,9 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 			if seg.end > len(line) {
 				seg.end = len(line)
 			}
-			y := textArea.Y + i*font.Height
+			y := textArea.Min.Y + i*font.Height
 			font.DrawText(buf, string(line[seg.start:seg.end]), textX, y,
-				textColor, graphics.ColorTransparent)
+				textColor, core.ColorTransparent)
 		}
 
 		if e.focused && !e.AttrBool("readOnly", false) {
@@ -1336,7 +950,7 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 						cursorCol = seg.end
 					}
 					cx := textX + textAreaLineSliceWidth(font, line, seg.start, cursorCol)
-					cy := textArea.Y + screenRow*font.Height
+					cy := textArea.Min.Y + screenRow*font.Height
 					cursorColor := e.AttrColor("cursorColor", gfxtheme.DefaultTheme.Foreground)
 					for dy := 0; dy < font.Height; dy++ {
 						buf.SetPixel(cx, cy+dy, cursorColor)
@@ -1346,9 +960,9 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 		}
 
 		if drawScrollbar {
-			trackColor := e.AttrColor("scrollbarTrackColor", graphics.NewColor(16, 24, 40, 28))
-			thumbColor := e.AttrColor("scrollbarThumbColor", graphics.NewColor(70, 96, 148, 136))
-			radius := trackRect.W / 2
+			trackColor := e.AttrColor("scrollbarTrackColor", core.NewColor(16, 24, 40, 28))
+			thumbColor := e.AttrColor("scrollbarThumbColor", core.NewColor(70, 96, 148, 136))
+			radius := trackRect.Dx() / 2
 			if radius < 1 {
 				radius = 1
 			}
@@ -1373,10 +987,10 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 		st.scrollRow = maxScroll
 	}
 
-	textW := textArea.W
+	textW := textArea.Dx()
 	drawScrollbar := e.AttrBool("showScrollbar", false) && maxScroll > 0
-	var trackRect graphics.Rect
-	var thumbRect graphics.Rect
+	var trackRect image.Rectangle
+	var thumbRect image.Rectangle
 	if drawScrollbar {
 		barW := e.AttrInt("scrollbarWidth", 6)
 		if barW < 4 {
@@ -1389,24 +1003,19 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 		if margin < 0 {
 			margin = 0
 		}
-		trackRect = graphics.Rect{
-			X: textArea.X + textArea.W - barW - margin,
-			Y: textArea.Y + margin,
-			W: barW,
-			H: textArea.H - margin*2,
-		}
-		if trackRect.X <= textArea.X || trackRect.H < 8 {
+		trackRect = core.RectXYWH(textArea.Min.X+textArea.Dx()-barW-margin, textArea.Min.Y+margin, barW, textArea.Dy()-margin*2)
+		if trackRect.Min.X <= textArea.Min.X || trackRect.Dy() < 8 {
 			drawScrollbar = false
 		} else {
-			textW = trackRect.X - textArea.X - 1
+			textW = trackRect.Min.X - textArea.Min.X - 1
 			if textW < 1 {
 				drawScrollbar = false
-				textW = textArea.W
+				textW = textArea.Dx()
 			}
 		}
 
 		if drawScrollbar {
-			thumbH := trackRect.H * visRows / len(st.lines)
+			thumbH := trackRect.Dy() * visRows / len(st.lines)
 			minThumb := e.AttrInt("scrollbarThumbMinHeight", 16)
 			if minThumb < 8 {
 				minThumb = 8
@@ -1414,21 +1023,16 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 			if thumbH < minThumb {
 				thumbH = minThumb
 			}
-			if thumbH > trackRect.H {
-				thumbH = trackRect.H
+			if thumbH > trackRect.Dy() {
+				thumbH = trackRect.Dy()
 			}
 
-			travel := trackRect.H - thumbH
-			thumbY := trackRect.Y
+			travel := trackRect.Dy() - thumbH
+			thumbY := trackRect.Min.Y
 			if travel > 0 && maxScroll > 0 {
 				thumbY += st.scrollRow * travel / maxScroll
 			}
-			thumbRect = graphics.Rect{
-				X: trackRect.X,
-				Y: thumbY,
-				W: trackRect.W,
-				H: thumbH,
-			}
+			thumbRect = core.RectXYWH(trackRect.Min.X, thumbY, trackRect.Dx(), thumbH)
 		}
 	}
 
@@ -1436,7 +1040,7 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 		drawTerminalTextArea(e, buf, font, st, textArea, textW, visRows)
 	} else {
 		textColor := e.AttrColor("textColor", gfxtheme.DefaultTheme.InputForeground)
-		textX := textArea.X
+		textX := textArea.Min.X
 
 		for i := 0; i < visRows; i++ {
 			lineIdx := st.scrollRow + i
@@ -1444,7 +1048,7 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 				break
 			}
 			line := st.lines[lineIdx]
-			y := textArea.Y + i*font.Height
+			y := textArea.Min.Y + i*font.Height
 
 			startCol := st.scrollCol
 			if startCol > len(line) {
@@ -1455,7 +1059,7 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 				endCol = startCol
 			}
 			font.DrawText(buf, string(line[startCol:endCol]), textX, y,
-				textColor, graphics.ColorTransparent)
+				textColor, core.ColorTransparent)
 		}
 
 		// Cursor
@@ -1477,7 +1081,7 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 					endCol := textAreaVisibleEndCol(font, line, startCol, textW)
 					if st.cursorCol >= startCol && st.cursorCol <= endCol {
 						cx := textX + textAreaLineSliceWidth(font, line, startCol, st.cursorCol)
-						cy := textArea.Y + screenRow*font.Height
+						cy := textArea.Min.Y + screenRow*font.Height
 						cursorColor := e.AttrColor("cursorColor", gfxtheme.DefaultTheme.Foreground)
 						for dy := 0; dy < font.Height; dy++ {
 							buf.SetPixel(cx, cy+dy, cursorColor)
@@ -1489,9 +1093,9 @@ func drawTextArea(e *Element, buf *graphics.Buffer) {
 	}
 
 	if drawScrollbar {
-		trackColor := e.AttrColor("scrollbarTrackColor", graphics.NewColor(16, 24, 40, 28))
-		thumbColor := e.AttrColor("scrollbarThumbColor", graphics.NewColor(70, 96, 148, 136))
-		radius := trackRect.W / 2
+		trackColor := e.AttrColor("scrollbarTrackColor", core.NewColor(16, 24, 40, 28))
+		thumbColor := e.AttrColor("scrollbarThumbColor", core.NewColor(70, 96, 148, 136))
+		radius := trackRect.Dx() / 2
 		if radius < 1 {
 			radius = 1
 		}
@@ -1520,14 +1124,14 @@ func textAreaRuneWidth(font *gfxfont.Font, ch rune) int {
 
 func drawTerminalTextArea(
 	e *Element,
-	buf *graphics.Buffer,
+	buf *core.Buffer,
 	font *gfxfont.Font,
 	st *textAreaState,
-	textArea graphics.Rect,
+	textArea image.Rectangle,
 	textW int,
 	visRows int,
 ) {
-	textX := textArea.X
+	textX := textArea.Min.X
 	maxX := textX + textW
 	defaultTextColor := e.AttrColor("textColor", gfxtheme.DefaultTheme.InputForeground)
 
@@ -1537,7 +1141,7 @@ func drawTerminalTextArea(
 			break
 		}
 		line := st.terminalLines[lineIdx]
-		y := textArea.Y + i*font.Height
+		y := textArea.Min.Y + i*font.Height
 
 		startCol := st.scrollCol
 		if startCol > len(line) {
@@ -1557,7 +1161,7 @@ func drawTerminalTextArea(
 			}
 
 			if cell.Bg.A > 0 {
-				buf.FillRect(graphics.Rect{X: x, Y: y, W: w, H: font.Height}, cell.Bg)
+				buf.FillRect(core.RectXYWH(x, y, w, font.Height), cell.Bg)
 			}
 
 			fg := cell.Fg
@@ -1565,7 +1169,7 @@ func drawTerminalTextArea(
 				fg = defaultTextColor
 			}
 			if ch != ' ' {
-				font.DrawText(buf, string(ch), x, y, fg, graphics.ColorTransparent)
+				font.DrawText(buf, string(ch), x, y, fg, core.ColorTransparent)
 			}
 			if cell.Underline {
 				uy := y + font.Height - 2
@@ -1632,14 +1236,14 @@ func drawTerminalTextArea(
 		return
 	}
 
-	cy := textArea.Y + screenRow*font.Height
+	cy := textArea.Min.Y + screenRow*font.Height
 	cursorColor := e.AttrColor("cursorColor", gfxtheme.DefaultTheme.Foreground)
 	for dy := 0; dy < font.Height; dy++ {
 		buf.SetPixel(cx, cy+dy, cursorColor)
 	}
 }
 
-func drawTableArea(e *Element, buf *graphics.Buffer) {
+func drawTableArea(e *Element, buf *core.Buffer) {
 	bounds := e.Bounds()
 	bodyFont := elementFont(e, gfxfont.UIFontParagraph)
 	headerFont := gfxfont.UIFont(e.Attr("headerTextRole", gfxfont.UIFontSubheading))
@@ -1690,7 +1294,7 @@ func drawTableArea(e *Element, buf *graphics.Buffer) {
 	for _, w := range colWidths {
 		totalW += w
 	}
-	availW := bounds.W - 2
+	availW := bounds.Dx() - 2
 	if totalW > availW && totalW > 0 {
 		for i := range colWidths {
 			scaled := colWidths[i] * availW / totalW
@@ -1710,28 +1314,28 @@ func drawTableArea(e *Element, buf *graphics.Buffer) {
 	textColor := e.AttrColor("textColor", gfxtheme.DefaultTheme.TextSecondary)
 	headerTextColor := e.AttrColor("headerTextColor", gfxtheme.DefaultTheme.Foreground)
 
-	headerRect := graphics.Rect{X: bounds.X + 1, Y: bounds.Y + 1, W: bounds.W - 2, H: rowH}
+	headerRect := core.RectXYWH(bounds.Min.X+1, bounds.Min.Y+1, bounds.Dx()-2, rowH)
 	buf.FillRoundedRect(headerRect, 8, headerBg)
 
-	x := bounds.X + 1
+	x := bounds.Min.X + 1
 	for c := 0; c < maxCols; c++ {
 		if c < len(rows[0]) {
-			ty := bounds.Y + (rowH-headerFont.Height)/2
-			headerFont.DrawText(buf, rows[0][c], x+10, ty, headerTextColor, graphics.ColorTransparent)
+			ty := bounds.Min.Y + (rowH-headerFont.Height)/2
+			headerFont.DrawText(buf, rows[0][c], x+10, ty, headerTextColor, core.ColorTransparent)
 		}
 		if c > 0 && divider.A > 0 {
-			for py := bounds.Y + 2; py < bounds.Y+bounds.H-2; py++ {
+			for py := bounds.Min.Y + 2; py < bounds.Min.Y+bounds.Dy()-2; py++ {
 				bg := buf.GetPixel(x, py)
-				buf.SetPixel(x, py, divider.Blend(bg))
+				buf.SetPixel(x, py, core.Blend(divider, bg))
 			}
 		}
 		x += colWidths[c]
-		if x >= bounds.X+bounds.W-1 {
+		if x >= bounds.Min.X+bounds.Dx()-1 {
 			break
 		}
 	}
 
-	visibleDataRows := (bounds.H - 2 - rowH) / rowH
+	visibleDataRows := (bounds.Dy() - 2 - rowH) / rowH
 	if visibleDataRows < 1 {
 		visibleDataRows = 1
 	}
@@ -1756,17 +1360,17 @@ func drawTableArea(e *Element, buf *graphics.Buffer) {
 			break
 		}
 		rowVals := rows[dataIdx+1]
-		ry := bounds.Y + 1 + (r+1)*rowH
-		if ry+rowH > bounds.Y+bounds.H-1 {
+		ry := bounds.Min.Y + 1 + (r+1)*rowH
+		if ry+rowH > bounds.Min.Y+bounds.Dy()-1 {
 			break
 		}
 		if divider.A > 0 {
-			for px := bounds.X + 8; px < bounds.X+bounds.W-8; px++ {
+			for px := bounds.Min.X + 8; px < bounds.Min.X+bounds.Dx()-8; px++ {
 				bg := buf.GetPixel(px, ry)
-				buf.SetPixel(px, ry, divider.Blend(bg))
+				buf.SetPixel(px, ry, core.Blend(divider, bg))
 			}
 		}
-		x = bounds.X + 1
+		x = bounds.Min.X + 1
 		for c := 0; c < len(rowVals) && c < maxCols; c++ {
 			ty := ry + (rowH-bodyFont.Height)/2
 			cell := rowVals[c]
@@ -1778,9 +1382,9 @@ func drawTableArea(e *Element, buf *graphics.Buffer) {
 					cellX = x + 10
 				}
 			}
-			bodyFont.DrawText(buf, cell, cellX, ty, textColor, graphics.ColorTransparent)
+			bodyFont.DrawText(buf, cell, cellX, ty, textColor, core.ColorTransparent)
 			x += colWidths[c]
-			if x >= bounds.X+bounds.W-1 {
+			if x >= bounds.Min.X+bounds.Dx()-1 {
 				break
 			}
 		}

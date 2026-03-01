@@ -29,7 +29,7 @@ import (
 	"unsafe"
 
 	"avyos.dev/pkg/fs"
-	graphics "avyos.dev/pkg/graphics/input"
+	gfxinput "avyos.dev/pkg/graphics/input"
 )
 
 // Event types
@@ -75,11 +75,11 @@ type Device struct {
 // Handler manages evdev input devices.
 type Handler struct {
 	devices   []*Device
-	events    chan graphics.Event
+	events    chan gfxinput.Event
 	quit      chan struct{}
 	wg        sync.WaitGroup
 	layout    KeyboardLayout
-	modifiers graphics.Modifiers
+	modifiers gfxinput.Modifiers
 	capsLock  bool
 	mouseX    int
 	mouseY    int
@@ -91,7 +91,7 @@ type Handler struct {
 // NewHandler creates a new evdev input handler.
 func NewHandler() *Handler {
 	return &Handler{
-		events: make(chan graphics.Event, 100),
+		events: make(chan gfxinput.Event, 100),
 		quit:   make(chan struct{}),
 		layout: LayoutUS,
 	}
@@ -193,12 +193,12 @@ func (h *Handler) Close() error {
 }
 
 // Events returns the event channel.
-func (h *Handler) Events() <-chan graphics.Event {
+func (h *Handler) Events() <-chan gfxinput.Event {
 	return h.events
 }
 
 // Poll returns the next event or nil if none available.
-func (h *Handler) Poll() *graphics.Event {
+func (h *Handler) Poll() *gfxinput.Event {
 	select {
 	case ev := <-h.events:
 		return &ev
@@ -208,7 +208,7 @@ func (h *Handler) Poll() *graphics.Event {
 }
 
 // Wait waits for the next event with a timeout.
-func (h *Handler) Wait(timeout time.Duration) *graphics.Event {
+func (h *Handler) Wait(timeout time.Duration) *gfxinput.Event {
 	select {
 	case ev := <-h.events:
 		return &ev
@@ -262,7 +262,7 @@ func (h *Handler) readDevice(dev *Device) {
 	}
 }
 
-func (h *Handler) processEvent(ev *inputEvent) *graphics.Event {
+func (h *Handler) processEvent(ev *inputEvent) *gfxinput.Event {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -275,7 +275,7 @@ func (h *Handler) processEvent(ev *inputEvent) *graphics.Event {
 	return nil
 }
 
-func (h *Handler) processKeyEvent(ev *inputEvent) *graphics.Event {
+func (h *Handler) processKeyEvent(ev *inputEvent) *gfxinput.Event {
 	// Handle mouse buttons
 	switch ev.Code {
 	case btnLeft, btnRight, btnMiddle:
@@ -295,38 +295,38 @@ func (h *Handler) processKeyEvent(ev *inputEvent) *graphics.Event {
 
 	// Update modifiers
 	switch mapping.key {
-	case graphics.KeyLeftShift, graphics.KeyRightShift:
+	case gfxinput.KeyLeftShift, gfxinput.KeyRightShift:
 		if ev.Value == 1 {
-			h.modifiers |= graphics.ModShift
+			h.modifiers |= gfxinput.ModShift
 		} else if ev.Value == 0 {
-			h.modifiers &^= graphics.ModShift
+			h.modifiers &^= gfxinput.ModShift
 		}
-	case graphics.KeyLeftCtrl, graphics.KeyRightCtrl:
+	case gfxinput.KeyLeftCtrl, gfxinput.KeyRightCtrl:
 		if ev.Value == 1 {
-			h.modifiers |= graphics.ModCtrl
+			h.modifiers |= gfxinput.ModCtrl
 		} else if ev.Value == 0 {
-			h.modifiers &^= graphics.ModCtrl
+			h.modifiers &^= gfxinput.ModCtrl
 		}
-	case graphics.KeyLeftAlt, graphics.KeyRightAlt:
+	case gfxinput.KeyLeftAlt, gfxinput.KeyRightAlt:
 		if ev.Value == 1 {
-			h.modifiers |= graphics.ModAlt
+			h.modifiers |= gfxinput.ModAlt
 		} else if ev.Value == 0 {
-			h.modifiers &^= graphics.ModAlt
+			h.modifiers &^= gfxinput.ModAlt
 		}
-	case graphics.KeyCapsLock:
+	case gfxinput.KeyCapsLock:
 		if ev.Value == 1 {
 			h.capsLock = !h.capsLock
 			if h.capsLock {
-				h.modifiers |= graphics.ModCapsLock
+				h.modifiers |= gfxinput.ModCapsLock
 			} else {
-				h.modifiers &^= graphics.ModCapsLock
+				h.modifiers &^= gfxinput.ModCapsLock
 			}
 		}
 	}
 
 	// Determine rune
 	var r rune
-	shifted := h.modifiers&graphics.ModShift != 0
+	shifted := h.modifiers&gfxinput.ModShift != 0
 	if h.capsLock && mapping.normal >= 'a' && mapping.normal <= 'z' {
 		shifted = !shifted
 	}
@@ -336,15 +336,15 @@ func (h *Handler) processKeyEvent(ev *inputEvent) *graphics.Event {
 		r = mapping.normal
 	}
 
-	eventType := graphics.EventKeyPress
+	eventType := gfxinput.EventKeyPress
 	if ev.Value == 0 {
-		eventType = graphics.EventKeyRelease
+		eventType = gfxinput.EventKeyRelease
 	} else if ev.Value == 2 {
 		// Key repeat - treat as press
-		eventType = graphics.EventKeyPress
+		eventType = gfxinput.EventKeyPress
 	}
 
-	return &graphics.Event{
+	return &gfxinput.Event{
 		Type:      eventType,
 		Key:       mapping.key,
 		Rune:      r,
@@ -352,23 +352,23 @@ func (h *Handler) processKeyEvent(ev *inputEvent) *graphics.Event {
 	}
 }
 
-func (h *Handler) processMouseButton(ev *inputEvent) *graphics.Event {
-	var btn graphics.MouseButton
+func (h *Handler) processMouseButton(ev *inputEvent) *gfxinput.Event {
+	var btn gfxinput.MouseButton
 	switch ev.Code {
 	case btnLeft:
-		btn = graphics.MouseButtonLeft
+		btn = gfxinput.MouseButtonLeft
 	case btnRight:
-		btn = graphics.MouseButtonRight
+		btn = gfxinput.MouseButtonRight
 	case btnMiddle:
-		btn = graphics.MouseButtonMiddle
+		btn = gfxinput.MouseButtonMiddle
 	}
 
-	eventType := graphics.EventMouseButtonPress
+	eventType := gfxinput.EventMouseButtonPress
 	if ev.Value == 0 {
-		eventType = graphics.EventMouseButtonRelease
+		eventType = gfxinput.EventMouseButtonRelease
 	}
 
-	return &graphics.Event{
+	return &gfxinput.Event{
 		Type:        eventType,
 		X:           h.mouseX,
 		Y:           h.mouseY,
@@ -377,7 +377,7 @@ func (h *Handler) processMouseButton(ev *inputEvent) *graphics.Event {
 	}
 }
 
-func (h *Handler) processRelEvent(ev *inputEvent) *graphics.Event {
+func (h *Handler) processRelEvent(ev *inputEvent) *gfxinput.Event {
 	switch ev.Code {
 	case relX:
 		if ev.Value == 0 {
@@ -411,40 +411,40 @@ func (h *Handler) processRelEvent(ev *inputEvent) *graphics.Event {
 		}
 	case relWheel:
 		if ev.Value > 0 {
-			return &graphics.Event{
-				Type:        graphics.EventMouseButtonPress,
+			return &gfxinput.Event{
+				Type:        gfxinput.EventMouseButtonPress,
 				X:           h.mouseX,
 				Y:           h.mouseY,
-				MouseButton: graphics.MouseButtonWheelUp,
+				MouseButton: gfxinput.MouseButtonWheelUp,
 				Modifiers:   h.modifiers,
 			}
 		}
 		if ev.Value < 0 {
-			return &graphics.Event{
-				Type:        graphics.EventMouseButtonPress,
+			return &gfxinput.Event{
+				Type:        gfxinput.EventMouseButtonPress,
 				X:           h.mouseX,
 				Y:           h.mouseY,
-				MouseButton: graphics.MouseButtonWheelDown,
+				MouseButton: gfxinput.MouseButtonWheelDown,
 				Modifiers:   h.modifiers,
 			}
 		}
 		return nil
 	case relHWheel:
 		if ev.Value > 0 {
-			return &graphics.Event{
-				Type:        graphics.EventMouseButtonPress,
+			return &gfxinput.Event{
+				Type:        gfxinput.EventMouseButtonPress,
 				X:           h.mouseX,
 				Y:           h.mouseY,
-				MouseButton: graphics.MouseButtonWheelLeft,
+				MouseButton: gfxinput.MouseButtonWheelLeft,
 				Modifiers:   h.modifiers,
 			}
 		}
 		if ev.Value < 0 {
-			return &graphics.Event{
-				Type:        graphics.EventMouseButtonPress,
+			return &gfxinput.Event{
+				Type:        gfxinput.EventMouseButtonPress,
 				X:           h.mouseX,
 				Y:           h.mouseY,
-				MouseButton: graphics.MouseButtonWheelRight,
+				MouseButton: gfxinput.MouseButtonWheelRight,
 				Modifiers:   h.modifiers,
 			}
 		}
@@ -453,8 +453,8 @@ func (h *Handler) processRelEvent(ev *inputEvent) *graphics.Event {
 		return nil
 	}
 
-	return &graphics.Event{
-		Type:      graphics.EventMouseMove,
+	return &gfxinput.Event{
+		Type:      gfxinput.EventMouseMove,
 		X:         h.mouseX,
 		Y:         h.mouseY,
 		Modifiers: h.modifiers,

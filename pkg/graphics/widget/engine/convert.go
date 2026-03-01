@@ -2,11 +2,12 @@ package engine
 
 import (
 	"fmt"
+	"image/color"
 	"strconv"
 	"strings"
 
-	graphics "avyos.dev/pkg/graphics/input"
-	gfxtheme "avyos.dev/pkg/graphics/theme"
+	core "avyos.dev/pkg/graphics/pixmap"
+	gfxtheme "avyos.dev/pkg/graphics/themes"
 )
 
 func toString(v interface{}) string {
@@ -91,17 +92,17 @@ func toBool(v interface{}) bool {
 	return false
 }
 
-func toColor(v interface{}) graphics.Color {
+func toColor(v interface{}) color.NRGBA {
 	switch val := v.(type) {
-	case graphics.Color:
+	case color.NRGBA:
 		return val
 	case string:
 		return parseColorStr(val)
 	}
-	return graphics.Color{}
+	return color.NRGBA{}
 }
 
-func parseColorStr(s string) graphics.Color {
+func parseColorStr(s string) color.NRGBA {
 	s = strings.TrimSpace(s)
 
 	// Theme colors
@@ -182,19 +183,19 @@ func parseColorStr(s string) graphics.Color {
 	// Named colors
 	switch strings.ToLower(s) {
 	case "black":
-		return graphics.ColorBlack
+		return core.ColorBlack
 	case "white":
-		return graphics.ColorWhite
+		return core.ColorWhite
 	case "red":
-		return graphics.ColorRed
+		return core.ColorRed
 	case "green":
-		return graphics.ColorGreen
+		return core.ColorGreen
 	case "blue":
-		return graphics.ColorBlue
+		return core.ColorBlue
 	case "gray", "grey":
-		return graphics.ColorGray
+		return core.ColorGray
 	case "transparent":
-		return graphics.ColorTransparent
+		return core.ColorTransparent
 	}
 
 	// Hex colors
@@ -205,17 +206,17 @@ func parseColorStr(s string) graphics.Color {
 			r, _ := strconv.ParseUint(string(hex[0])+string(hex[0]), 16, 8)
 			g, _ := strconv.ParseUint(string(hex[1])+string(hex[1]), 16, 8)
 			bl, _ := strconv.ParseUint(string(hex[2])+string(hex[2]), 16, 8)
-			return graphics.NewColorRGB(uint8(r), uint8(g), uint8(bl))
+			return core.NewColorRGB(uint8(r), uint8(g), uint8(bl))
 		case 6:
 			v, _ := strconv.ParseUint(hex, 16, 32)
-			return graphics.NewColorHex(uint32(v))
+			return core.NewColorHex(uint32(v))
 		case 8:
 			v, _ := strconv.ParseUint(hex, 16, 32)
-			return graphics.NewColorHex(uint32(v))
+			return core.NewColorHex(uint32(v))
 		}
 	}
 
-	return graphics.Color{}
+	return color.NRGBA{}
 }
 
 // parsePaddingStr parses CSS-like padding: "10", "10 20", "10 20 10 20"

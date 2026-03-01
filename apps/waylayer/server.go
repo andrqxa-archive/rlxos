@@ -25,7 +25,7 @@ import (
 	"time"
 
 	displayapi "avyos.dev/api/display"
-	graphics "avyos.dev/pkg/graphics/input"
+	gfxinput "avyos.dev/pkg/graphics/input"
 )
 
 // toplevelWindow maps a Wayland xdg surface role to a display window.
@@ -42,7 +42,7 @@ type toplevelWindow struct {
 	keyboardEntered bool
 
 	// Modifier tracking
-	modifiers graphics.Modifiers
+	modifiers gfxinput.Modifiers
 	capsLock  bool
 
 	// Track pressed keys for keyboard enter
@@ -264,7 +264,7 @@ func (s *Server) handlePointerButton(tw *toplevelWindow, button int, pressed boo
 }
 
 // handleKey sends wl_keyboard.key to the client.
-func (s *Server) handleKey(tw *toplevelWindow, key graphics.Key, char rune, pressed bool) {
+func (s *Server) handleKey(tw *toplevelWindow, key gfxinput.Key, char rune, pressed bool) {
 	sess := tw.session
 	if sess.keyboardID == 0 {
 		return
@@ -590,33 +590,33 @@ func (s *Server) timestamp() uint32 {
 }
 
 // updateModifiers tracks modifier key state.
-func (s *Server) updateModifiers(tw *toplevelWindow, key graphics.Key, pressed bool) {
+func (s *Server) updateModifiers(tw *toplevelWindow, key gfxinput.Key, pressed bool) {
 	switch key {
-	case graphics.KeyLeftShift, graphics.KeyRightShift:
+	case gfxinput.KeyLeftShift, gfxinput.KeyRightShift:
 		if pressed {
-			tw.modifiers |= graphics.ModShift
+			tw.modifiers |= gfxinput.ModShift
 		} else {
-			tw.modifiers &^= graphics.ModShift
+			tw.modifiers &^= gfxinput.ModShift
 		}
-	case graphics.KeyLeftCtrl, graphics.KeyRightCtrl:
+	case gfxinput.KeyLeftCtrl, gfxinput.KeyRightCtrl:
 		if pressed {
-			tw.modifiers |= graphics.ModCtrl
+			tw.modifiers |= gfxinput.ModCtrl
 		} else {
-			tw.modifiers &^= graphics.ModCtrl
+			tw.modifiers &^= gfxinput.ModCtrl
 		}
-	case graphics.KeyLeftAlt, graphics.KeyRightAlt:
+	case gfxinput.KeyLeftAlt, gfxinput.KeyRightAlt:
 		if pressed {
-			tw.modifiers |= graphics.ModAlt
+			tw.modifiers |= gfxinput.ModAlt
 		} else {
-			tw.modifiers &^= graphics.ModAlt
+			tw.modifiers &^= gfxinput.ModAlt
 		}
-	case graphics.KeyCapsLock:
+	case gfxinput.KeyCapsLock:
 		if pressed {
 			tw.capsLock = !tw.capsLock
 			if tw.capsLock {
-				tw.modifiers |= graphics.ModCapsLock
+				tw.modifiers |= gfxinput.ModCapsLock
 			} else {
-				tw.modifiers &^= graphics.ModCapsLock
+				tw.modifiers &^= gfxinput.ModCapsLock
 			}
 		}
 	}
@@ -630,18 +630,18 @@ func (s *Server) sendModifiers(tw *toplevelWindow) {
 	}
 
 	var depressed uint32
-	if tw.modifiers&graphics.ModShift != 0 {
+	if tw.modifiers&gfxinput.ModShift != 0 {
 		depressed |= 1 // Shift
 	}
-	if tw.modifiers&graphics.ModCtrl != 0 {
+	if tw.modifiers&gfxinput.ModCtrl != 0 {
 		depressed |= 4 // Control
 	}
-	if tw.modifiers&graphics.ModAlt != 0 {
+	if tw.modifiers&gfxinput.ModAlt != 0 {
 		depressed |= 8 // Mod1
 	}
 
 	var locked uint32
-	if tw.modifiers&graphics.ModCapsLock != 0 {
+	if tw.modifiers&gfxinput.ModCapsLock != 0 {
 		locked |= 2 // Lock
 	}
 

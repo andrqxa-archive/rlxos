@@ -23,7 +23,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	graphics "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
 // WL_SHM_FORMAT_ARGB8888 = 0 (BGRA in memory on little-endian)
@@ -64,7 +64,7 @@ type shmBuffer struct {
 	height   int
 	stride   int
 	released bool
-	buf      *graphics.Buffer
+	buf      *core.Buffer
 }
 
 // memfdCreate creates an anonymous file via memfd_create syscall.
@@ -145,11 +145,11 @@ func newShmPool(cl *client, width, height int) (*shmPool, error) {
 			stride:   stride,
 			released: true,
 		}
-		buf.buf = &graphics.Buffer{
+		buf.buf = &core.Buffer{
 			Width:  width,
 			Height: height,
 			Stride: stride,
-			Format: graphics.PixelFormatBGRA,
+			Format: core.PixelFormatBGRA,
 			Data:   data[offset : offset+bufSize],
 		}
 
@@ -237,11 +237,11 @@ func (p *shmPool) resize(width, height int) error {
 			stride:   stride,
 			released: true,
 		}
-		buf.buf = &graphics.Buffer{
+		buf.buf = &core.Buffer{
 			Width:  width,
 			Height: height,
 			Stride: stride,
-			Format: graphics.PixelFormatBGRA,
+			Format: core.PixelFormatBGRA,
 			Data:   data[offset : offset+bufSize],
 		}
 

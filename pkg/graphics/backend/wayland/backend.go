@@ -19,18 +19,20 @@ package wayland
 
 import (
 	"fmt"
+	"image"
 	"sync"
 
-	graphics "avyos.dev/pkg/graphics/input"
+	gfxinput "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
-// Backend implements graphics.Backend and graphics.InputHandler for Wayland.
+// Backend implements the display backend and input handler interfaces for Wayland.
 type Backend struct {
 	cl      *client
 	xdg     *xdgShell
 	pool    *shmPool
 	seat    *seatHandler
-	events  chan graphics.Event
+	events  chan gfxinput.Event
 	width   int
 	height  int
 	title   string
@@ -45,7 +47,7 @@ func New() *Backend {
 	return &Backend{
 		width:  800,
 		height: 600,
-		events: make(chan graphics.Event, 256),
+		events: make(chan gfxinput.Event, 256),
 		quit:   make(chan struct{}),
 	}
 }
@@ -115,7 +117,7 @@ func (b *Backend) Open() error {
 	}
 
 	xdg.onClose = func() {
-		b.emit(graphics.Event{Type: graphics.EventQuit})
+		b.emit(gfxinput.Event{Type: gfxinput.EventQuit})
 	}
 
 	// Initial commit to trigger configure
@@ -170,7 +172,7 @@ func (b *Backend) Size() (int, int) {
 }
 
 // Buffer returns the back buffer for drawing.
-func (b *Backend) Buffer() *graphics.Buffer {
+func (b *Backend) Buffer() *core.Buffer {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.pool == nil {
@@ -181,11 +183,11 @@ func (b *Backend) Buffer() *graphics.Buffer {
 
 // Flush copies the entire back buffer to the Wayland surface.
 func (b *Backend) Flush() error {
-	return b.FlushRect(graphics.Rect{W: b.width, H: b.height})
+	return b.FlushRect(core.RectXYWH(0, 0, b.width, b.height))
 }
 
 // FlushRect commits a damaged region to the Wayland surface.
-func (b *Backend) FlushRect(r graphics.Rect) error {
+func (b *Backend) FlushRect(r image.Rectangle) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -201,7 +203,7 @@ func (b *Backend) FlushRect(r graphics.Rect) error {
 	}
 
 	// Mark damage
-	if err := b.cl.surfaceDamage(int32(r.X), int32(r.Y), int32(r.W), int32(r.H)); err != nil {
+	if err := b.cl.surfaceDamage(int32(r.Min.X), int32(r.Min.Y), int32(r.Dx()), int32(r.Dy())); err != nil {
 		return err
 	}
 
@@ -242,7 +244,7 @@ func (b *Backend) Start() {
 }
 
 // Poll returns the next event or nil.
-func (b *Backend) Poll() *graphics.Event {
+func (b *Backend) Poll() *gfxinput.Event {
 	select {
 	case ev := <-b.events:
 		return &ev
@@ -270,14 +272,14 @@ func (b *Backend) eventLoop() {
 			return
 		default:
 			if err := b.cl.dispatch(); err != nil {
-				b.emit(graphics.Event{Type: graphics.EventQuit})
+				b.emit(gfxinput.Event{Type: gfxinput.EventQuit})
 				return
 			}
 		}
 	}
 }
 
-func (b *Backend) emit(ev graphics.Event) {
+func (b *Backend) emit(ev gfxinput.Event) {
 	select {
 	case b.events <- ev:
 	default:

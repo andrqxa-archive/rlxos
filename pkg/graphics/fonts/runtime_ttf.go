@@ -18,7 +18,6 @@
 package font
 
 import (
-	"image"
 	"image/color"
 )
 
@@ -96,24 +95,22 @@ func (r *ttfRenderer) DrawText(buf *Buffer, text string, x, y int, fg, bg Color)
 	if r == nil || r.face == nil || buf == nil {
 		return
 	}
-	dst := &bufferDrawImage{buf: buf}
 	var bgColor color.Color
 	if bg.A > 0 {
 		bgColor = color.NRGBA{R: bg.R, G: bg.G, B: bg.B, A: bg.A}
 	}
-	r.face.DrawText(dst, text, x, y, color.NRGBA{R: fg.R, G: fg.G, B: fg.B, A: fg.A}, bgColor)
+	r.face.DrawText(buf, text, x, y, color.NRGBA{R: fg.R, G: fg.G, B: fg.B, A: fg.A}, bgColor)
 }
 
 func (r *ttfRenderer) DrawGlyph(buf *Buffer, rn rune, x, y int, fg, bg Color) {
 	if r == nil || r.face == nil || buf == nil {
 		return
 	}
-	dst := &bufferDrawImage{buf: buf}
 	var bgColor color.Color
 	if bg.A > 0 {
 		bgColor = color.NRGBA{R: bg.R, G: bg.G, B: bg.B, A: bg.A}
 	}
-	r.face.DrawGlyph(dst, rn, x, y, color.NRGBA{R: fg.R, G: fg.G, B: fg.B, A: fg.A}, bgColor)
+	r.face.DrawGlyph(buf, rn, x, y, color.NRGBA{R: fg.R, G: fg.G, B: fg.B, A: fg.A}, bgColor)
 }
 
 func (r *ttfRenderer) TextWidth(text string) int {
@@ -137,29 +134,4 @@ func (r *ttfRenderer) Close() error {
 		return nil
 	}
 	return r.face.Close()
-}
-
-type bufferDrawImage struct {
-	buf *Buffer
-}
-
-func (i *bufferDrawImage) ColorModel() color.Model {
-	return color.NRGBAModel
-}
-
-func (i *bufferDrawImage) Bounds() image.Rectangle {
-	return image.Rect(0, 0, i.buf.Width, i.buf.Height)
-}
-
-func (i *bufferDrawImage) At(x, y int) color.Color {
-	c := i.buf.GetPixel(x, y)
-	return color.NRGBA{R: c.R, G: c.G, B: c.B, A: c.A}
-}
-
-func (i *bufferDrawImage) Set(x, y int, c color.Color) {
-	if i.buf == nil {
-		return
-	}
-	n := color.NRGBAModel.Convert(c).(color.NRGBA)
-	i.buf.SetPixel(x, y, Color{R: n.R, G: n.G, B: n.B, A: n.A})
 }

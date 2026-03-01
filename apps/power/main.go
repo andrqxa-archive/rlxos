@@ -10,10 +10,9 @@ import (
 	display "avyos.dev/api/display"
 	"avyos.dev/pkg/fs"
 	gapp "avyos.dev/pkg/graphics/app"
-	declapp "avyos.dev/pkg/graphics/app/decl"
 	displaybackend "avyos.dev/pkg/graphics/backend/display"
 	gfxicons "avyos.dev/pkg/graphics/icons"
-	graphics "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 	ui "avyos.dev/pkg/graphics/widget/engine"
 )
 
@@ -23,7 +22,7 @@ var powerUI string
 const iconSize = 64
 
 type powerApp struct {
-	declapp.App
+	gapp.App
 }
 
 func (a *powerApp) e(id string) *ui.Element { return a.FindElement(id) }
@@ -95,7 +94,7 @@ func main() {
 		Title:      "Power",
 		Backend:    backend,
 		Input:      backend,
-		Background: graphics.ColorTransparent,
+		Background: core.ColorTransparent,
 	})
 	if err := app.LoadString(powerUI, app); err != nil {
 		log.Fatalf("Failed to load power UI: %v", err)

@@ -20,7 +20,7 @@ package compositor
 import (
 	"time"
 
-	graphics "avyos.dev/pkg/graphics/input"
+	gfxinput "avyos.dev/pkg/graphics/input"
 )
 
 // inputState tracks the compositor's input routing state.
@@ -53,21 +53,21 @@ func newInputState(comp *Compositor) *inputState {
 }
 
 // processEvent routes an evdev event to the appropriate Wayland client.
-func (inp *inputState) processEvent(ev *graphics.Event) {
+func (inp *inputState) processEvent(ev *gfxinput.Event) {
 	switch ev.Type {
-	case graphics.EventMouseMove:
+	case gfxinput.EventMouseMove:
 		inp.handlePointerMotion(ev.X, ev.Y)
 
-	case graphics.EventMouseButtonPress:
+	case gfxinput.EventMouseButtonPress:
 		inp.handlePointerButton(ev.MouseButton, true)
 
-	case graphics.EventMouseButtonRelease:
+	case gfxinput.EventMouseButtonRelease:
 		inp.handlePointerButton(ev.MouseButton, false)
 
-	case graphics.EventKeyPress:
+	case gfxinput.EventKeyPress:
 		inp.handleKey(ev, true)
 
-	case graphics.EventKeyRelease:
+	case gfxinput.EventKeyRelease:
 		inp.handleKey(ev, false)
 	}
 }
@@ -134,15 +134,15 @@ func (inp *inputState) handlePointerMotion(x, y int) {
 }
 
 // handlePointerButton processes a mouse button press or release.
-func (inp *inputState) handlePointerButton(button graphics.MouseButton, pressed bool) {
+func (inp *inputState) handlePointerButton(button gfxinput.MouseButton, pressed bool) {
 	// Map to Linux evdev button code
 	var code uint32
 	switch button {
-	case graphics.MouseButtonLeft:
+	case gfxinput.MouseButtonLeft:
 		code = evBtnLeft
-	case graphics.MouseButtonRight:
+	case gfxinput.MouseButtonRight:
 		code = evBtnRight
-	case graphics.MouseButtonMiddle:
+	case gfxinput.MouseButtonMiddle:
 		code = evBtnMiddle
 	default:
 		return
@@ -204,13 +204,13 @@ func (inp *inputState) handlePointerButton(button graphics.MouseButton, pressed 
 }
 
 // handleKey processes a keyboard event.
-func (inp *inputState) handleKey(ev *graphics.Event, pressed bool) {
+func (inp *inputState) handleKey(ev *gfxinput.Event, pressed bool) {
 	win := inp.focusedWindow
 	if win == nil || inp.focusedSession == nil || inp.focusedSession.keyboardID == 0 {
 		return
 	}
 
-	// Convert graphics.Key back to evdev keycode
+	// Convert gfxinput.Key back to evdev keycode
 	keycode := keyToEvdev(ev.Key)
 	if keycode == 0 {
 		return
@@ -287,24 +287,24 @@ func (inp *inputState) focusWindow(win *Window) {
 }
 
 // sendModifiers sends wl_keyboard.modifiers to the focused client.
-func (inp *inputState) sendModifiers(mods graphics.Modifiers) {
+func (inp *inputState) sendModifiers(mods gfxinput.Modifiers) {
 	if inp.focusedSession == nil || inp.focusedSession.keyboardID == 0 {
 		return
 	}
 
 	var depressed uint32
-	if mods&graphics.ModShift != 0 {
+	if mods&gfxinput.ModShift != 0 {
 		depressed |= 1 // Shift
 	}
-	if mods&graphics.ModCtrl != 0 {
+	if mods&gfxinput.ModCtrl != 0 {
 		depressed |= 4 // Control
 	}
-	if mods&graphics.ModAlt != 0 {
+	if mods&gfxinput.ModAlt != 0 {
 		depressed |= 8 // Mod1
 	}
 
 	var locked uint32
-	if mods&graphics.ModCapsLock != 0 {
+	if mods&gfxinput.ModCapsLock != 0 {
 		locked |= 2 // Lock
 	}
 
@@ -324,43 +324,43 @@ func (inp *inputState) sendPointerFrame(session *clientSession) {
 	}
 }
 
-// keyToEvdev converts a graphics.Key to an evdev keycode.
+// keyToEvdev converts a gfxinput.Key to an evdev keycode.
 // These are the raw evdev keycodes as used in wl_keyboard.key events.
-var keyToEvdevMap = map[graphics.Key]int{
-	graphics.KeyEscape:     1,
-	graphics.KeyBackspace:  14,
-	graphics.KeyTab:        15,
-	graphics.KeyEnter:      28,
-	graphics.KeySpace:      57,
-	graphics.KeyLeft:       105,
-	graphics.KeyRight:      106,
-	graphics.KeyUp:         103,
-	graphics.KeyDown:       108,
-	graphics.KeyHome:       102,
-	graphics.KeyEnd:        107,
-	graphics.KeyPageUp:     104,
-	graphics.KeyPageDown:   109,
-	graphics.KeyInsert:     110,
-	graphics.KeyDelete:     111,
-	graphics.KeyF1:         59,
-	graphics.KeyF2:         60,
-	graphics.KeyF3:         61,
-	graphics.KeyF4:         62,
-	graphics.KeyF5:         63,
-	graphics.KeyF6:         64,
-	graphics.KeyF7:         65,
-	graphics.KeyF8:         66,
-	graphics.KeyF9:         67,
-	graphics.KeyF10:        68,
-	graphics.KeyF11:        87,
-	graphics.KeyF12:        88,
-	graphics.KeyLeftShift:  42,
-	graphics.KeyRightShift: 54,
-	graphics.KeyLeftCtrl:   29,
-	graphics.KeyRightCtrl:  97,
-	graphics.KeyLeftAlt:    56,
-	graphics.KeyRightAlt:   100,
-	graphics.KeyCapsLock:   58,
+var keyToEvdevMap = map[gfxinput.Key]int{
+	gfxinput.KeyEscape:     1,
+	gfxinput.KeyBackspace:  14,
+	gfxinput.KeyTab:        15,
+	gfxinput.KeyEnter:      28,
+	gfxinput.KeySpace:      57,
+	gfxinput.KeyLeft:       105,
+	gfxinput.KeyRight:      106,
+	gfxinput.KeyUp:         103,
+	gfxinput.KeyDown:       108,
+	gfxinput.KeyHome:       102,
+	gfxinput.KeyEnd:        107,
+	gfxinput.KeyPageUp:     104,
+	gfxinput.KeyPageDown:   109,
+	gfxinput.KeyInsert:     110,
+	gfxinput.KeyDelete:     111,
+	gfxinput.KeyF1:         59,
+	gfxinput.KeyF2:         60,
+	gfxinput.KeyF3:         61,
+	gfxinput.KeyF4:         62,
+	gfxinput.KeyF5:         63,
+	gfxinput.KeyF6:         64,
+	gfxinput.KeyF7:         65,
+	gfxinput.KeyF8:         66,
+	gfxinput.KeyF9:         67,
+	gfxinput.KeyF10:        68,
+	gfxinput.KeyF11:        87,
+	gfxinput.KeyF12:        88,
+	gfxinput.KeyLeftShift:  42,
+	gfxinput.KeyRightShift: 54,
+	gfxinput.KeyLeftCtrl:   29,
+	gfxinput.KeyRightCtrl:  97,
+	gfxinput.KeyLeftAlt:    56,
+	gfxinput.KeyRightAlt:   100,
+	gfxinput.KeyCapsLock:   58,
 }
 
 // runeToEvdev maps printable runes to evdev keycodes (US layout).
@@ -380,7 +380,7 @@ var runeToEvdevMap = map[rune]int{
 	',': 51, '.': 52, '/': 53,
 }
 
-func keyToEvdev(key graphics.Key) int {
+func keyToEvdev(key gfxinput.Key) int {
 	if code, ok := keyToEvdevMap[key]; ok {
 		return code
 	}

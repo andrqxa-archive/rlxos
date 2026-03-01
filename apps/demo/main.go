@@ -23,14 +23,13 @@ import (
 	"log"
 
 	gapp "avyos.dev/pkg/graphics/app"
-	declapp "avyos.dev/pkg/graphics/app/decl"
 )
 
 //go:embed ui/demo.ui
 var demoUI string
 
 type DemoApp struct {
-	declapp.App
+	gapp.App
 	clickCount   int
 	optionCursor int
 }

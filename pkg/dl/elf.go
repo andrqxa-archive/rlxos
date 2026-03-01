@@ -62,9 +62,9 @@ const (
 	ptPHDR    = 6
 	ptTLS     = 7
 
-	ptGnuEhFrame = 0x6474e550
-	ptGnuStack   = 0x6474e551
-	ptGnuRelro   = 0x6474e552
+	ptGnuEhFrame  = 0x6474e550
+	ptGnuStack    = 0x6474e551
+	ptGnuRelro    = 0x6474e552
 	ptGnuProperty = 0x6474e553
 )
 
@@ -121,66 +121,66 @@ const elf64DynSize = 16
 
 // Dynamic tags (d_tag).
 const (
-	dtNULL         = 0
-	dtNEEDED       = 1
-	dtPLTRELSZ     = 2
-	dtPLTGOT       = 3
-	dtHASH         = 4
-	dtSTRTAB       = 5
-	dtSYMTAB       = 6
-	dtRELA         = 7
-	dtRELASZ       = 8
-	dtRELAENT      = 9
-	dtSTRSZ        = 10
-	dtSYMENT       = 11
-	dtINIT         = 12
-	dtFINI         = 13
-	dtSONAME       = 14
-	dtRPATH        = 15
-	dtSYMBOLIC     = 16
-	dtREL          = 17
-	dtRELSZ        = 18
-	dtRELENT       = 19
-	dtPLTREL       = 20
-	dtDEBUG        = 21
-	dtTEXTREL      = 22
-	dtJMPREL       = 23
-	dtBIND_NOW     = 24
-	dtINIT_ARRAY   = 25
-	dtFINI_ARRAY   = 26
-	dtINIT_ARRAYSZ = 27
-	dtFINI_ARRAYSZ = 28
-	dtRUNPATH      = 29
-	dtFLAGS        = 30
+	dtNULL            = 0
+	dtNEEDED          = 1
+	dtPLTRELSZ        = 2
+	dtPLTGOT          = 3
+	dtHASH            = 4
+	dtSTRTAB          = 5
+	dtSYMTAB          = 6
+	dtRELA            = 7
+	dtRELASZ          = 8
+	dtRELAENT         = 9
+	dtSTRSZ           = 10
+	dtSYMENT          = 11
+	dtINIT            = 12
+	dtFINI            = 13
+	dtSONAME          = 14
+	dtRPATH           = 15
+	dtSYMBOLIC        = 16
+	dtREL             = 17
+	dtRELSZ           = 18
+	dtRELENT          = 19
+	dtPLTREL          = 20
+	dtDEBUG           = 21
+	dtTEXTREL         = 22
+	dtJMPREL          = 23
+	dtBIND_NOW        = 24
+	dtINIT_ARRAY      = 25
+	dtFINI_ARRAY      = 26
+	dtINIT_ARRAYSZ    = 27
+	dtFINI_ARRAYSZ    = 28
+	dtRUNPATH         = 29
+	dtFLAGS           = 30
 	dtPREINIT_ARRAY   = 32
 	dtPREINIT_ARRAYSZ = 33
 
-	dtGnuHash  = 0x6ffffef5 // DT_GNU_HASH
+	dtGnuHash     = 0x6ffffef5 // DT_GNU_HASH
 	dtTLSDESC_PLT = 0x6ffffef6
 	dtTLSDESC_GOT = 0x6ffffef7
-	dtRELACount = 0x6ffffff9
-	dtFLAGS_1  = 0x6ffffffb
-	dtVERSYM   = 0x6ffffff0
-	dtVERDEF   = 0x6ffffffc
-	dtVERDEFNUM = 0x6ffffffd
-	dtVERNEED  = 0x6ffffffe
-	dtVERNEEDNUM = 0x6fffffff
+	dtRELACount   = 0x6ffffff9
+	dtFLAGS_1     = 0x6ffffffb
+	dtVERSYM      = 0x6ffffff0
+	dtVERDEF      = 0x6ffffffc
+	dtVERDEFNUM   = 0x6ffffffd
+	dtVERNEED     = 0x6ffffffe
+	dtVERNEEDNUM  = 0x6fffffff
 )
 
 // DT_FLAGS bits.
 const (
-	dfSYMBOLIC  = 0x02
-	dfTEXTREL   = 0x04
-	dfBIND_NOW  = 0x08
+	dfSYMBOLIC   = 0x02
+	dfTEXTREL    = 0x04
+	dfBIND_NOW   = 0x08
 	dfSTATIC_TLS = 0x10
 )
 
 // DT_FLAGS_1 bits.
 const (
-	df1NOW    = 0x00000001
-	df1GLOBAL = 0x00000002
+	df1NOW      = 0x00000001
+	df1GLOBAL   = 0x00000002
 	df1NODELETE = 0x00000008
-	df1PIE    = 0x08000000
+	df1PIE      = 0x08000000
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -212,13 +212,13 @@ const (
 	stbGLOBAL = 1
 	stbWEAK   = 2
 
-	sttNOTYPE  = 0
-	sttOBJECT  = 1
-	sttFUNC    = 2
-	sttSECTION = 3
-	sttFILE    = 4
-	sttCOMMON  = 5
-	sttTLS     = 6
+	sttNOTYPE    = 0
+	sttOBJECT    = 1
+	sttFUNC      = 2
+	sttSECTION   = 3
+	sttFILE      = 4
+	sttCOMMON    = 5
+	sttTLS       = 6
 	sttGNU_IFUNC = 10
 
 	stvDEFAULT   = 0
@@ -226,8 +226,8 @@ const (
 	stvHIDDEN    = 2
 	stvPROTECTED = 3
 
-	shnUNDEF = 0
-	shnABS   = 0xfff1
+	shnUNDEF  = 0
+	shnABS    = 0xfff1
 	shnCOMMON = 0xfff2
 )
 
@@ -277,13 +277,13 @@ type elf64Vernaux struct {
 
 // Elf64_Verdef
 type elf64Verdef struct {
-	Version  uint16
-	Flags    uint16
-	Ndx      uint16
-	Cnt      uint16
-	Hash     uint32
-	Aux      uint32
-	Next     uint32
+	Version uint16
+	Flags   uint16
+	Ndx     uint16
+	Cnt     uint16
+	Hash    uint32
+	Aux     uint32
+	Next    uint32
 }
 
 // Elf64_Verdaux
@@ -306,9 +306,10 @@ const (
 
 // gnuHashHeader is the layout at the start of a DT_GNU_HASH section.
 // After this header come:
-//   bloom[maskwords] uint64
-//   buckets[nbuckets] uint32
-//   chains[] uint32          (indexed by symbol index - symndx)
+//
+//	bloom[maskwords] uint64
+//	buckets[nbuckets] uint32
+//	chains[] uint32          (indexed by symbol index - symndx)
 type gnuHashHeader struct {
 	Nbuckets  uint32
 	Symndx    uint32

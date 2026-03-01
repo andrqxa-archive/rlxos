@@ -34,55 +34,55 @@ type Object struct {
 	dyn dynamicInfo
 
 	// Symbol and string tables (pointers into mapped memory)
-	symtab  uintptr // DT_SYMTAB absolute address
-	strtab  uintptr // DT_STRTAB absolute address
-	strsz   uint64  // DT_STRSZ
-	syment  uint64  // DT_SYMENT (should be 24)
+	symtab uintptr // DT_SYMTAB absolute address
+	strtab uintptr // DT_STRTAB absolute address
+	strsz  uint64  // DT_STRSZ
+	syment uint64  // DT_SYMENT (should be 24)
 
 	// Hash tables
-	gnuHash *gnuHashTable
+	gnuHash  *gnuHashTable
 	sysvHash *sysvHashTable
 
 	// Versioning tables (absolute addresses in mapped memory)
-	versym   uintptr // DT_VERSYM — array of uint16, one per symbol
-	verdef   uintptr // DT_VERDEF
-	verdefNum uint64
-	verneed  uintptr // DT_VERNEED
+	versym     uintptr // DT_VERSYM — array of uint16, one per symbol
+	verdef     uintptr // DT_VERDEF
+	verdefNum  uint64
+	verneed    uintptr // DT_VERNEED
 	verneedNum uint64
 
 	// Relocation tables (absolute addresses + sizes)
-	relaAddr uintptr
-	relaSz   uint64
-	relaEnt  uint64
-	relAddr  uintptr
-	relSz    uint64
-	relEnt   uint64
-	pltRel   uint64 // DT_PLTREL: 7=RELA, 17=REL
+	relaAddr   uintptr
+	relaSz     uint64
+	relaEnt    uint64
+	relAddr    uintptr
+	relSz      uint64
+	relEnt     uint64
+	pltRel     uint64 // DT_PLTREL: 7=RELA, 17=REL
 	jmprelAddr uintptr
 	jmprelSz   uint64
-	pltgot   uintptr // DT_PLTGOT
+	pltgot     uintptr // DT_PLTGOT
 
 	// RELRO region
 	relroAddr uintptr
 	relroSize uintptr
 
 	// TLS
-	tlsPhdr    *elf64Phdr // PT_TLS program header, if present
-	tlsModuleID uint64    // assigned module ID for TLS
-	tlsOffset   uint64    // offset into static TLS block
-	tlsImage   uintptr   // absolute address of TLS init image
-	tlsImageSz uint64    // size of TLS init image (filesz)
-	tlsMemSz   uint64    // total TLS allocation (memsz)
-	tlsAlign   uint64    // TLS alignment
+	tlsPhdr     *elf64Phdr // PT_TLS program header, if present
+	tlsModuleID uint64     // assigned module ID for TLS
+	tlsOffset   uint64     // offset into static TLS block
+	tlsImage    uintptr    // absolute address of TLS init image
+	tlsImageSz  uint64     // size of TLS init image (filesz)
+	tlsMemSz    uint64     // total TLS allocation (memsz)
+	tlsAlign    uint64     // TLS alignment
 
 	// Init / fini
-	initFunc      uintptr   // DT_INIT
-	finiFunc      uintptr   // DT_FINI
-	initArray     uintptr   // DT_INIT_ARRAY
-	initArraySz   uint64    // DT_INIT_ARRAYSZ
-	finiArray     uintptr   // DT_FINI_ARRAY
-	finiArraySz   uint64    // DT_FINI_ARRAYSZ
-	preinitArray  uintptr
+	initFunc       uintptr // DT_INIT
+	finiFunc       uintptr // DT_FINI
+	initArray      uintptr // DT_INIT_ARRAY
+	initArraySz    uint64  // DT_INIT_ARRAYSZ
+	finiArray      uintptr // DT_FINI_ARRAY
+	finiArraySz    uint64  // DT_FINI_ARRAYSZ
+	preinitArray   uintptr
 	preinitArraySz uint64
 
 	// Dependencies (sonames from DT_NEEDED)
@@ -93,12 +93,12 @@ type Object struct {
 	Runpath string
 
 	// Flags
-	bindNow    bool // DT_BIND_NOW or DF_BIND_NOW or DF_1_NOW
-	symbolic   bool // DT_SYMBOLIC or DF_SYMBOLIC
-	staticTLS  bool // DF_STATIC_TLS
-	textrel    bool // DT_TEXTREL or DF_TEXTREL
-	nodelete   bool // DF_1_NODELETE
-	deepbind   bool // opened with RTLD_DEEPBIND
+	bindNow   bool // DT_BIND_NOW or DF_BIND_NOW or DF_1_NOW
+	symbolic  bool // DT_SYMBOLIC or DF_SYMBOLIC
+	staticTLS bool // DF_STATIC_TLS
+	textrel   bool // DT_TEXTREL or DF_TEXTREL
+	nodelete  bool // DF_1_NODELETE
+	deepbind  bool // opened with RTLD_DEEPBIND
 
 	// State
 	refcount    int

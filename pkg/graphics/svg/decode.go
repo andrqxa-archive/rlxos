@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	core "avyos.dev/pkg/graphics/pixmap"
+
 	"golang.org/x/image/vector"
 )
 
@@ -40,7 +42,7 @@ type svgStyle struct {
 
 type svgGradientStop struct {
 	offset float64
-	color  Color
+	color  color.NRGBA
 }
 
 type svgGradient struct {
@@ -86,7 +88,7 @@ type svgDefs struct {
 	clipPaths   map[string]svgNode
 	masks       map[string]svgNode
 	textFace    *TextFace
-	decodeImage func(path string, reqSize int) (*Buffer, error)
+	decodeImage func(path string, reqSize int) (*core.Buffer, error)
 }
 
 type TextFace struct {
@@ -97,7 +99,7 @@ type TextFace struct {
 
 type Options struct {
 	TextFace    *TextFace
-	DecodeImage func(path string, reqSize int) (*Buffer, error)
+	DecodeImage func(path string, reqSize int) (*core.Buffer, error)
 }
 
 type svgMatrix struct {
@@ -124,7 +126,7 @@ func svgMul(a, b svgMatrix) svgMatrix {
 }
 
 // Decode decodes and rasterizes SVG using an in-tree parser/rasterizer.
-func Decode(path string, reqSize int, opts Options) (*Buffer, error) {
+func Decode(path string, reqSize int, opts Options) (*core.Buffer, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read svg %q: %w", path, err)
@@ -159,7 +161,7 @@ func Decode(path string, reqSize int, opts Options) (*Buffer, error) {
 	}
 	svgCollectDefs(root, defs)
 
-	dst := NewBuffer(w, h)
+	dst := core.NewBuffer(w, h)
 	fit := svgFitMatrix(vw, vh, w, h)
 	style := svgStyle{
 		fill:        "#000000",
@@ -269,7 +271,7 @@ func svgCollectDefs(n svgNode, defs *svgDefs) {
 	}
 }
 
-func svgRenderNode(dst *Buffer, n svgNode, ctm svgMatrix, inherited svgStyle, defs *svgDefs, depth int) {
+func svgRenderNode(dst *core.Buffer, n svgNode, ctm svgMatrix, inherited svgStyle, defs *svgDefs, depth int) {
 	if depth > 20 {
 		return
 	}
@@ -289,7 +291,7 @@ func svgRenderNode(dst *Buffer, n svgNode, ctm svgMatrix, inherited svgStyle, de
 	clipID := svgParseURLID(svgAttr(n, "clip-path"))
 	maskID := svgParseURLID(svgAttr(n, "mask"))
 	if clipID != "" || maskID != "" {
-		tmp := NewBuffer(dst.Width, dst.Height)
+		tmp := core.NewBuffer(dst.Width, dst.Height)
 		nNoFx := svgNode{
 			XMLName: n.XMLName,
 			Attrs:   svgFilterAttrs(n.Attrs, "clip-path", "mask"),
@@ -396,7 +398,7 @@ func svgRenderNode(dst *Buffer, n svgNode, ctm svgMatrix, inherited svgStyle, de
 	}
 }
 
-func svgFillPath(dst *Buffer, d string, ctm svgMatrix, style svgStyle, defs *svgDefs) {
+func svgFillPath(dst *core.Buffer, d string, ctm svgMatrix, style svgStyle, defs *svgDefs) {
 	paths := svgPathToStrokePolylines(d, ctm)
 	bbox := svgBBoxFromPolylines(paths)
 	if strings.EqualFold(style.fillRule, "evenodd") {
@@ -410,7 +412,7 @@ func svgFillPath(dst *Buffer, d string, ctm svgMatrix, style svgStyle, defs *svg
 	svgPaintRaster(dst, zr, style, defs, ctm, bbox)
 }
 
-func svgFillPathEvenOdd(dst *Buffer, paths []svgPolyline, style svgStyle, defs *svgDefs, ctm svgMatrix, bbox svgBBox) {
+func svgFillPathEvenOdd(dst *core.Buffer, paths []svgPolyline, style svgStyle, defs *svgDefs, ctm svgMatrix, bbox svgBBox) {
 	paint, ok := svgResolveFillPaint(style, defs, ctm, bbox)
 	if !ok {
 		return
@@ -426,7 +428,7 @@ func svgFillPathEvenOdd(dst *Buffer, paths []svgPolyline, style svgStyle, defs *
 	svgBlendMaskRegion(dst, paint, mask, bbox)
 }
 
-func svgFillCircle(dst *Buffer, cx, cy, r float64, ctm svgMatrix, style svgStyle, defs *svgDefs) {
+func svgFillCircle(dst *core.Buffer, cx, cy, r float64, ctm svgMatrix, style svgStyle, defs *svgDefs) {
 	zr := vector.NewRasterizer(dst.Width, dst.Height)
 	pts := make([][2]float64, 0, 65)
 	const segs = 64
@@ -446,7 +448,7 @@ func svgFillCircle(dst *Buffer, cx, cy, r float64, ctm svgMatrix, style svgStyle
 	svgPaintRaster(dst, zr, style, defs, ctm, svgBBoxFromPoints(pts))
 }
 
-func svgFillRect(dst *Buffer, x, y, w, h float64, ctm svgMatrix, style svgStyle, defs *svgDefs) {
+func svgFillRect(dst *core.Buffer, x, y, w, h float64, ctm svgMatrix, style svgStyle, defs *svgDefs) {
 	zr := vector.NewRasterizer(dst.Width, dst.Height)
 	x0, y0 := ctm.apply(x, y)
 	x1, y1 := ctm.apply(x+w, y)
@@ -460,7 +462,7 @@ func svgFillRect(dst *Buffer, x, y, w, h float64, ctm svgMatrix, style svgStyle,
 	svgPaintRaster(dst, zr, style, defs, ctm, svgBBoxFromPoints([][2]float64{{x0, y0}, {x1, y1}, {x2, y2}, {x3, y3}}))
 }
 
-func svgFillEllipse(dst *Buffer, cx, cy, rx, ry float64, ctm svgMatrix, style svgStyle, defs *svgDefs) {
+func svgFillEllipse(dst *core.Buffer, cx, cy, rx, ry float64, ctm svgMatrix, style svgStyle, defs *svgDefs) {
 	zr := vector.NewRasterizer(dst.Width, dst.Height)
 	pts := make([][2]float64, 0, 73)
 	const segs = 72
@@ -480,7 +482,7 @@ func svgFillEllipse(dst *Buffer, cx, cy, rx, ry float64, ctm svgMatrix, style sv
 	svgPaintRaster(dst, zr, style, defs, ctm, svgBBoxFromPoints(pts))
 }
 
-func svgFillPoints(dst *Buffer, pts [][2]float64, closePath bool, ctm svgMatrix, style svgStyle, defs *svgDefs) {
+func svgFillPoints(dst *core.Buffer, pts [][2]float64, closePath bool, ctm svgMatrix, style svgStyle, defs *svgDefs) {
 	if len(pts) == 0 {
 		return
 	}
@@ -500,7 +502,7 @@ func svgFillPoints(dst *Buffer, pts [][2]float64, closePath bool, ctm svgMatrix,
 	svgPaintRaster(dst, zr, style, defs, ctm, svgBBoxFromPoints(tpts))
 }
 
-func svgStrokePath(dst *Buffer, d string, ctm svgMatrix, style svgStyle, defs *svgDefs) {
+func svgStrokePath(dst *core.Buffer, d string, ctm svgMatrix, style svgStyle, defs *svgDefs) {
 	paths := svgPathToStrokePolylines(d, ctm)
 	bbox := svgBBoxFromPolylines(paths)
 	p, ok := svgResolveStrokePaint(style, defs, ctm, bbox)
@@ -510,11 +512,11 @@ func svgStrokePath(dst *Buffer, d string, ctm svgMatrix, style svgStyle, defs *s
 	svgRenderStrokePolylines(dst, paths, p, style)
 }
 
-func svgStrokeCircle(dst *Buffer, cx, cy, r float64, ctm svgMatrix, style svgStyle, defs *svgDefs) {
+func svgStrokeCircle(dst *core.Buffer, cx, cy, r float64, ctm svgMatrix, style svgStyle, defs *svgDefs) {
 	svgStrokeEllipse(dst, cx, cy, r, r, ctm, style, defs)
 }
 
-func svgStrokeEllipse(dst *Buffer, cx, cy, rx, ry float64, ctm svgMatrix, style svgStyle, defs *svgDefs) {
+func svgStrokeEllipse(dst *core.Buffer, cx, cy, rx, ry float64, ctm svgMatrix, style svgStyle, defs *svgDefs) {
 	const segs = 96
 	pts := make([][2]float64, 0, segs)
 	for i := 0; i < segs; i++ {
@@ -531,12 +533,12 @@ func svgStrokeEllipse(dst *Buffer, cx, cy, rx, ry float64, ctm svgMatrix, style 
 	svgRenderStrokePolylines(dst, []svgPolyline{{pts: pts, closed: true}}, p, style)
 }
 
-func svgStrokeRect(dst *Buffer, x, y, w, h float64, ctm svgMatrix, style svgStyle, defs *svgDefs) {
+func svgStrokeRect(dst *core.Buffer, x, y, w, h float64, ctm svgMatrix, style svgStyle, defs *svgDefs) {
 	pts := [][2]float64{{x, y}, {x + w, y}, {x + w, y + h}, {x, y + h}}
 	svgStrokePoints(dst, pts, true, ctm, style, defs)
 }
 
-func svgStrokePoints(dst *Buffer, pts [][2]float64, closePath bool, ctm svgMatrix, style svgStyle, defs *svgDefs) {
+func svgStrokePoints(dst *core.Buffer, pts [][2]float64, closePath bool, ctm svgMatrix, style svgStyle, defs *svgDefs) {
 	tp := make([][2]float64, 0, len(pts))
 	for _, q := range pts {
 		x, y := ctm.apply(q[0], q[1])
@@ -549,7 +551,7 @@ func svgStrokePoints(dst *Buffer, pts [][2]float64, closePath bool, ctm svgMatri
 	svgRenderStrokePolylines(dst, []svgPolyline{{pts: tp, closed: closePath}}, p, style)
 }
 
-func svgRenderText(dst *Buffer, n svgNode, ctm svgMatrix, style svgStyle, defs *svgDefs) {
+func svgRenderText(dst *core.Buffer, n svgNode, ctm svgMatrix, style svgStyle, defs *svgDefs) {
 	font := defs.textFace
 	if font == nil {
 		return
@@ -711,7 +713,7 @@ func svgRasterTextMask(mask *image.Alpha, font *TextFace, text string, x, y floa
 	}
 }
 
-func svgRenderImage(dst *Buffer, n svgNode, ctm svgMatrix, style svgStyle, defs *svgDefs) {
+func svgRenderImage(dst *core.Buffer, n svgNode, ctm svgMatrix, style svgStyle, defs *svgDefs) {
 	href := strings.TrimSpace(svgAttr(n, "href"))
 	if href == "" {
 		href = strings.TrimSpace(svgAttr(n, "xlink:href"))
@@ -745,11 +747,11 @@ func svgRenderImage(dst *Buffer, n svgNode, ctm svgMatrix, style svgStyle, defs 
 	if x1 <= x0 || y1 <= y0 {
 		return
 	}
-	dstRect := Rect{X: x0, Y: y0, W: x1 - x0, H: y1 - y0}
-	srcRect := Rect{X: 0, Y: 0, W: src.Width, H: src.Height}
+	dstRect := core.RectXYWH(x0, y0, x1-x0, y1-y0)
+	srcRect := core.RectXYWH(0, 0, src.Width, src.Height)
 
 	// Draw image through a temporary buffer so opacity can be applied uniformly.
-	tmp := NewBuffer(dst.Width, dst.Height)
+	tmp := core.NewBuffer(dst.Width, dst.Height)
 	tmp.BlitScaled(src, srcRect, dstRect)
 	opacity := style.opacity
 	if opacity < 0 {
@@ -771,12 +773,12 @@ func svgRenderImage(dst *Buffer, n svgNode, ctm svgMatrix, style svgStyle, defs 
 				}
 			}
 			bg := dst.GetPixel(px, py)
-			dst.SetPixel(px, py, c.Blend(bg))
+			dst.SetPixel(px, py, core.Blend(c, bg))
 		}
 	}
 }
 
-func svgRenderStrokePolylines(dst *Buffer, lines []svgPolyline, paint svgPaint, style svgStyle) {
+func svgRenderStrokePolylines(dst *core.Buffer, lines []svgPolyline, paint svgPaint, style svgStyle) {
 	r := style.strokeWidth * 0.5
 	if r <= 0 {
 		return
@@ -853,7 +855,7 @@ func svgRenderStrokePolylines(dst *Buffer, lines []svgPolyline, paint svgPaint, 
 	}
 }
 
-func svgStrokeJoin(dst *Buffer, paint svgPaint, prev, cur, next [2]float64, r float64, joinStyle string, miterLimit float64) {
+func svgStrokeJoin(dst *core.Buffer, paint svgPaint, prev, cur, next [2]float64, r float64, joinStyle string, miterLimit float64) {
 	if r <= 0 {
 		return
 	}
@@ -903,7 +905,7 @@ func svgNormVec(x, y float64) (float64, float64, bool) {
 	return x / l, y / l, true
 }
 
-func svgStrokeJoinTriangle(dst *Buffer, paint svgPaint, a, b, c [2]float64) {
+func svgStrokeJoinTriangle(dst *core.Buffer, paint svgPaint, a, b, c [2]float64) {
 	zr := vector.NewRasterizer(dst.Width, dst.Height)
 	zr.MoveTo(float32(a[0]), float32(a[1]))
 	zr.LineTo(float32(b[0]), float32(b[1]))
@@ -936,7 +938,7 @@ func svgNormalizeDash(d []float64) []float64 {
 	return out
 }
 
-func svgStrokeDashedPolyline(dst *Buffer, paint svgPaint, pl svgPolyline, r float64, capStyle string, dash []float64, dashOffset float64) {
+func svgStrokeDashedPolyline(dst *core.Buffer, paint svgPaint, pl svgPolyline, r float64, capStyle string, dash []float64, dashOffset float64) {
 	if len(dash) == 0 || len(pl.pts) < 2 {
 		return
 	}
@@ -997,7 +999,7 @@ func svgStrokeDashedPolyline(dst *Buffer, paint svgPaint, pl svgPolyline, r floa
 	}
 }
 
-func svgStrokeSegment(dst *Buffer, paint svgPaint, x1, y1, x2, y2, r float64, capStyle string) {
+func svgStrokeSegment(dst *core.Buffer, paint svgPaint, x1, y1, x2, y2, r float64, capStyle string) {
 	if r <= 0 {
 		return
 	}
@@ -1055,7 +1057,7 @@ func svgStrokeSegment(dst *Buffer, paint svgPaint, x1, y1, x2, y2, r float64, ca
 	}
 }
 
-func svgStrokeDisc(dst *Buffer, paint svgPaint, cx, cy, r float64) {
+func svgStrokeDisc(dst *core.Buffer, paint svgPaint, cx, cy, r float64) {
 	if r <= 0 {
 		return
 	}
@@ -1080,7 +1082,7 @@ func svgStrokeDisc(dst *Buffer, paint svgPaint, cx, cy, r float64) {
 	}
 }
 
-func svgBlendPaintPixel(dst *Buffer, paint svgPaint, px, py int, cov float64) {
+func svgBlendPaintPixel(dst *core.Buffer, paint svgPaint, px, py int, cov float64) {
 	if px < 0 || py < 0 || px >= dst.Width || py >= dst.Height || cov <= 0 {
 		return
 	}
@@ -1096,7 +1098,7 @@ func svgBlendPaintPixel(dst *Buffer, paint svgPaint, px, py int, cov float64) {
 		return
 	}
 	bg := dst.GetPixel(px, py)
-	dst.SetPixel(px, py, src.Blend(bg))
+	dst.SetPixel(px, py, core.Blend(src, bg))
 }
 
 func svgFilterAttrs(attrs []xml.Attr, dropKeys ...string) []xml.Attr {
@@ -1156,7 +1158,7 @@ func svgClipNodeToRenderable(n svgNode, inheritedClipRule string) svgNode {
 	return out
 }
 
-func svgBufferAlphaBBox(buf *Buffer) svgBBox {
+func svgBufferAlphaBBox(buf *core.Buffer) svgBBox {
 	if buf == nil || buf.Width <= 0 || buf.Height <= 0 {
 		return svgBBox{}
 	}
@@ -1190,7 +1192,7 @@ func svgBufferAlphaBBox(buf *Buffer) svgBBox {
 }
 
 func svgBuildClipMask(w, h int, cp svgNode, ctm svgMatrix, targetBBox svgBBox, defs *svgDefs, depth int) *image.Alpha {
-	maskBuf := NewBuffer(w, h)
+	maskBuf := core.NewBuffer(w, h)
 	cpRule := strings.TrimSpace(strings.ToLower(svgAttr(cp, "clip-rule")))
 	if cpRule == "" {
 		cpRule = "nonzero"
@@ -1230,7 +1232,7 @@ func svgBuildClipMask(w, h int, cp svgNode, ctm svgMatrix, targetBBox svgBBox, d
 }
 
 func svgBuildMaskAlpha(w, h int, m svgNode, ctm svgMatrix, targetBBox svgBBox, defs *svgDefs, depth int) *image.Alpha {
-	maskBuf := NewBuffer(w, h)
+	maskBuf := core.NewBuffer(w, h)
 	maskStyle := svgStyle{
 		fill:        "#ffffff",
 		fillOpacity: 1,
@@ -1299,7 +1301,7 @@ func svgBuildMaskAlpha(w, h int, m svgNode, ctm svgMatrix, targetBBox svgBBox, d
 	return alpha
 }
 
-func svgModulateBufferAlpha(buf *Buffer, mask *image.Alpha) {
+func svgModulateBufferAlpha(buf *core.Buffer, mask *image.Alpha) {
 	if buf == nil || mask == nil {
 		return
 	}
@@ -1327,7 +1329,7 @@ func svgModulateBufferAlpha(buf *Buffer, mask *image.Alpha) {
 	}
 }
 
-func svgCompositeBuffer(dst, src *Buffer) {
+func svgCompositeBuffer(dst, src *core.Buffer) {
 	if dst == nil || src == nil {
 		return
 	}
@@ -1346,12 +1348,12 @@ func svgCompositeBuffer(dst, src *Buffer) {
 				continue
 			}
 			bg := dst.GetPixel(x, y)
-			dst.SetPixel(x, y, c.Blend(bg))
+			dst.SetPixel(x, y, core.Blend(c, bg))
 		}
 	}
 }
 
-func svgCompositeMask(dst, src *Buffer, mask *image.Alpha) {
+func svgCompositeMask(dst, src *core.Buffer, mask *image.Alpha) {
 	if dst == nil || src == nil || mask == nil {
 		return
 	}
@@ -1384,7 +1386,7 @@ func svgCompositeMask(dst, src *Buffer, mask *image.Alpha) {
 				continue
 			}
 			bg := dst.GetPixel(x, y)
-			dst.SetPixel(x, y, c.Blend(bg))
+			dst.SetPixel(x, y, core.Blend(c, bg))
 		}
 	}
 }
@@ -1519,7 +1521,7 @@ func svgPointInEvenOdd(paths []svgPolyline, x, y float64) bool {
 	return crossings%2 == 1
 }
 
-func svgPaintRaster(dst *Buffer, zr *vector.Rasterizer, style svgStyle, defs *svgDefs, ctm svgMatrix, bbox svgBBox) {
+func svgPaintRaster(dst *core.Buffer, zr *vector.Rasterizer, style svgStyle, defs *svgDefs, ctm svgMatrix, bbox svgBBox) {
 	paint, ok := svgResolveFillPaint(style, defs, ctm, bbox)
 	if !ok {
 		return
@@ -1529,14 +1531,14 @@ func svgPaintRaster(dst *Buffer, zr *vector.Rasterizer, style svgStyle, defs *sv
 	svgBlendMaskRegion(dst, paint, mask, bbox)
 }
 
-func svgBlendMask(dst *Buffer, paint svgPaint, mask *image.Alpha) {
+func svgBlendMask(dst *core.Buffer, paint svgPaint, mask *image.Alpha) {
 	if dst == nil || paint == nil || mask == nil {
 		return
 	}
 	svgBlendMaskRegion(dst, paint, mask, svgBBox{})
 }
 
-func svgBlendMaskRegion(dst *Buffer, paint svgPaint, mask *image.Alpha, bbox svgBBox) {
+func svgBlendMaskRegion(dst *core.Buffer, paint svgPaint, mask *image.Alpha, bbox svgBBox) {
 	if dst == nil || paint == nil || mask == nil {
 		return
 	}
@@ -1564,7 +1566,7 @@ func svgBlendMaskRegion(dst *Buffer, paint svgPaint, mask *image.Alpha, bbox svg
 				continue
 			}
 			bg := dst.GetPixel(x, y)
-			dst.SetPixel(x, y, src.Blend(bg))
+			dst.SetPixel(x, y, core.Blend(src, bg))
 		}
 	}
 }

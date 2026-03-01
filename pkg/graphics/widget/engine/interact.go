@@ -2,12 +2,14 @@ package engine
 
 import (
 	"fmt"
+	"image"
 	"math"
 	"strings"
 	"time"
 
-	gfxfont "avyos.dev/pkg/graphics/font"
-	graphics "avyos.dev/pkg/graphics/input"
+	gfxfont "avyos.dev/pkg/graphics/fonts"
+	gfxinput "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
 // --- Event dispatch ---
@@ -25,15 +27,15 @@ func (e *Element) isInteractive() bool {
 }
 
 // interactHandleEvent dispatches events based on element attributes.
-func (e *Element) interactHandleEvent(ev graphics.Event) bool {
+func (e *Element) interactHandleEvent(ev gfxinput.Event) bool {
 	if e.focused {
-		if ev.Type == graphics.EventKeyPress {
+		if ev.Type == gfxinput.EventKeyPress {
 			if _, ok := e.signals["keyPressed"]; ok {
 				e.EmitSignal("keyPressed", ev)
 				return true
 			}
 		}
-		if ev.Type == graphics.EventKeyRelease {
+		if ev.Type == gfxinput.EventKeyRelease {
 			if _, ok := e.signals["keyReleased"]; ok {
 				e.EmitSignal("keyReleased", ev)
 				return true
@@ -41,7 +43,7 @@ func (e *Element) interactHandleEvent(ev graphics.Event) bool {
 		}
 	}
 
-	if ev.Type == graphics.EventMouseButtonPress && isWheelButton(ev.MouseButton) {
+	if ev.Type == gfxinput.EventMouseButtonPress && isWheelButton(ev.MouseButton) {
 		if e.AttrBool("listView", false) {
 			return e.handleListViewEvent(ev)
 		}
@@ -79,30 +81,30 @@ func (e *Element) interactHandleEvent(ev graphics.Event) bool {
 
 // --- Click handling (buttons, interactive elements) ---
 
-func (e *Element) handleClickEvent(ev graphics.Event) bool {
+func (e *Element) handleClickEvent(ev gfxinput.Event) bool {
 	bounds := e.Bounds()
 	switch ev.Type {
-	case graphics.EventMouseMove:
-		inside := bounds.ContainsXY(ev.X, ev.Y)
+	case gfxinput.EventMouseMove:
+		inside := core.RectContainsXY(bounds, ev.X, ev.Y)
 		if inside != e.hovered {
 			e.hovered = inside
 			e.dirty = true
 			return true
 		}
-	case graphics.EventMouseButtonPress:
-		if ev.MouseButton == graphics.MouseButtonLeft && bounds.ContainsXY(ev.X, ev.Y) {
+	case gfxinput.EventMouseButtonPress:
+		if ev.MouseButton == gfxinput.MouseButtonLeft && core.RectContainsXY(bounds, ev.X, ev.Y) {
 			e.pressed = true
 			e.dirty = true
 			return true
 		}
-		if ev.MouseButton == graphics.MouseButtonRight && bounds.ContainsXY(ev.X, ev.Y) {
+		if ev.MouseButton == gfxinput.MouseButtonRight && core.RectContainsXY(bounds, ev.X, ev.Y) {
 			e.rightPressed = true
 			e.dirty = true
 			return true
 		}
-	case graphics.EventMouseButtonRelease:
-		if ev.MouseButton == graphics.MouseButtonLeft && e.pressed {
-			inside := bounds.ContainsXY(ev.X, ev.Y)
+	case gfxinput.EventMouseButtonRelease:
+		if ev.MouseButton == gfxinput.MouseButtonLeft && e.pressed {
+			inside := core.RectContainsXY(bounds, ev.X, ev.Y)
 			e.hovered = inside
 			if inside {
 				e.EmitSignal("clicked")
@@ -111,8 +113,8 @@ func (e *Element) handleClickEvent(ev graphics.Event) bool {
 			e.dirty = true
 			return true
 		}
-		if ev.MouseButton == graphics.MouseButtonRight && e.rightPressed {
-			inside := bounds.ContainsXY(ev.X, ev.Y)
+		if ev.MouseButton == gfxinput.MouseButtonRight && e.rightPressed {
+			inside := core.RectContainsXY(bounds, ev.X, ev.Y)
 			e.hovered = inside
 			if inside {
 				e.EmitSignal("secondaryClicked")
@@ -121,7 +123,7 @@ func (e *Element) handleClickEvent(ev graphics.Event) bool {
 			e.dirty = true
 			return true
 		}
-	case graphics.EventKeyPress:
+	case gfxinput.EventKeyPress:
 		if !e.focused {
 			return false
 		}
@@ -129,11 +131,11 @@ func (e *Element) handleClickEvent(ev graphics.Event) bool {
 			e.EmitSignal("keyPressed", ev)
 			return true
 		}
-		if ev.Key == graphics.KeyEnter || ev.Key == graphics.KeySpace {
+		if ev.Key == gfxinput.KeyEnter || ev.Key == gfxinput.KeySpace {
 			e.EmitSignal("clicked")
 			return true
 		}
-	case graphics.EventKeyRelease:
+	case gfxinput.EventKeyRelease:
 		if !e.focused {
 			return false
 		}
@@ -147,26 +149,26 @@ func (e *Element) handleClickEvent(ev graphics.Event) bool {
 
 // --- Checkable handling ---
 
-func (e *Element) handleCheckableEvent(ev graphics.Event) bool {
+func (e *Element) handleCheckableEvent(ev gfxinput.Event) bool {
 	bounds := e.Bounds()
 	switch ev.Type {
-	case graphics.EventMouseMove:
-		inside := bounds.ContainsXY(ev.X, ev.Y)
+	case gfxinput.EventMouseMove:
+		inside := core.RectContainsXY(bounds, ev.X, ev.Y)
 		if inside != e.hovered {
 			e.hovered = inside
 			e.dirty = true
 			return true
 		}
-	case graphics.EventMouseButtonPress:
-		if ev.MouseButton == graphics.MouseButtonLeft && bounds.ContainsXY(ev.X, ev.Y) {
+	case gfxinput.EventMouseButtonPress:
+		if ev.MouseButton == gfxinput.MouseButtonLeft && core.RectContainsXY(bounds, ev.X, ev.Y) {
 			checked := !e.AttrBool("checked", false)
 			e.attrs["checked"] = fmt.Sprintf("%v", checked)
 			e.dirty = true
 			e.EmitSignal("changed", checked)
 			return true
 		}
-	case graphics.EventKeyPress:
-		if e.focused && (ev.Key == graphics.KeyEnter || ev.Key == graphics.KeySpace) {
+	case gfxinput.EventKeyPress:
+		if e.focused && (ev.Key == gfxinput.KeyEnter || ev.Key == gfxinput.KeySpace) {
 			checked := !e.AttrBool("checked", false)
 			e.attrs["checked"] = fmt.Sprintf("%v", checked)
 			e.dirty = true
@@ -177,25 +179,25 @@ func (e *Element) handleCheckableEvent(ev graphics.Event) bool {
 	return false
 }
 
-func (e *Element) handleToggleEvent(ev graphics.Event) bool {
+func (e *Element) handleToggleEvent(ev gfxinput.Event) bool {
 	bounds := e.Bounds()
 	switch ev.Type {
-	case graphics.EventMouseMove:
-		inside := bounds.ContainsXY(ev.X, ev.Y)
+	case gfxinput.EventMouseMove:
+		inside := core.RectContainsXY(bounds, ev.X, ev.Y)
 		if inside != e.hovered {
 			e.hovered = inside
 			e.dirty = true
 			return true
 		}
-	case graphics.EventMouseButtonPress:
-		if ev.MouseButton == graphics.MouseButtonLeft && bounds.ContainsXY(ev.X, ev.Y) {
+	case gfxinput.EventMouseButtonPress:
+		if ev.MouseButton == gfxinput.MouseButtonLeft && core.RectContainsXY(bounds, ev.X, ev.Y) {
 			e.pressed = true
 			e.dirty = true
 			return true
 		}
-	case graphics.EventMouseButtonRelease:
-		if ev.MouseButton == graphics.MouseButtonLeft && e.pressed {
-			inside := bounds.ContainsXY(ev.X, ev.Y)
+	case gfxinput.EventMouseButtonRelease:
+		if ev.MouseButton == gfxinput.MouseButtonLeft && e.pressed {
+			inside := core.RectContainsXY(bounds, ev.X, ev.Y)
 			e.hovered = inside
 			e.pressed = false
 			if inside {
@@ -206,8 +208,8 @@ func (e *Element) handleToggleEvent(ev graphics.Event) bool {
 			e.dirty = true
 			return true
 		}
-	case graphics.EventKeyPress:
-		if e.focused && (ev.Key == graphics.KeyEnter || ev.Key == graphics.KeySpace) {
+	case gfxinput.EventKeyPress:
+		if e.focused && (ev.Key == gfxinput.KeyEnter || ev.Key == gfxinput.KeySpace) {
 			checked := !e.AttrBool("checked", false)
 			e.attrs["checked"] = fmt.Sprintf("%v", checked)
 			e.dirty = true
@@ -218,7 +220,7 @@ func (e *Element) handleToggleEvent(ev graphics.Event) bool {
 	return false
 }
 
-func (e *Element) handleListViewEvent(ev graphics.Event) bool {
+func (e *Element) handleListViewEvent(ev gfxinput.Event) bool {
 	bounds := e.Bounds()
 	itemsRaw := e.Attr("items", "")
 	if itemsRaw == "" {
@@ -229,7 +231,7 @@ func (e *Element) handleListViewEvent(ev graphics.Event) bool {
 	if rowH <= 0 {
 		rowH = 34
 	}
-	visibleRows := bounds.H / rowH
+	visibleRows := bounds.Dy() / rowH
 	if visibleRows < 1 {
 		visibleRows = 1
 	}
@@ -246,10 +248,10 @@ func (e *Element) handleListViewEvent(ev graphics.Event) bool {
 	}
 
 	rowAt := func(x, y int) int {
-		if !bounds.ContainsXY(x, y) {
+		if !core.RectContainsXY(bounds, x, y) {
 			return -1
 		}
-		idx := (y-bounds.Y)/rowH + scrollIndex
+		idx := (y-bounds.Min.Y)/rowH + scrollIndex
 		if idx < 0 || idx >= len(items) {
 			return -1
 		}
@@ -257,7 +259,7 @@ func (e *Element) handleListViewEvent(ev graphics.Event) bool {
 	}
 
 	switch ev.Type {
-	case graphics.EventMouseMove:
+	case gfxinput.EventMouseMove:
 		idx := rowAt(ev.X, ev.Y)
 		prev := e.AttrInt("hoveredIndex", -1)
 		if idx != prev {
@@ -265,16 +267,16 @@ func (e *Element) handleListViewEvent(ev graphics.Event) bool {
 			e.dirty = true
 			return true
 		}
-	case graphics.EventMouseButtonPress:
+	case gfxinput.EventMouseButtonPress:
 		if isWheelButton(ev.MouseButton) {
-			if !bounds.ContainsXY(ev.X, ev.Y) {
+			if !core.RectContainsXY(bounds, ev.X, ev.Y) {
 				return false
 			}
 			delta := 0
 			switch ev.MouseButton {
-			case graphics.MouseButtonWheelUp:
+			case gfxinput.MouseButtonWheelUp:
 				delta = -1
-			case graphics.MouseButtonWheelDown:
+			case gfxinput.MouseButtonWheelDown:
 				delta = 1
 			default:
 				return false
@@ -290,8 +292,8 @@ func (e *Element) handleListViewEvent(ev graphics.Event) bool {
 			e.dirty = true
 			return true
 		}
-		if ev.MouseButton == graphics.MouseButtonRight {
-			if !bounds.ContainsXY(ev.X, ev.Y) {
+		if ev.MouseButton == gfxinput.MouseButtonRight {
+			if !core.RectContainsXY(bounds, ev.X, ev.Y) {
 				return false
 			}
 			idx := rowAt(ev.X, ev.Y)
@@ -304,8 +306,8 @@ func (e *Element) handleListViewEvent(ev graphics.Event) bool {
 			e.EmitSignal("secondaryClicked")
 			return true
 		}
-		if ev.MouseButton == graphics.MouseButtonLeft {
-			if !bounds.ContainsXY(ev.X, ev.Y) {
+		if ev.MouseButton == gfxinput.MouseButtonLeft {
+			if !core.RectContainsXY(bounds, ev.X, ev.Y) {
 				return false
 			}
 			e.pressed = true
@@ -313,8 +315,8 @@ func (e *Element) handleListViewEvent(ev graphics.Event) bool {
 			e.dirty = true
 			return true
 		}
-	case graphics.EventMouseButtonRelease:
-		if ev.MouseButton == graphics.MouseButtonLeft && e.pressed {
+	case gfxinput.EventMouseButtonRelease:
+		if ev.MouseButton == gfxinput.MouseButtonLeft && e.pressed {
 			e.pressed = false
 			releasedIdx := rowAt(ev.X, ev.Y)
 			pressedIdx := e.AttrInt("pressedIndex", -1)
@@ -329,7 +331,7 @@ func (e *Element) handleListViewEvent(ev graphics.Event) bool {
 			e.dirty = true
 			return true
 		}
-	case graphics.EventKeyPress:
+	case gfxinput.EventKeyPress:
 		if !e.focused {
 			return false
 		}
@@ -341,27 +343,27 @@ func (e *Element) handleListViewEvent(ev graphics.Event) bool {
 			selected = len(items) - 1
 		}
 		switch ev.Key {
-		case graphics.KeyUp:
+		case gfxinput.KeyUp:
 			if selected > 0 {
 				selected--
 			}
-		case graphics.KeyDown:
+		case gfxinput.KeyDown:
 			if selected < len(items)-1 {
 				selected++
 			}
-		case graphics.KeyPageUp:
+		case gfxinput.KeyPageUp:
 			selected -= visibleRows
 			if selected < 0 {
 				selected = 0
 			}
-		case graphics.KeyPageDown:
+		case gfxinput.KeyPageDown:
 			selected += visibleRows
 			if selected > len(items)-1 {
 				selected = len(items) - 1
 			}
-		case graphics.KeyHome:
+		case gfxinput.KeyHome:
 			selected = 0
-		case graphics.KeyEnd:
+		case gfxinput.KeyEnd:
 			selected = len(items) - 1
 		default:
 			return false
@@ -389,18 +391,18 @@ func (e *Element) handleListViewEvent(ev graphics.Event) bool {
 
 // --- Text input handling ---
 
-func (e *Element) handleTextInputEvent(ev graphics.Event) bool {
+func (e *Element) handleTextInputEvent(ev gfxinput.Event) bool {
 	bounds := e.Bounds()
 	content := e.contentArea()
 	st := e.getTextInputState()
 	font := elementFont(e, gfxfont.UIFontParagraph)
 
 	switch ev.Type {
-	case graphics.EventMouseButtonPress:
-		if ev.MouseButton == graphics.MouseButtonLeft && bounds.ContainsXY(ev.X, ev.Y) {
+	case gfxinput.EventMouseButtonPress:
+		if ev.MouseButton == gfxinput.MouseButtonLeft && core.RectContainsXY(bounds, ev.X, ev.Y) {
 			display := textInputDisplayRunes(st, e.AttrBool("password", false))
-			start, end := textInputVisibleRange(font, display, st.scrollOffset, content.W)
-			relX := ev.X - content.X
+			start, end := textInputVisibleRange(font, display, st.scrollOffset, content.Dx())
+			relX := ev.X - content.Min.X
 			if relX < 0 {
 				relX = 0
 			}
@@ -411,7 +413,7 @@ func (e *Element) handleTextInputEvent(ev graphics.Event) bool {
 			e.dirty = true
 			return true
 		}
-	case graphics.EventKeyPress:
+	case gfxinput.EventKeyPress:
 		if !e.focused {
 			return false
 		}
@@ -420,9 +422,9 @@ func (e *Element) handleTextInputEvent(ev graphics.Event) bool {
 	return false
 }
 
-func (e *Element) handleTextInputKey(st *textInputState, ev graphics.Event) bool {
+func (e *Element) handleTextInputKey(st *textInputState, ev gfxinput.Event) bool {
 	switch ev.Key {
-	case graphics.KeyLeft:
+	case gfxinput.KeyLeft:
 		if st.cursorPos > 0 {
 			st.cursorPos--
 			e.ensureTextInputVisible(st)
@@ -431,7 +433,7 @@ func (e *Element) handleTextInputKey(st *textInputState, ev graphics.Event) bool
 			e.dirty = true
 		}
 		return true
-	case graphics.KeyRight:
+	case gfxinput.KeyRight:
 		if st.cursorPos < len(st.text) {
 			st.cursorPos++
 			e.ensureTextInputVisible(st)
@@ -440,21 +442,21 @@ func (e *Element) handleTextInputKey(st *textInputState, ev graphics.Event) bool
 			e.dirty = true
 		}
 		return true
-	case graphics.KeyHome:
+	case gfxinput.KeyHome:
 		st.cursorPos = 0
 		e.ensureTextInputVisible(st)
 		st.cursorBlink = true
 		st.lastBlink = time.Now()
 		e.dirty = true
 		return true
-	case graphics.KeyEnd:
+	case gfxinput.KeyEnd:
 		st.cursorPos = len(st.text)
 		e.ensureTextInputVisible(st)
 		st.cursorBlink = true
 		st.lastBlink = time.Now()
 		e.dirty = true
 		return true
-	case graphics.KeyBackspace:
+	case gfxinput.KeyBackspace:
 		if st.cursorPos > 0 {
 			st.text = append(st.text[:st.cursorPos-1], st.text[st.cursorPos:]...)
 			st.cursorPos--
@@ -465,14 +467,14 @@ func (e *Element) handleTextInputKey(st *textInputState, ev graphics.Event) bool
 			e.dirty = true
 		}
 		return true
-	case graphics.KeyDelete:
+	case gfxinput.KeyDelete:
 		if st.cursorPos < len(st.text) {
 			st.text = append(st.text[:st.cursorPos], st.text[st.cursorPos+1:]...)
 			e.syncTextInput(st)
 			e.dirty = true
 		}
 		return true
-	case graphics.KeyEnter:
+	case gfxinput.KeyEnter:
 		e.EmitSignal("submitted", string(st.text))
 		return true
 	default:
@@ -576,7 +578,7 @@ func textInputCursorFromX(font *gfxfont.Font, display []rune, start, end, relX i
 func (e *Element) ensureTextInputVisible(st *textInputState) {
 	font := elementFont(e, gfxfont.UIFontParagraph)
 	content := e.contentArea()
-	if content.W <= 0 {
+	if content.Dx() <= 0 {
 		return
 	}
 
@@ -598,19 +600,19 @@ func (e *Element) ensureTextInputVisible(st *textInputState) {
 	}
 
 	for st.scrollOffset < st.cursorPos &&
-		textInputSliceWidth(font, display, st.scrollOffset, st.cursorPos) > content.W {
+		textInputSliceWidth(font, display, st.scrollOffset, st.cursorPos) > content.Dx() {
 		st.scrollOffset++
 	}
 
 	for st.scrollOffset > 0 &&
-		textInputSliceWidth(font, display, st.scrollOffset-1, st.cursorPos) <= content.W {
+		textInputSliceWidth(font, display, st.scrollOffset-1, st.cursorPos) <= content.Dx() {
 		st.scrollOffset--
 	}
 }
 
 // --- Text area handling ---
 
-func (e *Element) handleTextAreaEvent(ev graphics.Event) bool {
+func (e *Element) handleTextAreaEvent(ev gfxinput.Event) bool {
 	bounds := e.Bounds()
 	content := e.contentArea()
 	st := e.getTextAreaState()
@@ -618,7 +620,7 @@ func (e *Element) handleTextAreaEvent(ev graphics.Event) bool {
 	textW := e.textAreaTextWidth(content)
 
 	switch ev.Type {
-	case graphics.EventMouseButtonPress:
+	case gfxinput.EventMouseButtonPress:
 		if isWheelButton(ev.MouseButton) {
 			visRows, _ := e.textAreaVisibleRowsCols()
 			if visRows < 1 {
@@ -626,9 +628,9 @@ func (e *Element) handleTextAreaEvent(ev graphics.Event) bool {
 			}
 			step := int(math.Max(1, float64(visRows/3)))
 			switch ev.MouseButton {
-			case graphics.MouseButtonWheelUp:
+			case gfxinput.MouseButtonWheelUp:
 				st.scrollRow -= step
-			case graphics.MouseButtonWheelDown:
+			case gfxinput.MouseButtonWheelDown:
 				st.scrollRow += step
 			default:
 				return false
@@ -643,9 +645,9 @@ func (e *Element) handleTextAreaEvent(ev graphics.Event) bool {
 			e.dirty = true
 			return true
 		}
-		if ev.MouseButton == graphics.MouseButtonLeft && bounds.ContainsXY(ev.X, ev.Y) {
-			relX := ev.X - content.X
-			relY := ev.Y - content.Y
+		if ev.MouseButton == gfxinput.MouseButtonLeft && core.RectContainsXY(bounds, ev.X, ev.Y) {
+			relX := ev.X - content.Min.X
+			relY := ev.Y - content.Min.Y
 			if relX < 0 {
 				relX = 0
 			}
@@ -696,7 +698,7 @@ func (e *Element) handleTextAreaEvent(ev graphics.Event) bool {
 			e.dirty = true
 			return true
 		}
-	case graphics.EventKeyPress:
+	case gfxinput.EventKeyPress:
 		if !e.focused {
 			return false
 		}
@@ -705,7 +707,7 @@ func (e *Element) handleTextAreaEvent(ev graphics.Event) bool {
 	return false
 }
 
-func (e *Element) handleScrollableWheel(ev graphics.Event) bool {
+func (e *Element) handleScrollableWheel(ev gfxinput.Event) bool {
 	step := e.AttrInt("scrollStep", 40)
 	if step < 8 {
 		step = 8
@@ -717,9 +719,9 @@ func (e *Element) handleScrollableWheel(ev graphics.Event) bool {
 	}
 	start := scrollY
 	switch ev.MouseButton {
-	case graphics.MouseButtonWheelUp:
+	case gfxinput.MouseButtonWheelUp:
 		scrollY -= step
-	case graphics.MouseButtonWheelDown:
+	case gfxinput.MouseButtonWheelDown:
 		scrollY += step
 	default:
 		return false
@@ -743,7 +745,7 @@ func (e *Element) handleScrollableWheel(ev graphics.Event) bool {
 func (e *Element) maxScrollableY() int {
 	content := e.contentArea()
 	scrollY := e.AttrInt("scrollY", 0)
-	baseY := content.Y - scrollY
+	baseY := content.Min.Y - scrollY
 	maxBottom := baseY
 	for _, child := range e.children {
 		if !child.visible {
@@ -755,7 +757,7 @@ func (e *Element) maxScrollableY() int {
 		}
 	}
 	contentH := maxBottom - baseY
-	maxScroll := contentH - content.H
+	maxScroll := contentH - content.Dy()
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
@@ -766,7 +768,7 @@ func (e *Element) maxVisibleBottom() int {
 	if e == nil || !e.visible {
 		return 0
 	}
-	bottom := e.bounds.Y + e.bounds.H
+	bottom := e.bounds.Min.Y + e.bounds.Dy()
 	if e.overflowClipped() {
 		return bottom
 	}
@@ -782,11 +784,11 @@ func (e *Element) maxVisibleBottom() int {
 	return bottom
 }
 
-func (e *Element) handleTextAreaKey(st *textAreaState, ev graphics.Event) bool {
+func (e *Element) handleTextAreaKey(st *textAreaState, ev gfxinput.Event) bool {
 	readOnly := e.AttrBool("readOnly", false)
 
 	switch ev.Key {
-	case graphics.KeyLeft:
+	case gfxinput.KeyLeft:
 		if st.cursorCol > 0 {
 			st.cursorCol--
 		} else if st.cursorRow > 0 {
@@ -798,7 +800,7 @@ func (e *Element) handleTextAreaKey(st *textAreaState, ev graphics.Event) bool {
 		st.lastBlink = time.Now()
 		e.dirty = true
 		return true
-	case graphics.KeyRight:
+	case gfxinput.KeyRight:
 		if st.cursorRow < len(st.lines) && st.cursorCol < len(st.lines[st.cursorRow]) {
 			st.cursorCol++
 		} else if st.cursorRow < len(st.lines)-1 {
@@ -810,7 +812,7 @@ func (e *Element) handleTextAreaKey(st *textAreaState, ev graphics.Event) bool {
 		st.lastBlink = time.Now()
 		e.dirty = true
 		return true
-	case graphics.KeyUp:
+	case gfxinput.KeyUp:
 		if e.AttrBool("wrap", false) {
 			e.moveWrappedCursorVertical(st, -1)
 		} else if st.cursorRow > 0 {
@@ -824,7 +826,7 @@ func (e *Element) handleTextAreaKey(st *textAreaState, ev graphics.Event) bool {
 		st.lastBlink = time.Now()
 		e.dirty = true
 		return true
-	case graphics.KeyDown:
+	case gfxinput.KeyDown:
 		if e.AttrBool("wrap", false) {
 			e.moveWrappedCursorVertical(st, 1)
 		} else if st.cursorRow < len(st.lines)-1 {
@@ -838,7 +840,7 @@ func (e *Element) handleTextAreaKey(st *textAreaState, ev graphics.Event) bool {
 		st.lastBlink = time.Now()
 		e.dirty = true
 		return true
-	case graphics.KeyHome:
+	case gfxinput.KeyHome:
 		if readOnly {
 			st.scrollRow = 0
 			e.dirty = true
@@ -850,7 +852,7 @@ func (e *Element) handleTextAreaKey(st *textAreaState, ev graphics.Event) bool {
 		st.lastBlink = time.Now()
 		e.dirty = true
 		return true
-	case graphics.KeyEnd:
+	case gfxinput.KeyEnd:
 		if readOnly {
 			st.scrollRow = e.textAreaMaxScroll(st)
 			e.dirty = true
@@ -862,7 +864,7 @@ func (e *Element) handleTextAreaKey(st *textAreaState, ev graphics.Event) bool {
 		st.lastBlink = time.Now()
 		e.dirty = true
 		return true
-	case graphics.KeyBackspace:
+	case gfxinput.KeyBackspace:
 		if readOnly {
 			return true
 		}
@@ -883,7 +885,7 @@ func (e *Element) handleTextAreaKey(st *textAreaState, ev graphics.Event) bool {
 		st.lastBlink = time.Now()
 		e.dirty = true
 		return true
-	case graphics.KeyDelete:
+	case gfxinput.KeyDelete:
 		if readOnly {
 			return true
 		}
@@ -897,7 +899,7 @@ func (e *Element) handleTextAreaKey(st *textAreaState, ev graphics.Event) bool {
 		e.syncTextArea(st)
 		e.dirty = true
 		return true
-	case graphics.KeyEnter:
+	case gfxinput.KeyEnter:
 		if readOnly {
 			return true
 		}
@@ -920,7 +922,7 @@ func (e *Element) handleTextAreaKey(st *textAreaState, ev graphics.Event) bool {
 		st.lastBlink = time.Now()
 		e.dirty = true
 		return true
-	case graphics.KeyPageUp:
+	case gfxinput.KeyPageUp:
 		visRows, _ := e.textAreaVisibleRowsCols()
 		if visRows < 1 {
 			visRows = 1
@@ -945,7 +947,7 @@ func (e *Element) handleTextAreaKey(st *textAreaState, ev graphics.Event) bool {
 		st.lastBlink = time.Now()
 		e.dirty = true
 		return true
-	case graphics.KeyPageDown:
+	case gfxinput.KeyPageDown:
 		visRows, _ := e.textAreaVisibleRowsCols()
 		if visRows < 1 {
 			visRows = 1
@@ -994,7 +996,7 @@ func (e *Element) handleTextAreaKey(st *textAreaState, ev graphics.Event) bool {
 func (e *Element) textAreaVisibleRowsCols() (int, int) {
 	font := elementFont(e, gfxfont.UIFontParagraph)
 	content := e.contentArea()
-	visRows := content.H / font.Height
+	visRows := content.Dy() / font.Height
 	textW := e.textAreaTextWidth(content)
 	if textW < 0 {
 		textW = 0
@@ -1010,8 +1012,8 @@ func (e *Element) textAreaVisibleRowsCols() (int, int) {
 	return visRows, visCols
 }
 
-func (e *Element) textAreaTextWidth(content graphics.Rect) int {
-	textW := content.W
+func (e *Element) textAreaTextWidth(content image.Rectangle) int {
+	textW := content.Dx()
 	if textW <= 0 {
 		return textW
 	}
@@ -1030,9 +1032,9 @@ func (e *Element) textAreaTextWidth(content graphics.Rect) int {
 	if margin < 0 {
 		margin = 0
 	}
-	trackX := content.X + content.W - barW - margin
-	if trackX > content.X {
-		textW = trackX - content.X - 1
+	trackX := content.Min.X + content.Dx() - barW - margin
+	if trackX > content.Min.X {
+		textW = trackX - content.Min.X - 1
 		if textW < 1 {
 			textW = 1
 		}
@@ -1296,7 +1298,7 @@ func textAreaWrapVisualRowForCursor(segments []textAreaWrapSegment, row, col int
 func (e *Element) ensureTextAreaVisible(st *textAreaState) {
 	font := elementFont(e, gfxfont.UIFontParagraph)
 	content := e.contentArea()
-	visRows := content.H / font.Height
+	visRows := content.Dy() / font.Height
 	textW := e.textAreaTextWidth(content)
 	if visRows <= 0 || textW <= 0 {
 		return
@@ -1366,12 +1368,12 @@ const (
 	sliderTrackH = 4
 )
 
-func (e *Element) handleSliderEvent(ev graphics.Event) bool {
+func (e *Element) handleSliderEvent(ev gfxinput.Event) bool {
 	bounds := e.Bounds()
 	st := e.getSliderState()
 
 	switch ev.Type {
-	case graphics.EventMouseMove:
+	case gfxinput.EventMouseMove:
 		if st.dragging {
 			e.sliderUpdateFromMouse(ev.X, ev.Y, bounds)
 			return true
@@ -1382,19 +1384,19 @@ func (e *Element) handleSliderEvent(ev graphics.Event) bool {
 			e.dirty = true
 			return true
 		}
-	case graphics.EventMouseButtonPress:
-		if ev.MouseButton == graphics.MouseButtonLeft && bounds.ContainsXY(ev.X, ev.Y) {
+	case gfxinput.EventMouseButtonPress:
+		if ev.MouseButton == gfxinput.MouseButtonLeft && core.RectContainsXY(bounds, ev.X, ev.Y) {
 			st.dragging = true
 			e.sliderUpdateFromMouse(ev.X, ev.Y, bounds)
 			return true
 		}
-	case graphics.EventMouseButtonRelease:
-		if ev.MouseButton == graphics.MouseButtonLeft && st.dragging {
+	case gfxinput.EventMouseButtonRelease:
+		if ev.MouseButton == gfxinput.MouseButtonLeft && st.dragging {
 			st.dragging = false
 			e.dirty = true
 			return true
 		}
-	case graphics.EventKeyPress:
+	case gfxinput.EventKeyPress:
 		if e.focused {
 			min := e.AttrFloat("min", 0)
 			max := e.AttrFloat("max", 100)
@@ -1405,16 +1407,16 @@ func (e *Element) handleSliderEvent(ev graphics.Event) bool {
 			}
 			val := e.AttrFloat("value", min)
 			switch ev.Key {
-			case graphics.KeyLeft, graphics.KeyDown:
+			case gfxinput.KeyLeft, gfxinput.KeyDown:
 				e.sliderSetValue(val - delta)
 				return true
-			case graphics.KeyRight, graphics.KeyUp:
+			case gfxinput.KeyRight, gfxinput.KeyUp:
 				e.sliderSetValue(val + delta)
 				return true
-			case graphics.KeyHome:
+			case gfxinput.KeyHome:
 				e.sliderSetValue(min)
 				return true
-			case graphics.KeyEnd:
+			case gfxinput.KeyEnd:
 				e.sliderSetValue(max)
 				return true
 			}
@@ -1433,23 +1435,23 @@ func (e *Element) sliderSetValue(v float64) {
 	e.EmitSignal("changed", v)
 }
 
-func (e *Element) sliderUpdateFromMouse(mx, my int, bounds graphics.Rect) {
+func (e *Element) sliderUpdateFromMouse(mx, my int, bounds image.Rectangle) {
 	min := e.AttrFloat("min", 0)
 	max := e.AttrFloat("max", 100)
 	step := e.AttrFloat("step", 0)
 	var ratio float64
 	if e.Attr("orientation", "horizontal") == "vertical" {
-		trackLen := bounds.H - sliderThumbW
+		trackLen := bounds.Dy() - sliderThumbW
 		if trackLen <= 0 {
 			return
 		}
-		ratio = 1.0 - float64(my-bounds.Y-sliderThumbW/2)/float64(trackLen)
+		ratio = 1.0 - float64(my-bounds.Min.Y-sliderThumbW/2)/float64(trackLen)
 	} else {
-		trackLen := bounds.W - sliderThumbW
+		trackLen := bounds.Dx() - sliderThumbW
 		if trackLen <= 0 {
 			return
 		}
-		ratio = float64(mx-bounds.X-sliderThumbW/2) / float64(trackLen)
+		ratio = float64(mx-bounds.Min.X-sliderThumbW/2) / float64(trackLen)
 	}
 	if ratio < 0 {
 		ratio = 0
@@ -1463,55 +1465,49 @@ func (e *Element) sliderUpdateFromMouse(mx, my int, bounds graphics.Rect) {
 	e.EmitSignal("changed", v)
 }
 
-func (e *Element) sliderThumbContains(mx, my int, bounds graphics.Rect) bool {
+func (e *Element) sliderThumbContains(mx, my int, bounds image.Rectangle) bool {
 	if e.Attr("orientation", "horizontal") == "vertical" {
 		thumbY := e.sliderValueToPixelV(bounds)
-		return graphics.Rect{
-			X: bounds.X + (bounds.W-sliderThumbH)/2, Y: thumbY,
-			W: sliderThumbH, H: sliderThumbW,
-		}.ContainsXY(mx, my)
+		return core.RectContainsXY(core.RectXYWH(bounds.Min.X+(bounds.Dx()-sliderThumbH)/2, thumbY, sliderThumbH, sliderThumbW), mx, my)
 	}
 	thumbX := e.sliderValueToPixelH(bounds)
-	return graphics.Rect{
-		X: thumbX, Y: bounds.Y + (bounds.H-sliderThumbH)/2,
-		W: sliderThumbW, H: sliderThumbH,
-	}.ContainsXY(mx, my)
+	return core.RectContainsXY(core.RectXYWH(thumbX, bounds.Min.Y+(bounds.Dy()-sliderThumbH)/2, sliderThumbW, sliderThumbH), mx, my)
 }
 
-func (e *Element) sliderValueToPixelH(bounds graphics.Rect) int {
+func (e *Element) sliderValueToPixelH(bounds image.Rectangle) int {
 	min := e.AttrFloat("min", 0)
 	max := e.AttrFloat("max", 100)
 	val := e.AttrFloat("value", min)
-	trackLen := bounds.W - sliderThumbW
+	trackLen := bounds.Dx() - sliderThumbW
 	if max <= min || trackLen <= 0 {
-		return bounds.X
+		return bounds.Min.X
 	}
-	return bounds.X + int((val-min)/(max-min)*float64(trackLen))
+	return bounds.Min.X + int((val-min)/(max-min)*float64(trackLen))
 }
 
-func (e *Element) sliderValueToPixelV(bounds graphics.Rect) int {
+func (e *Element) sliderValueToPixelV(bounds image.Rectangle) int {
 	min := e.AttrFloat("min", 0)
 	max := e.AttrFloat("max", 100)
 	val := e.AttrFloat("value", min)
-	trackLen := bounds.H - sliderThumbW
+	trackLen := bounds.Dy() - sliderThumbW
 	if max <= min || trackLen <= 0 {
-		return bounds.Y
+		return bounds.Min.Y
 	}
-	return bounds.Y + int((max-val)/(max-min)*float64(trackLen))
+	return bounds.Min.Y + int((max-val)/(max-min)*float64(trackLen))
 }
 
 // --- Min size helpers ---
 
-func (e *Element) editableMinSize() graphics.Point {
+func (e *Element) editableMinSize() image.Point {
 	font := elementFont(e, gfxfont.UIFontParagraph)
 	pad := 8
 	if e.AttrBool("multiline", false) {
-		return graphics.Point{X: font.Width*20 + pad, Y: font.Height*4 + pad}
+		return image.Point{X: font.Width*20 + pad, Y: font.Height*4 + pad}
 	}
-	return graphics.Point{X: font.Width*15 + pad, Y: font.Height + pad}
+	return image.Point{X: font.Width*15 + pad, Y: font.Height + pad}
 }
 
-func (e *Element) checkableMinSize() graphics.Point {
+func (e *Element) checkableMinSize() image.Point {
 	font := elementFont(e, gfxfont.UIFontParagraph)
 	boxSize := font.Height
 	gap := 6
@@ -1522,10 +1518,10 @@ func (e *Element) checkableMinSize() graphics.Point {
 	if textH > h {
 		h = textH
 	}
-	return graphics.Point{X: boxSize + gap + textW, Y: h}
+	return image.Point{X: boxSize + gap + textW, Y: h}
 }
 
-func (e *Element) toggleMinSize() graphics.Point {
+func (e *Element) toggleMinSize() image.Point {
 	font := elementFont(e, gfxfont.UIFontParagraph)
 	text := e.Attr("text", "")
 	textW := font.TextWidth(text)
@@ -1537,10 +1533,10 @@ func (e *Element) toggleMinSize() graphics.Point {
 	if font.Height > h {
 		h = font.Height
 	}
-	return graphics.Point{X: w, Y: h}
+	return image.Point{X: w, Y: h}
 }
 
-func (e *Element) listViewMinSize() graphics.Point {
+func (e *Element) listViewMinSize() image.Point {
 	font := elementFont(e, gfxfont.UIFontParagraph)
 	items := strings.Split(e.Attr("items", ""), "|")
 	rowH := e.AttrInt("rowHeight", 34)
@@ -1558,22 +1554,22 @@ func (e *Element) listViewMinSize() graphics.Point {
 			maxW = w
 		}
 	}
-	return graphics.Point{X: maxW, Y: rows * rowH}
+	return image.Point{X: maxW, Y: rows * rowH}
 }
 
-func (e *Element) slidableMinSize() graphics.Point {
+func (e *Element) slidableMinSize() image.Point {
 	if e.Attr("orientation", "horizontal") == "vertical" {
-		return graphics.Point{X: sliderThumbH + 4, Y: 80}
+		return image.Point{X: sliderThumbH + 4, Y: 80}
 	}
-	return graphics.Point{X: 80, Y: sliderThumbH + 4}
+	return image.Point{X: 80, Y: sliderThumbH + 4}
 }
 
-func (e *Element) progressMinSize() graphics.Point {
+func (e *Element) progressMinSize() image.Point {
 	font := elementFont(e, gfxfont.UIFontParagraph)
-	return graphics.Point{X: 100, Y: font.Height + 8}
+	return image.Point{X: 100, Y: font.Height + 8}
 }
 
-func (e *Element) frameMinSize() graphics.Point {
+func (e *Element) frameMinSize() image.Point {
 	font := elementTitleFont(e)
 	title := e.Attr("title", "")
 	titleGap := 4
@@ -1594,7 +1590,7 @@ func (e *Element) frameMinSize() graphics.Point {
 	}
 	h := ch + pt + pb + 2 + titleH
 
-	return graphics.Point{X: w, Y: h}
+	return image.Point{X: w, Y: h}
 }
 
 // --- Utility ---

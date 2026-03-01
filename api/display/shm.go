@@ -2,6 +2,7 @@ package display
 
 import (
 	"fmt"
+	"image"
 	"log"
 	"os"
 	"sync"
@@ -9,7 +10,8 @@ import (
 	"time"
 
 	"avyos.dev/pkg/fs"
-	graphics "avyos.dev/pkg/graphics/input"
+	gfxinput "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
 const (
@@ -82,9 +84,9 @@ type Event struct {
 	Scope      uint32
 	X, Y       int
 	Button     int
-	Key        graphics.Key
+	Key        gfxinput.Key
 	Rune       rune
-	Modifiers  graphics.Modifiers
+	Modifiers  gfxinput.Modifiers
 	Char       rune
 	Pressed    bool
 	Focused    bool
@@ -111,7 +113,7 @@ type ClientWindow struct {
 	path    string
 	data    []byte
 	stride  int
-	buf     *graphics.Buffer
+	buf     *core.Buffer
 	retired []sharedBuffer
 }
 
@@ -188,7 +190,7 @@ func (cl *DisplayClient) hookEvents() {
 			Scope:      ev.Scope,
 			Key:        ev.Key,
 			Rune:       ev.Rune,
-			Modifiers:  graphics.Modifiers(ev.Modifiers),
+			Modifiers:  gfxinput.Modifiers(ev.Modifiers),
 		})
 	})
 }
@@ -273,11 +275,11 @@ func (cl *DisplayClient) registerWindow(id uint32, x, y, width, height int, shm 
 		path:   shm.path,
 		data:   shm.data,
 		stride: shm.stride,
-		buf: &graphics.Buffer{
+		buf: &core.Buffer{
 			Width:  width,
 			Height: height,
 			Stride: shm.stride,
-			Format: graphics.PixelFormatBGRA,
+			Format: core.PixelFormatBGRA,
 			Data:   shm.data,
 		},
 	}
@@ -391,18 +393,18 @@ func (cl *DisplayClient) SetWindowState(windowID, action uint32) error {
 	return err
 }
 
-func (cl *DisplayClient) RegisterShortcut(shortcutID, windowID, scope uint32, key graphics.Key, modifiers graphics.Modifiers) error {
+func (cl *DisplayClient) RegisterShortcut(shortcutID, windowID, scope uint32, key gfxinput.Key, modifiers gfxinput.Modifiers) error {
 	return cl.RegisterShortcutEx(shortcutID, windowID, scope, key, 0, modifiers)
 }
 
-func (cl *DisplayClient) RegisterShortcutEx(shortcutID, windowID, scope uint32, key graphics.Key, ch rune, modifiers graphics.Modifiers) error {
+func (cl *DisplayClient) RegisterShortcutEx(shortcutID, windowID, scope uint32, key gfxinput.Key, ch rune, modifiers gfxinput.Modifiers) error {
 	_, err := cl.rpc.RegisterShortcut(RegisterShortcutRequest{
 		ShortcutID: shortcutID,
 		WindowID:   windowID,
 		Scope:      scope,
 		Key:        key,
 		Rune:       ch,
-		Modifiers:  uint8(modifiers & (graphics.ModShift | graphics.ModCtrl | graphics.ModAlt)),
+		Modifiers:  uint8(modifiers & (gfxinput.ModShift | gfxinput.ModCtrl | gfxinput.ModAlt)),
 	})
 	return err
 }
@@ -448,17 +450,17 @@ func (cl *DisplayClient) Close() error {
 	return cl.rpc.Close()
 }
 
-func (w *ClientWindow) Buffer() *graphics.Buffer {
+func (w *ClientWindow) Buffer() *core.Buffer {
 	return w.buf
 }
 
-func (w *ClientWindow) Damage(r graphics.Rect) error {
-	_, err := w.client.rpc.Damage(DamageRequest{WindowID: w.ID, X: r.X, Y: r.Y, Width: r.W, Height: r.H})
+func (w *ClientWindow) Damage(r image.Rectangle) error {
+	_, err := w.client.rpc.Damage(DamageRequest{WindowID: w.ID, X: r.Min.X, Y: r.Min.Y, Width: r.Dx(), Height: r.Dy()})
 	return err
 }
 
 func (w *ClientWindow) DamageAll() error {
-	return w.Damage(graphics.Rect{W: w.Width, H: w.Height})
+	return w.Damage(core.RectXYWH(0, 0, w.Width, w.Height))
 }
 
 func (w *ClientWindow) SetTitle(title string) error {
@@ -506,11 +508,11 @@ func (w *ClientWindow) Resize(width, height int) error {
 	w.stride = shm.stride
 	w.Width = width
 	w.Height = height
-	w.buf = &graphics.Buffer{
+	w.buf = &core.Buffer{
 		Width:  width,
 		Height: height,
 		Stride: shm.stride,
-		Format: graphics.PixelFormatBGRA,
+		Format: core.PixelFormatBGRA,
 		Data:   shm.data,
 	}
 	return nil

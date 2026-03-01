@@ -19,10 +19,11 @@ package main
 
 import (
 	"fmt"
+	"image"
 	"log"
 	"syscall"
 
-	graphics "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
 // surfaceState represents a wl_surface created by a client.
@@ -46,7 +47,7 @@ type surfacePending struct {
 	bufferID  uint32
 	bufferX   int32
 	bufferY   int32
-	damage    []graphics.Rect
+	damage    []image.Rectangle
 	hasBuffer bool
 	attached  bool
 }
@@ -98,7 +99,7 @@ func (s *clientSession) handleSurfaceRequest(id uint32, opcode uint16, payload [
 			y := int(getInt32(payload, 4))
 			w := int(getInt32(payload, 8))
 			h := int(getInt32(payload, 12))
-			surf.pending.damage = append(surf.pending.damage, graphics.Rect{X: x, Y: y, W: w, H: h})
+			surf.pending.damage = append(surf.pending.damage, core.RectXYWH(x, y, w, h))
 		}
 
 	case surfaceFrameOp:
@@ -144,7 +145,7 @@ func (s *clientSession) commitSurface(surf *surfaceState) {
 		if tw != nil && tw.win != nil {
 			dstBuf := tw.win.Buffer()
 			if dstBuf != nil {
-				dstBuf.Clear(graphics.ColorTransparent)
+				dstBuf.Clear(core.ColorTransparent)
 				tw.win.DamageAll()
 			}
 		}
@@ -246,7 +247,7 @@ func (s *clientSession) commitSurface(surf *surfaceState) {
 }
 
 // compositeSubsurface draws a subsurface onto the parent's display buffer.
-func (s *clientSession) compositeSubsurface(dstBuf *graphics.Buffer, ss *subsurfaceState) {
+func (s *clientSession) compositeSubsurface(dstBuf *core.Buffer, ss *subsurfaceState) {
 	subSurf := ss.surface
 	if subSurf == nil || !subSurf.current.hasBuffer {
 		return

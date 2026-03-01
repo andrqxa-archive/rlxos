@@ -2,19 +2,22 @@ package svg
 
 import (
 	"encoding/xml"
+	"image/color"
 	"math"
 	"regexp"
 	"sort"
 	"strings"
+
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
 type svgPaint interface {
-	sample(x, y float64) Color
+	sample(x, y float64) color.NRGBA
 }
 
-type svgSolidPaint struct{ c Color }
+type svgSolidPaint struct{ c color.NRGBA }
 
-func (p svgSolidPaint) sample(_, _ float64) Color { return p.c }
+func (p svgSolidPaint) sample(_, _ float64) color.NRGBA { return p.c }
 
 type svgLinearPaint struct {
 	x1, y1 float64
@@ -23,7 +26,7 @@ type svgLinearPaint struct {
 	stops  []svgGradientStop
 }
 
-func (p svgLinearPaint) sample(x, y float64) Color {
+func (p svgLinearPaint) sample(x, y float64) color.NRGBA {
 	dx := p.x2 - p.x1
 	dy := p.y2 - p.y1
 	den := dx*dx + dy*dy
@@ -42,7 +45,7 @@ type svgRadialPaint struct {
 	stops  []svgGradientStop
 }
 
-func (p svgRadialPaint) sample(x, y float64) Color {
+func (p svgRadialPaint) sample(x, y float64) color.NRGBA {
 	if p.r <= 1e-9 {
 		return svgSampleStops(p.stops, 1)
 	}
@@ -154,15 +157,15 @@ func svgApplySpread(t float64, spread string) float64 {
 }
 
 type svgPatternPaint struct {
-	tile  *Buffer
+	tile  *core.Buffer
 	ox    float64
 	oy    float64
 	alpha float64
 }
 
-func (p svgPatternPaint) sample(x, y float64) Color {
+func (p svgPatternPaint) sample(x, y float64) color.NRGBA {
 	if p.tile == nil || p.tile.Width <= 0 || p.tile.Height <= 0 {
-		return ColorTransparent
+		return core.ColorTransparent
 	}
 	u := math.Mod(x-p.ox, float64(p.tile.Width))
 	v := math.Mod(y-p.oy, float64(p.tile.Height))
@@ -310,7 +313,7 @@ func svgBuildPatternPaint(pn svgNode, defs *svgDefs, ctm svgMatrix, bbox svgBBox
 	if th > 1024 {
 		th = 1024
 	}
-	tile := NewBuffer(tw, th)
+	tile := core.NewBuffer(tw, th)
 	ps := svgStyle{
 		fill:        "#000000",
 		fillOpacity: 1,
@@ -554,9 +557,9 @@ func svgParsePreserveAspectRatio(v string) (align string, mode string) {
 	return align, mode
 }
 
-func svgSampleStops(stops []svgGradientStop, t float64) Color {
+func svgSampleStops(stops []svgGradientStop, t float64) color.NRGBA {
 	if len(stops) == 0 {
-		return ColorTransparent
+		return core.ColorTransparent
 	}
 	if t <= stops[0].offset {
 		return stops[0].color
@@ -576,7 +579,7 @@ func svgSampleStops(stops []svgGradientStop, t float64) Color {
 		if den > 1e-9 {
 			u = (t - a.offset) / den
 		}
-		return Color{
+		return color.NRGBA{
 			R: uint8(float64(a.color.R) + (float64(b.color.R)-float64(a.color.R))*u + 0.5),
 			G: uint8(float64(a.color.G) + (float64(b.color.G)-float64(a.color.G))*u + 0.5),
 			B: uint8(float64(a.color.B) + (float64(b.color.B)-float64(a.color.B))*u + 0.5),

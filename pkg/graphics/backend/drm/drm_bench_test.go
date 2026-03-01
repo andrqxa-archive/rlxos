@@ -1,9 +1,10 @@
 package drm
 
 import (
+	"image"
 	"testing"
 
-	graphics "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 )
 
 var drmBenchSink byte
@@ -13,7 +14,7 @@ func BenchmarkCopyRectsToScanoutFullHD(b *testing.B) {
 	be := &Backend{
 		width:      w,
 		height:     h,
-		backBuffer: graphics.NewBuffer(w, h),
+		backBuffer: core.NewBuffer(w, h),
 	}
 	fill := be.backBuffer.Data
 	for i := range fill {
@@ -21,7 +22,7 @@ func BenchmarkCopyRectsToScanoutFullHD(b *testing.B) {
 	}
 
 	dst := make([]byte, w*h*4)
-	rects := []graphics.Rect{{X: 0, Y: 0, W: w, H: h}}
+	rects := []image.Rectangle{core.RectXYWH(0, 0, w, h)}
 
 	b.SetBytes(int64(w * h * 4))
 	b.ResetTimer()
@@ -36,7 +37,7 @@ func BenchmarkCopyRectsToScanoutDamage24(b *testing.B) {
 	be := &Backend{
 		width:      w,
 		height:     h,
-		backBuffer: graphics.NewBuffer(w, h),
+		backBuffer: core.NewBuffer(w, h),
 	}
 	fill := be.backBuffer.Data
 	for i := range fill {
@@ -48,7 +49,7 @@ func BenchmarkCopyRectsToScanoutDamage24(b *testing.B) {
 
 	totalBytes := int64(0)
 	for _, r := range rects {
-		totalBytes += int64(r.W * r.H * 4)
+		totalBytes += int64(r.Dx() * r.Dy() * 4)
 	}
 	b.SetBytes(totalBytes)
 	b.ResetTimer()
@@ -58,8 +59,8 @@ func BenchmarkCopyRectsToScanoutDamage24(b *testing.B) {
 	drmBenchSink = dst[len(dst)-1]
 }
 
-func makeDamageRects24(w, h int) []graphics.Rect {
-	out := make([]graphics.Rect, 0, 24)
+func makeDamageRects24(w, h int) []image.Rectangle {
+	out := make([]image.Rectangle, 0, 24)
 	cellW := w / 8
 	cellH := h / 3
 	for row := 0; row < 3; row++ {
@@ -74,7 +75,7 @@ func makeDamageRects24(w, h int) []graphics.Rect {
 			if row == 2 {
 				rh = h - y
 			}
-			out = append(out, graphics.Rect{X: x, Y: y, W: rw, H: rh})
+			out = append(out, core.RectXYWH(x, y, rw, rh))
 		}
 	}
 	return out

@@ -1,9 +1,16 @@
-package core
+package pixmap
 
-import "math"
+import (
+	"image"
+	"image/color"
+	"math"
+)
 
-// FillRoundedRect fills a rectangle with rounded corners.
-func (b *Buffer) FillRoundedRect(r Rect, radius int, c Color) {
+// FillRoundedRect fills r with rounded corners.
+func (b *Buffer) FillRoundedRect(r image.Rectangle, radius int, c color.Color) {
+	if b == nil {
+		return
+	}
 	if radius <= 0 {
 		b.FillRect(r, c)
 		return
@@ -11,32 +18,31 @@ func (b *Buffer) FillRoundedRect(r Rect, radius int, c Color) {
 	radius = clampRoundedRadius(r, radius)
 	x0, y0, x1, y1 := clampRectToBuffer(r, b.Width, b.Height)
 	if b.clipOn {
-		if x0 < b.clip.X {
-			x0 = b.clip.X
+		if x0 < b.clip.Min.X {
+			x0 = b.clip.Min.X
 		}
-		if y0 < b.clip.Y {
-			y0 = b.clip.Y
+		if y0 < b.clip.Min.Y {
+			y0 = b.clip.Min.Y
 		}
-		clipX1 := b.clip.X + b.clip.W
-		clipY1 := b.clip.Y + b.clip.H
-		if x1 > clipX1 {
-			x1 = clipX1
+		if x1 > b.clip.Max.X {
+			x1 = b.clip.Max.X
 		}
-		if y1 > clipY1 {
-			y1 = clipY1
+		if y1 > b.clip.Max.Y {
+			y1 = b.clip.Max.Y
 		}
 	}
 	if x0 >= x1 || y0 >= y1 {
 		return
 	}
+	n := ToNRGBA(c)
 	for y := y0; y < y1; y++ {
 		for x := x0; x < x1; x++ {
 			cov := roundedRectCoverage(x, y, r, radius)
 			if cov >= 0.999 {
-				if c.A == 255 {
-					b.SetPixel(x, y, c)
+				if n.A == 255 {
+					b.SetPixel(x, y, n)
 				} else {
-					drawCoveragePixel(b, x, y, c, 1)
+					drawCoveragePixel(b, x, y, n, 1)
 				}
 				continue
 			}
@@ -44,13 +50,16 @@ func (b *Buffer) FillRoundedRect(r Rect, radius int, c Color) {
 				continue
 			}
 			cov = math.Sqrt(cov)
-			drawCoveragePixel(b, x, y, c, cov)
+			drawCoveragePixel(b, x, y, n, cov)
 		}
 	}
 }
 
-// DrawRoundedRect draws a rounded rectangle outline.
-func (b *Buffer) DrawRoundedRect(r Rect, radius int, c Color) {
+// DrawRoundedRect draws rounded rectangle outline.
+func (b *Buffer) DrawRoundedRect(r image.Rectangle, radius int, c color.Color) {
+	if b == nil {
+		return
+	}
 	if radius <= 0 {
 		b.DrawRect(r, c)
 		return
@@ -58,30 +67,29 @@ func (b *Buffer) DrawRoundedRect(r Rect, radius int, c Color) {
 	radius = clampRoundedRadius(r, radius)
 	x0, y0, x1, y1 := clampRectToBuffer(r, b.Width, b.Height)
 	if b.clipOn {
-		if x0 < b.clip.X {
-			x0 = b.clip.X
+		if x0 < b.clip.Min.X {
+			x0 = b.clip.Min.X
 		}
-		if y0 < b.clip.Y {
-			y0 = b.clip.Y
+		if y0 < b.clip.Min.Y {
+			y0 = b.clip.Min.Y
 		}
-		clipX1 := b.clip.X + b.clip.W
-		clipY1 := b.clip.Y + b.clip.H
-		if x1 > clipX1 {
-			x1 = clipX1
+		if x1 > b.clip.Max.X {
+			x1 = b.clip.Max.X
 		}
-		if y1 > clipY1 {
-			y1 = clipY1
+		if y1 > b.clip.Max.Y {
+			y1 = b.clip.Max.Y
 		}
 	}
 	if x0 >= x1 || y0 >= y1 {
 		return
 	}
 
-	inner := Rect{X: r.X + 1, Y: r.Y + 1, W: r.W - 2, H: r.H - 2}
+	inner := image.Rect(r.Min.X+1, r.Min.Y+1, r.Max.X-1, r.Max.Y-1)
 	innerRadius := radius - 1
 	if innerRadius < 0 {
 		innerRadius = 0
 	}
+	n := ToNRGBA(c)
 
 	for y := y0; y < y1; y++ {
 		for x := x0; x < x1; x++ {
@@ -90,7 +98,7 @@ func (b *Buffer) DrawRoundedRect(r Rect, radius int, c Color) {
 				continue
 			}
 			cov := outer
-			if inner.W > 0 && inner.H > 0 {
+			if !inner.Empty() {
 				innerCov := roundedRectCoverageExact(x, y, inner, innerRadius)
 				cov -= innerCov
 				if cov < 0 {
@@ -98,20 +106,20 @@ func (b *Buffer) DrawRoundedRect(r Rect, radius int, c Color) {
 				}
 			}
 			if cov >= 0.999 {
-				drawCoveragePixel(b, x, y, c, 1)
+				drawCoveragePixel(b, x, y, n, 1)
 				continue
 			}
 			if cov <= 0.001 {
 				continue
 			}
-			drawCoveragePixel(b, x, y, c, cov)
+			drawCoveragePixel(b, x, y, n, cov)
 		}
 	}
 }
 
-func clampRectToBuffer(r Rect, bw, bh int) (x0, y0, x1, y1 int) {
-	x0, y0 = r.X, r.Y
-	x1, y1 = r.X+r.W, r.Y+r.H
+func clampRectToBuffer(r image.Rectangle, bw, bh int) (x0, y0, x1, y1 int) {
+	x0, y0 = r.Min.X, r.Min.Y
+	x1, y1 = r.Max.X, r.Max.Y
 	if x0 < 0 {
 		x0 = 0
 	}
@@ -127,47 +135,39 @@ func clampRectToBuffer(r Rect, bw, bh int) (x0, y0, x1, y1 int) {
 	return x0, y0, x1, y1
 }
 
-func clampRoundedRadius(r Rect, radius int) int {
+func clampRoundedRadius(r image.Rectangle, radius int) int {
 	if radius < 0 {
 		return 0
 	}
-	if radius > r.W/2 {
-		radius = r.W / 2
+	if radius > r.Dx()/2 {
+		radius = r.Dx() / 2
 	}
-	if radius > r.H/2 {
-		radius = r.H / 2
+	if radius > r.Dy()/2 {
+		radius = r.Dy() / 2
 	}
 	return radius
 }
 
-func pointInRoundedRectSample(x, y int, r Rect, radius int) bool {
-	return pointInRoundedRectAt(float64(x)+0.5, float64(y)+0.5, r, radius)
-}
-
-func pointInRoundedRectAt(px, py float64, r Rect, radius int) bool {
+func pointInRoundedRectAt(px, py float64, r image.Rectangle, radius int) bool {
 	if radius <= 0 {
-		if px < float64(r.X) || px >= float64(r.X+r.W) || py < float64(r.Y) || py >= float64(r.Y+r.H) {
-			return false
-		}
-		return true
+		return px >= float64(r.Min.X) && px < float64(r.Max.X) && py >= float64(r.Min.Y) && py < float64(r.Max.Y)
 	}
 	return pointInRoundedRectAtClamped(px, py, r, clampRoundedRadius(r, radius))
 }
 
-func pointInRoundedRectAtClamped(px, py float64, r Rect, radius int) bool {
-	if px < float64(r.X) || px >= float64(r.X+r.W) || py < float64(r.Y) || py >= float64(r.Y+r.H) {
+func pointInRoundedRectAtClamped(px, py float64, r image.Rectangle, radius int) bool {
+	if px < float64(r.Min.X) || px >= float64(r.Max.X) || py < float64(r.Min.Y) || py >= float64(r.Max.Y) {
 		return false
 	}
 	if radius <= 0 {
 		return true
 	}
 
-	halfW := float64(r.W) / 2.0
-	halfH := float64(r.H) / 2.0
+	halfW := float64(r.Dx()) / 2.0
+	halfH := float64(r.Dy()) / 2.0
 	rr := float64(radius)
-
-	cx := float64(r.X) + halfW
-	cy := float64(r.Y) + halfH
+	cx := float64(r.Min.X) + halfW
+	cy := float64(r.Min.Y) + halfH
 	qx := absFloat(px-cx) - (halfW - rr)
 	qy := absFloat(py-cy) - (halfH - rr)
 	if qx < 0 {
@@ -179,16 +179,16 @@ func pointInRoundedRectAtClamped(px, py float64, r Rect, radius int) bool {
 	return (qx*qx + qy*qy) <= (rr * rr)
 }
 
-func roundedRectCoverage(x, y int, r Rect, radius int) float64 {
+func roundedRectCoverage(x, y int, r image.Rectangle, radius int) float64 {
 	if radius <= 0 {
-		if r.ContainsXY(x, y) {
+		if RectContainsXY(r, x, y) {
 			return 1
 		}
 		return 0
 	}
 	radius = clampRoundedRadius(r, radius)
 	if radius <= 0 {
-		if r.ContainsXY(x, y) {
+		if RectContainsXY(r, x, y) {
 			return 1
 		}
 		return 0
@@ -221,16 +221,16 @@ func roundedRectCoverage(x, y int, r Rect, radius int) float64 {
 	return float64(inside) / float64(samples*samples)
 }
 
-func roundedRectCoverageExact(x, y int, r Rect, radius int) float64 {
+func roundedRectCoverageExact(x, y int, r image.Rectangle, radius int) float64 {
 	if radius <= 0 {
-		if r.ContainsXY(x, y) {
+		if RectContainsXY(r, x, y) {
 			return 1
 		}
 		return 0
 	}
 	radius = clampRoundedRadius(r, radius)
 	if radius <= 0 {
-		if r.ContainsXY(x, y) {
+		if RectContainsXY(r, x, y) {
 			return 1
 		}
 		return 0
@@ -251,26 +251,26 @@ func roundedRectCoverageExact(x, y int, r Rect, radius int) float64 {
 	return float64(inside) / float64(samples*samples)
 }
 
-func roundedRectSignedDistance(px, py float64, r Rect, radius int) float64 {
-	if r.W <= 0 || r.H <= 0 {
+func roundedRectSignedDistance(px, py float64, r image.Rectangle, radius int) float64 {
+	if r.Dx() <= 0 || r.Dy() <= 0 {
 		return 1
 	}
 	if radius <= 0 {
-		dx := math.Max(math.Max(float64(r.X)-px, 0), px-float64(r.X+r.W))
-		dy := math.Max(math.Max(float64(r.Y)-py, 0), py-float64(r.Y+r.H))
+		dx := math.Max(math.Max(float64(r.Min.X)-px, 0), px-float64(r.Max.X))
+		dy := math.Max(math.Max(float64(r.Min.Y)-py, 0), py-float64(r.Max.Y))
 		if dx > 0 || dy > 0 {
 			return math.Hypot(dx, dy)
 		}
-		inside := math.Min(px-float64(r.X), float64(r.X+r.W)-px)
-		insideY := math.Min(py-float64(r.Y), float64(r.Y+r.H)-py)
+		inside := math.Min(px-float64(r.Min.X), float64(r.Max.X)-px)
+		insideY := math.Min(py-float64(r.Min.Y), float64(r.Max.Y)-py)
 		if insideY < inside {
 			inside = insideY
 		}
 		return -inside
 	}
 
-	halfW := float64(r.W) / 2.0
-	halfH := float64(r.H) / 2.0
+	halfW := float64(r.Dx()) / 2.0
+	halfH := float64(r.Dy()) / 2.0
 	rr := float64(radius)
 	if rr > halfW {
 		rr = halfW
@@ -279,8 +279,8 @@ func roundedRectSignedDistance(px, py float64, r Rect, radius int) float64 {
 		rr = halfH
 	}
 
-	cx := float64(r.X) + halfW
-	cy := float64(r.Y) + halfH
+	cx := float64(r.Min.X) + halfW
+	cy := float64(r.Min.Y) + halfH
 	qx := absFloat(px-cx) - (halfW - rr)
 	qy := absFloat(py-cy) - (halfH - rr)
 	ox := math.Max(qx, 0)
@@ -290,7 +290,7 @@ func roundedRectSignedDistance(px, py float64, r Rect, radius int) float64 {
 	return outside + inside - rr
 }
 
-func drawCoveragePixel(b *Buffer, x, y int, c Color, coverage float64) {
+func drawCoveragePixel(b *Buffer, x, y int, c color.NRGBA, coverage float64) {
 	if coverage <= 0 {
 		return
 	}
@@ -298,13 +298,13 @@ func drawCoveragePixel(b *Buffer, x, y int, c Color, coverage float64) {
 	if a == 0 {
 		return
 	}
-	sc := Color{R: c.R, G: c.G, B: c.B, A: a}
+	sc := color.NRGBA{R: c.R, G: c.G, B: c.B, A: a}
 	if a == 255 {
 		b.SetPixel(x, y, sc)
 		return
 	}
 	bg := b.GetPixel(x, y)
-	b.SetPixel(x, y, sc.Blend(bg))
+	b.SetPixel(x, y, Blend(sc, bg))
 }
 
 func absFloat(v float64) float64 {

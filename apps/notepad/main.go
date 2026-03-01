@@ -11,7 +11,6 @@ import (
 	"unicode/utf8"
 
 	gapp "avyos.dev/pkg/graphics/app"
-	declapp "avyos.dev/pkg/graphics/app/decl"
 	ui "avyos.dev/pkg/graphics/widget/engine"
 )
 
@@ -19,7 +18,7 @@ import (
 var notepadUI string
 
 type NotepadApp struct {
-	declapp.App
+	gapp.App
 
 	currentPath string
 	savedText   string

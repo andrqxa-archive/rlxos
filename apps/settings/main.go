@@ -26,7 +26,6 @@ import (
 	ueventapi "avyos.dev/api/uevent"
 	"avyos.dev/pkg/fs"
 	gapp "avyos.dev/pkg/graphics/app"
-	declapp "avyos.dev/pkg/graphics/app/decl"
 	uidecl "avyos.dev/pkg/graphics/widget/decl"
 	ui "avyos.dev/pkg/graphics/widget/engine"
 	"avyos.dev/pkg/identity"
@@ -1013,7 +1012,7 @@ func (s *settingsStore) List(prefix string) []settingsapi.Entry {
 }
 
 type settingsApp struct {
-	declapp.App
+	gapp.App
 	currentPage int
 	values      map[string]string
 	persisted   map[string]string

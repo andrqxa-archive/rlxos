@@ -17,7 +17,9 @@
 
 package compositor
 
-import graphics "avyos.dev/pkg/graphics/input"
+import (
+	core "avyos.dev/pkg/graphics/pixmap"
+)
 
 // layerSurfaceState represents a zwlr_layer_surface_v1.
 type layerSurfaceState struct {
@@ -205,7 +207,7 @@ func (ls *LayerSurface) computeGeometry(screenW, screenH int, exclusives [4]int3
 }
 
 // drawLayerSurface renders a layer surface onto the framebuffer.
-func drawLayerSurface(buf *graphics.Buffer, ls *LayerSurface) {
+func drawLayerSurface(buf *core.Buffer, ls *LayerSurface) {
 	if ls.state.surface == nil {
 		return
 	}

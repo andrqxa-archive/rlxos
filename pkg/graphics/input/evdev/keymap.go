@@ -17,7 +17,7 @@
 
 package evdev
 
-import graphics "avyos.dev/pkg/graphics/input"
+import gfxinput "avyos.dev/pkg/graphics/input"
 
 // KeyboardLayout represents a keyboard layout.
 type KeyboardLayout string
@@ -30,7 +30,7 @@ const (
 
 // keyMapping maps evdev keycodes to Key constants and runes.
 type keyMapping struct {
-	key     graphics.Key
+	key     gfxinput.Key
 	normal  rune
 	shifted rune
 }
@@ -131,89 +131,89 @@ const (
 )
 
 var usLayout = map[uint16]keyMapping{
-	keyEsc:        {graphics.KeyEscape, 0, 0},
-	key1:          {graphics.KeyNone, '1', '!'},
-	key2:          {graphics.KeyNone, '2', '@'},
-	key3:          {graphics.KeyNone, '3', '#'},
-	key4:          {graphics.KeyNone, '4', '$'},
-	key5:          {graphics.KeyNone, '5', '%'},
-	key6:          {graphics.KeyNone, '6', '^'},
-	key7:          {graphics.KeyNone, '7', '&'},
-	key8:          {graphics.KeyNone, '8', '*'},
-	key9:          {graphics.KeyNone, '9', '('},
-	key0:          {graphics.KeyNone, '0', ')'},
-	keyMinus:      {graphics.KeyNone, '-', '_'},
-	keyEqual:      {graphics.KeyNone, '=', '+'},
-	keyBackspace:  {graphics.KeyBackspace, 0, 0},
-	keyTab:        {graphics.KeyTab, '\t', '\t'},
-	keyQ:          {graphics.KeyNone, 'q', 'Q'},
-	keyW:          {graphics.KeyNone, 'w', 'W'},
-	keyE:          {graphics.KeyNone, 'e', 'E'},
-	keyR:          {graphics.KeyNone, 'r', 'R'},
-	keyT:          {graphics.KeyNone, 't', 'T'},
-	keyY:          {graphics.KeyNone, 'y', 'Y'},
-	keyU:          {graphics.KeyNone, 'u', 'U'},
-	keyI:          {graphics.KeyNone, 'i', 'I'},
-	keyO:          {graphics.KeyNone, 'o', 'O'},
-	keyP:          {graphics.KeyNone, 'p', 'P'},
-	keyLeftBrace:  {graphics.KeyNone, '[', '{'},
-	keyRightBrace: {graphics.KeyNone, ']', '}'},
-	keyEnter:      {graphics.KeyEnter, '\n', '\n'},
-	keyLeftCtrl:   {graphics.KeyLeftCtrl, 0, 0},
-	keyA:          {graphics.KeyNone, 'a', 'A'},
-	keyS:          {graphics.KeyNone, 's', 'S'},
-	keyD:          {graphics.KeyNone, 'd', 'D'},
-	keyF:          {graphics.KeyNone, 'f', 'F'},
-	keyG:          {graphics.KeyNone, 'g', 'G'},
-	keyH:          {graphics.KeyNone, 'h', 'H'},
-	keyJ:          {graphics.KeyNone, 'j', 'J'},
-	keyK:          {graphics.KeyNone, 'k', 'K'},
-	keyL:          {graphics.KeyNone, 'l', 'L'},
-	keySemicolon:  {graphics.KeyNone, ';', ':'},
-	keyApostrophe: {graphics.KeyNone, '\'', '"'},
-	keyGrave:      {graphics.KeyNone, '`', '~'},
-	keyLeftShift:  {graphics.KeyLeftShift, 0, 0},
-	keyBackslash:  {graphics.KeyNone, '\\', '|'},
-	keyZ:          {graphics.KeyNone, 'z', 'Z'},
-	keyX:          {graphics.KeyNone, 'x', 'X'},
-	keyC:          {graphics.KeyNone, 'c', 'C'},
-	keyV:          {graphics.KeyNone, 'v', 'V'},
-	keyB:          {graphics.KeyNone, 'b', 'B'},
-	keyN:          {graphics.KeyNone, 'n', 'N'},
-	keyM:          {graphics.KeyNone, 'm', 'M'},
-	keyComma:      {graphics.KeyNone, ',', '<'},
-	keyDot:        {graphics.KeyNone, '.', '>'},
-	keySlash:      {graphics.KeyNone, '/', '?'},
-	keyRightShift: {graphics.KeyRightShift, 0, 0},
-	keyLeftAlt:    {graphics.KeyLeftAlt, 0, 0},
-	keySpace:      {graphics.KeySpace, ' ', ' '},
-	keyCapsLock:   {graphics.KeyCapsLock, 0, 0},
-	keyF1:         {graphics.KeyF1, 0, 0},
-	keyF2:         {graphics.KeyF2, 0, 0},
-	keyF3:         {graphics.KeyF3, 0, 0},
-	keyF4:         {graphics.KeyF4, 0, 0},
-	keyF5:         {graphics.KeyF5, 0, 0},
-	keyF6:         {graphics.KeyF6, 0, 0},
-	keyF7:         {graphics.KeyF7, 0, 0},
-	keyF8:         {graphics.KeyF8, 0, 0},
-	keyF9:         {graphics.KeyF9, 0, 0},
-	keyF10:        {graphics.KeyF10, 0, 0},
-	keyF11:        {graphics.KeyF11, 0, 0},
-	keyF12:        {graphics.KeyF12, 0, 0},
-	keyNumLock:    {graphics.KeyNumLock, 0, 0},
-	keyScrollLock: {graphics.KeyScrollLock, 0, 0},
-	keyRightCtrl:  {graphics.KeyRightCtrl, 0, 0},
-	keyRightAlt:   {graphics.KeyRightAlt, 0, 0},
-	keyHome:       {graphics.KeyHome, 0, 0},
-	keyUp:         {graphics.KeyUp, 0, 0},
-	keyPageUp:     {graphics.KeyPageUp, 0, 0},
-	keyLeft:       {graphics.KeyLeft, 0, 0},
-	keyRight:      {graphics.KeyRight, 0, 0},
-	keyEnd:        {graphics.KeyEnd, 0, 0},
-	keyDown:       {graphics.KeyDown, 0, 0},
-	keyPageDown:   {graphics.KeyPageDown, 0, 0},
-	keyInsert:     {graphics.KeyInsert, 0, 0},
-	keyDelete:     {graphics.KeyDelete, 0, 0},
+	keyEsc:        {gfxinput.KeyEscape, 0, 0},
+	key1:          {gfxinput.KeyNone, '1', '!'},
+	key2:          {gfxinput.KeyNone, '2', '@'},
+	key3:          {gfxinput.KeyNone, '3', '#'},
+	key4:          {gfxinput.KeyNone, '4', '$'},
+	key5:          {gfxinput.KeyNone, '5', '%'},
+	key6:          {gfxinput.KeyNone, '6', '^'},
+	key7:          {gfxinput.KeyNone, '7', '&'},
+	key8:          {gfxinput.KeyNone, '8', '*'},
+	key9:          {gfxinput.KeyNone, '9', '('},
+	key0:          {gfxinput.KeyNone, '0', ')'},
+	keyMinus:      {gfxinput.KeyNone, '-', '_'},
+	keyEqual:      {gfxinput.KeyNone, '=', '+'},
+	keyBackspace:  {gfxinput.KeyBackspace, 0, 0},
+	keyTab:        {gfxinput.KeyTab, '\t', '\t'},
+	keyQ:          {gfxinput.KeyNone, 'q', 'Q'},
+	keyW:          {gfxinput.KeyNone, 'w', 'W'},
+	keyE:          {gfxinput.KeyNone, 'e', 'E'},
+	keyR:          {gfxinput.KeyNone, 'r', 'R'},
+	keyT:          {gfxinput.KeyNone, 't', 'T'},
+	keyY:          {gfxinput.KeyNone, 'y', 'Y'},
+	keyU:          {gfxinput.KeyNone, 'u', 'U'},
+	keyI:          {gfxinput.KeyNone, 'i', 'I'},
+	keyO:          {gfxinput.KeyNone, 'o', 'O'},
+	keyP:          {gfxinput.KeyNone, 'p', 'P'},
+	keyLeftBrace:  {gfxinput.KeyNone, '[', '{'},
+	keyRightBrace: {gfxinput.KeyNone, ']', '}'},
+	keyEnter:      {gfxinput.KeyEnter, '\n', '\n'},
+	keyLeftCtrl:   {gfxinput.KeyLeftCtrl, 0, 0},
+	keyA:          {gfxinput.KeyNone, 'a', 'A'},
+	keyS:          {gfxinput.KeyNone, 's', 'S'},
+	keyD:          {gfxinput.KeyNone, 'd', 'D'},
+	keyF:          {gfxinput.KeyNone, 'f', 'F'},
+	keyG:          {gfxinput.KeyNone, 'g', 'G'},
+	keyH:          {gfxinput.KeyNone, 'h', 'H'},
+	keyJ:          {gfxinput.KeyNone, 'j', 'J'},
+	keyK:          {gfxinput.KeyNone, 'k', 'K'},
+	keyL:          {gfxinput.KeyNone, 'l', 'L'},
+	keySemicolon:  {gfxinput.KeyNone, ';', ':'},
+	keyApostrophe: {gfxinput.KeyNone, '\'', '"'},
+	keyGrave:      {gfxinput.KeyNone, '`', '~'},
+	keyLeftShift:  {gfxinput.KeyLeftShift, 0, 0},
+	keyBackslash:  {gfxinput.KeyNone, '\\', '|'},
+	keyZ:          {gfxinput.KeyNone, 'z', 'Z'},
+	keyX:          {gfxinput.KeyNone, 'x', 'X'},
+	keyC:          {gfxinput.KeyNone, 'c', 'C'},
+	keyV:          {gfxinput.KeyNone, 'v', 'V'},
+	keyB:          {gfxinput.KeyNone, 'b', 'B'},
+	keyN:          {gfxinput.KeyNone, 'n', 'N'},
+	keyM:          {gfxinput.KeyNone, 'm', 'M'},
+	keyComma:      {gfxinput.KeyNone, ',', '<'},
+	keyDot:        {gfxinput.KeyNone, '.', '>'},
+	keySlash:      {gfxinput.KeyNone, '/', '?'},
+	keyRightShift: {gfxinput.KeyRightShift, 0, 0},
+	keyLeftAlt:    {gfxinput.KeyLeftAlt, 0, 0},
+	keySpace:      {gfxinput.KeySpace, ' ', ' '},
+	keyCapsLock:   {gfxinput.KeyCapsLock, 0, 0},
+	keyF1:         {gfxinput.KeyF1, 0, 0},
+	keyF2:         {gfxinput.KeyF2, 0, 0},
+	keyF3:         {gfxinput.KeyF3, 0, 0},
+	keyF4:         {gfxinput.KeyF4, 0, 0},
+	keyF5:         {gfxinput.KeyF5, 0, 0},
+	keyF6:         {gfxinput.KeyF6, 0, 0},
+	keyF7:         {gfxinput.KeyF7, 0, 0},
+	keyF8:         {gfxinput.KeyF8, 0, 0},
+	keyF9:         {gfxinput.KeyF9, 0, 0},
+	keyF10:        {gfxinput.KeyF10, 0, 0},
+	keyF11:        {gfxinput.KeyF11, 0, 0},
+	keyF12:        {gfxinput.KeyF12, 0, 0},
+	keyNumLock:    {gfxinput.KeyNumLock, 0, 0},
+	keyScrollLock: {gfxinput.KeyScrollLock, 0, 0},
+	keyRightCtrl:  {gfxinput.KeyRightCtrl, 0, 0},
+	keyRightAlt:   {gfxinput.KeyRightAlt, 0, 0},
+	keyHome:       {gfxinput.KeyHome, 0, 0},
+	keyUp:         {gfxinput.KeyUp, 0, 0},
+	keyPageUp:     {gfxinput.KeyPageUp, 0, 0},
+	keyLeft:       {gfxinput.KeyLeft, 0, 0},
+	keyRight:      {gfxinput.KeyRight, 0, 0},
+	keyEnd:        {gfxinput.KeyEnd, 0, 0},
+	keyDown:       {gfxinput.KeyDown, 0, 0},
+	keyPageDown:   {gfxinput.KeyPageDown, 0, 0},
+	keyInsert:     {gfxinput.KeyInsert, 0, 0},
+	keyDelete:     {gfxinput.KeyDelete, 0, 0},
 }
 
 // UK layout - same as US but with some differences
@@ -223,10 +223,10 @@ var ukLayout = func() map[uint16]keyMapping {
 		layout[k] = v
 	}
 	// UK-specific differences
-	layout[key2] = keyMapping{graphics.KeyNone, '2', '"'}
-	layout[key3] = keyMapping{graphics.KeyNone, '3', '£'}
-	layout[keyApostrophe] = keyMapping{graphics.KeyNone, '\'', '@'}
-	layout[keyGrave] = keyMapping{graphics.KeyNone, '`', '¬'}
+	layout[key2] = keyMapping{gfxinput.KeyNone, '2', '"'}
+	layout[key3] = keyMapping{gfxinput.KeyNone, '3', '£'}
+	layout[keyApostrophe] = keyMapping{gfxinput.KeyNone, '\'', '@'}
+	layout[keyGrave] = keyMapping{gfxinput.KeyNone, '`', '¬'}
 	return layout
 }()
 
@@ -237,16 +237,16 @@ var deLayout = func() map[uint16]keyMapping {
 		layout[k] = v
 	}
 	// German-specific differences
-	layout[keyY] = keyMapping{graphics.KeyNone, 'z', 'Z'}
-	layout[keyZ] = keyMapping{graphics.KeyNone, 'y', 'Y'}
-	layout[keyMinus] = keyMapping{graphics.KeyNone, 'ß', '?'}
-	layout[keyEqual] = keyMapping{graphics.KeyNone, '´', '`'}
-	layout[keyLeftBrace] = keyMapping{graphics.KeyNone, 'ü', 'Ü'}
-	layout[keyRightBrace] = keyMapping{graphics.KeyNone, '+', '*'}
-	layout[keySemicolon] = keyMapping{graphics.KeyNone, 'ö', 'Ö'}
-	layout[keyApostrophe] = keyMapping{graphics.KeyNone, 'ä', 'Ä'}
-	layout[keyGrave] = keyMapping{graphics.KeyNone, '^', '°'}
-	layout[keyBackslash] = keyMapping{graphics.KeyNone, '#', '\''}
-	layout[keySlash] = keyMapping{graphics.KeyNone, '-', '_'}
+	layout[keyY] = keyMapping{gfxinput.KeyNone, 'z', 'Z'}
+	layout[keyZ] = keyMapping{gfxinput.KeyNone, 'y', 'Y'}
+	layout[keyMinus] = keyMapping{gfxinput.KeyNone, 'ß', '?'}
+	layout[keyEqual] = keyMapping{gfxinput.KeyNone, '´', '`'}
+	layout[keyLeftBrace] = keyMapping{gfxinput.KeyNone, 'ü', 'Ü'}
+	layout[keyRightBrace] = keyMapping{gfxinput.KeyNone, '+', '*'}
+	layout[keySemicolon] = keyMapping{gfxinput.KeyNone, 'ö', 'Ö'}
+	layout[keyApostrophe] = keyMapping{gfxinput.KeyNone, 'ä', 'Ä'}
+	layout[keyGrave] = keyMapping{gfxinput.KeyNone, '^', '°'}
+	layout[keyBackslash] = keyMapping{gfxinput.KeyNone, '#', '\''}
+	layout[keySlash] = keyMapping{gfxinput.KeyNone, '-', '_'}
 	return layout
 }()

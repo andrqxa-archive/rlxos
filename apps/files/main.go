@@ -16,8 +16,7 @@ import (
 
 	"avyos.dev/pkg/fs"
 	gapp "avyos.dev/pkg/graphics/app"
-	declapp "avyos.dev/pkg/graphics/app/decl"
-	gfxfont "avyos.dev/pkg/graphics/font"
+	gfxfont "avyos.dev/pkg/graphics/fonts"
 	gfxicons "avyos.dev/pkg/graphics/icons"
 	ui "avyos.dev/pkg/graphics/widget/engine"
 	"avyos.dev/pkg/identity"
@@ -90,7 +89,7 @@ type driveEntry struct {
 }
 
 type fileManager struct {
-	declapp.App
+	gapp.App
 
 	cwd        string
 	home       string

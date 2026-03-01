@@ -20,6 +20,7 @@ package drm
 import (
 	"encoding/binary"
 	"fmt"
+	"image"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -29,7 +30,7 @@ import (
 	"unsafe"
 
 	"avyos.dev/pkg/fs"
-	graphics "avyos.dev/pkg/graphics/input"
+	core "avyos.dev/pkg/graphics/pixmap"
 	"avyos.dev/pkg/simd"
 )
 
@@ -232,7 +233,7 @@ type Backend struct {
 	dataB      []byte
 	frontIsB   bool
 	pageFlip   int8 // 0 unknown, 1 supported, -1 unsupported
-	backBuffer *graphics.Buffer
+	backBuffer *core.Buffer
 	crtcID     uint32
 	connID     uint32
 	savedCrtc  drmModeCrtc
@@ -460,7 +461,7 @@ func (b *Backend) Open() error {
 	b.setGraphicsMode()
 
 	// Create software back buffer
-	b.backBuffer = graphics.NewBuffer(b.width, b.height)
+	b.backBuffer = core.NewBuffer(b.width, b.height)
 
 	return nil
 }
@@ -541,23 +542,23 @@ func (b *Backend) Size() (int, int) {
 }
 
 // Buffer returns the back buffer for drawing.
-func (b *Backend) Buffer() *graphics.Buffer {
+func (b *Backend) Buffer() *core.Buffer {
 	return b.backBuffer
 }
 
 // Flush copies the entire back buffer to the display.
 func (b *Backend) Flush() error {
-	return b.FlushRects([]graphics.Rect{{W: b.width, H: b.height}})
+	return b.FlushRects([]image.Rectangle{core.RectXYWH(0, 0, b.width, b.height)})
 }
 
 // FlushRect copies a region from the back buffer to the display.
-func (b *Backend) FlushRect(r graphics.Rect) error {
-	return b.FlushRects([]graphics.Rect{r})
+func (b *Backend) FlushRect(r image.Rectangle) error {
+	return b.FlushRects([]image.Rectangle{r})
 }
 
 // FlushRects copies multiple regions from the back buffer to the display.
 // This reduces per-rect overhead and allows one hardware dirty notification.
-func (b *Backend) FlushRects(rects []graphics.Rect) error {
+func (b *Backend) FlushRects(rects []image.Rectangle) error {
 	if b.backBuffer == nil {
 		return nil
 	}
@@ -570,7 +571,7 @@ func (b *Backend) FlushRects(rects []graphics.Rect) error {
 	if b.fbIDB != 0 && len(b.dataB) > 0 && b.pageFlip >= 0 {
 		updateRects := rects
 		if !b.scanoutsPrimed {
-			updateRects = []graphics.Rect{{X: 0, Y: 0, W: b.width, H: b.height}}
+			updateRects = []image.Rectangle{core.RectXYWH(0, 0, b.width, b.height)}
 		}
 		targetData, targetPitch := b.backScanout()
 		if len(targetData) != 0 && targetPitch > 0 {
@@ -599,7 +600,7 @@ func (b *Backend) FlushRects(rects []graphics.Rect) error {
 	}
 	merged, haveMerged := b.copyRectsToScanout(frontData, int(frontPitch), srcStride, rects)
 	if haveMerged {
-		b.notifyDirty(frontFBID, merged.X, merged.Y, merged.X+merged.W, merged.Y+merged.H)
+		b.notifyDirty(frontFBID, merged.Min.X, merged.Min.Y, merged.Max.X, merged.Max.Y)
 	}
 	return nil
 }
@@ -798,12 +799,12 @@ func (b *Backend) backScanoutFBID() uint32 {
 	return b.fbIDB
 }
 
-func (b *Backend) copyRectsToScanout(dst []byte, dstStride int, srcStride int, rects []graphics.Rect) (graphics.Rect, bool) {
-	var merged graphics.Rect
+func (b *Backend) copyRectsToScanout(dst []byte, dstStride int, srcStride int, rects []image.Rectangle) (image.Rectangle, bool) {
+	var merged image.Rectangle
 	haveMerged := false
 	for _, r := range rects {
-		x0, y0 := r.X, r.Y
-		x1, y1 := r.X+r.W, r.Y+r.H
+		x0, y0 := r.Min.X, r.Min.Y
+		x1, y1 := r.Max.X, r.Max.Y
 		if x0 < 0 {
 			x0 = 0
 		}
@@ -829,7 +830,7 @@ func (b *Backend) copyRectsToScanout(dst []byte, dstStride int, srcStride int, r
 				x1-x0,
 			)
 		}
-		cr := graphics.Rect{X: x0, Y: y0, W: x1 - x0, H: y1 - y0}
+		cr := core.RectXYWH(x0, y0, x1-x0, y1-y0)
 		if !haveMerged {
 			merged = cr
 			haveMerged = true
