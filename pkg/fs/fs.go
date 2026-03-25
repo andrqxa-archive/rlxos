@@ -23,7 +23,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 )
 
 // Exists checks if a path exists.
@@ -279,9 +278,9 @@ func Info(path string) (*FileInfo, error) {
 		IsDir:   fi.IsDir(),
 		IsLink:  fi.Mode()&os.ModeSymlink != 0,
 	}
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok && st != nil {
-		info.UID = st.Uid
-		info.GID = st.Gid
+	info.UID, info.GID, err = getUidGid(fi.Sys())
+	if err != nil {
+		return nil, err
 	}
 
 	if info.IsLink {

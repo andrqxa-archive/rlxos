@@ -96,10 +96,17 @@ func run(args []string) error {
 		"-device", "virtio-gpu-pci",
 		"-device", "virtio-keyboard-pci",
 		"-device", "virtio-mouse-pci",
-		"-drive", fmt.Sprintf("if=pflash,file=%s/firmware,readonly=on,format=raw", name),
-		"-drive", fmt.Sprintf("if=pflash,file=%s/variables,format=raw", name),
 		"-drive", fmt.Sprintf("file=%s/disk.img,format=raw", name),
 	}
+
+	if runtime.GOOS == "windows" {
+		qemuArgs = append(qemuArgs, "-bios", fmt.Sprintf("%s/firmware", name))
+	} else {
+		qemuArgs = append(qemuArgs,
+			"-drive", fmt.Sprintf("if=pflash,file=%s/firmware,readonly=on,format=raw", name),
+			"-drive", fmt.Sprintf("if=pflash,file=%s/variables,format=raw", name))
+	}
+
 	if flagDBGPort < 0 || flagDBGPort > 65535 {
 		return fmt.Errorf("invalid dbg-port: %d", flagDBGPort)
 	}
@@ -117,6 +124,9 @@ func run(args []string) error {
 					fmt.Println("[*] Using kvm hardware acceleration")
 					flagAccel = "kvm"
 				}
+			case "windows":
+				fmt.Println("[*] Using whpx hardware acceleration")
+				flagAccel = "whpx"
 			case "darwin":
 				fmt.Println("[*] Using hcf hardware acceleration")
 				flagAccel = "hvf"
